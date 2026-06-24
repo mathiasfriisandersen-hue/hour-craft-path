@@ -71,9 +71,11 @@ export function AppShell({
       <main className="mx-auto max-w-6xl px-6 py-8">
         {denied ? (
           <div className="rounded-lg border bg-card p-8 text-center">
-            <h1 className="text-xl font-semibold">Ingen adgang</h1>
+            <h1 className="text-xl font-semibold">
+              Du er logget ind som {ROLE_LABEL[role]}
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Din rolle ({ROLE_LABEL[role]}) har ikke adgang til denne side.
+              Denne side hører til en anden rolle.
             </p>
             <Link
               to={home}
@@ -81,7 +83,6 @@ export function AppShell({
             >
               Gå til {ROLE_LABEL[role]}-visning
             </Link>
-            {/* avoid unused pathname warning */}
             <span className="hidden">{pathname}</span>
           </div>
         ) : (
