@@ -13,7 +13,7 @@ function KontaktList() {
   const list = all.filter((t) => t.status === "sent" || t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
 
   return (
-    <AppShell>
+    <AppShell allow={["kontaktperson"]}>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Timesedler til godkendelse</h1>
         <p className="text-sm text-muted-foreground mt-1">

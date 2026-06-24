@@ -2,20 +2,35 @@ import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { STATUS_CLASS, STATUS_LABEL, type Status } from "@/lib/timesheet-store";
+import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
+import { LoginScreen } from "@/components/login-screen";
 
-const NAV = [
-  { to: "/vikar", label: "Vikar" },
-  { to: "/kontaktperson", label: "Kontaktperson" },
-  { to: "/admin", label: "Admin" },
-] as const;
-
-export function AppShell({ children }: { children?: ReactNode }) {
+export function AppShell({
+  children,
+  allow,
+}: {
+  children?: ReactNode;
+  /** If set, only these roles may view the page. */
+  allow?: Role[];
+}) {
+  const { role, logout, ready } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  if (!ready) {
+    return <div className="min-h-screen bg-background" />;
+  }
+  if (!role) {
+    return <LoginScreen />;
+  }
+
+  const home = ROLE_HOME[role];
+  const denied = allow && !allow.includes(role);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-6">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to={home} className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
               T
             </div>
@@ -26,28 +41,47 @@ export function AppShell({ children }: { children?: ReactNode }) {
               </div>
             </div>
           </Link>
-          <nav className="flex gap-1">
-            {NAV.map((n) => {
-              const active = pathname === n.to || pathname.startsWith(n.to + "/");
-              return (
-                <Link
-                  key={n.to}
-                  to={n.to}
-                  className={cn(
-                    "px-3 py-1.5 rounded-md text-sm font-medium transition-colors",
-                    active
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  {n.label}
-                </Link>
-              );
-            })}
-          </nav>
+          <div className="flex items-center gap-3">
+            <span className="hidden sm:inline text-sm text-muted-foreground">
+              Logget ind som:{" "}
+              <span className="font-medium text-foreground">{ROLE_LABEL[role]}</span>
+            </span>
+            <span
+              className={cn(
+                "sm:hidden px-2 py-0.5 rounded-md text-xs font-medium bg-accent text-accent-foreground",
+              )}
+            >
+              {ROLE_LABEL[role]}
+            </span>
+            <button
+              onClick={logout}
+              className="px-3 py-1.5 rounded-md text-sm font-medium border bg-background hover:bg-accent transition-colors"
+            >
+              Log ud
+            </button>
+          </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children ?? <Outlet />}</main>
+      <main className="mx-auto max-w-6xl px-6 py-8">
+        {denied ? (
+          <div className="rounded-lg border bg-card p-8 text-center">
+            <h1 className="text-xl font-semibold">Ingen adgang</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Din rolle ({ROLE_LABEL[role]}) har ikke adgang til denne side.
+            </p>
+            <Link
+              to={home}
+              className="mt-4 inline-flex px-3 py-1.5 rounded-md text-sm font-medium bg-primary text-primary-foreground"
+            >
+              Gå til {ROLE_LABEL[role]}-visning
+            </Link>
+            {/* avoid unused pathname warning */}
+            <span className="hidden">{pathname}</span>
+          </div>
+        ) : (
+          children ?? <Outlet />
+        )}
+      </main>
     </div>
   );
 }

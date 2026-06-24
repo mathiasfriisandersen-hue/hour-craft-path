@@ -30,7 +30,7 @@ function AdminDetail() {
     else setT(found);
   }, [id, navigate]);
 
-  if (!t) return <AppShell><div>Indlæser…</div></AppShell>;
+  if (!t) return <AppShell allow={["admin"]}><div>Indlæser…</div></AppShell>;
 
   const total = totalHours(t.days);
   const overtime = overtimeHours(t.days);
@@ -41,7 +41,7 @@ function AdminDetail() {
   };
 
   return (
-    <AppShell>
+    <AppShell allow={["admin"]}>
       <div className="mb-6">
         <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground">
           ← Admin-overblik

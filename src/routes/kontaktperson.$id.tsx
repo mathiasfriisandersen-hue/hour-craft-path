@@ -31,7 +31,7 @@ function KontaktDetail() {
     else setT(found);
   }, [id, navigate]);
 
-  if (!t) return <AppShell><div>Indlæser…</div></AppShell>;
+  if (!t) return <AppShell allow={["kontaktperson"]}><div>Indlæser…</div></AppShell>;
 
   const canAct = t.status === "sent";
 
@@ -46,7 +46,7 @@ function KontaktDetail() {
   };
 
   return (
-    <AppShell>
+    <AppShell allow={["kontaktperson"]}>
       <div className="mb-6">
         <Link to="/kontaktperson" className="text-sm text-muted-foreground hover:text-foreground">
           ← Tilbage
