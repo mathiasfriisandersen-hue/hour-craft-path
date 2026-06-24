@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { DEMO_PASSWORD, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
+import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import subzLogo from "@/assets/sub-z-logo.png.asset.json";
 
 const ROLES: Role[] = ["vikar", "kontaktperson", "admin"];
 
 export function LoginScreen() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [role, setRole] = useState<Role>("vikar");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +22,7 @@ export function LoginScreen() {
     }
     setError(null);
     login(role);
+    navigate({ to: ROLE_HOME[role], replace: true });
   };
 
   return (
