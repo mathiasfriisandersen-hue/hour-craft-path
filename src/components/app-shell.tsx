@@ -1,11 +1,12 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { STATUS_CLASS, STATUS_LABEL, type Status } from "@/lib/timesheet-store";
 
 const NAV = [
-  { to: "/vikar", label: "Vikar", desc: "Registrér timer" },
-  { to: "/kontaktperson", label: "Kontaktperson", desc: "Godkend timer" },
-  { to: "/admin", label: "Admin", desc: "Overblik & kontrol" },
+  { to: "/vikar", label: "Vikar" },
+  { to: "/kontaktperson", label: "Kontaktperson" },
+  { to: "/admin", label: "Admin" },
 ] as const;
 
 export function AppShell({ children }: { children?: ReactNode }) {
@@ -14,8 +15,8 @@ export function AppShell({ children }: { children?: ReactNode }) {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card">
         <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-6">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
+          <Link to="/" className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
               T
             </div>
             <div>
@@ -51,15 +52,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   );
 }
 
-export function StatusBadge({
-  status,
-  className,
-}: {
-  status: import("@/lib/timesheet-store").Status;
-  className?: string;
-}) {
-  const { STATUS_LABEL, STATUS_CLASS } =
-    require("@/lib/timesheet-store") as typeof import("@/lib/timesheet-store");
+export function StatusBadge({ status, className }: { status: Status; className?: string }) {
   return (
     <span
       className={cn(
@@ -70,5 +63,26 @@ export function StatusBadge({
     >
       {STATUS_LABEL[status]}
     </span>
+  );
+}
+
+export function InfoBanner({
+  tone = "info",
+  children,
+}: {
+  tone?: "info" | "warning";
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-md border px-4 py-3 text-sm",
+        tone === "warning"
+          ? "border-status-sent-fg/30 bg-status-sent/40 text-status-sent-fg"
+          : "border-status-reviewed-fg/30 bg-status-reviewed/40 text-status-reviewed-fg",
+      )}
+    >
+      {children}
+    </div>
   );
 }
