@@ -13,7 +13,8 @@ export const Route = createFileRoute("/kontaktperson/")({
 function KontaktList() {
   const navigate = useNavigate();
   const all = useTimesheets();
-  const list = all.filter((t) => t.status === "sent" || t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
+  const list = all.filter((t) => t.status === "sent");
+  const handled = all.filter((t) => t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
 
   const [rejectTarget, setRejectTarget] = useState<Timesheet | null>(null);
   const [comment, setComment] = useState("");
