@@ -98,6 +98,17 @@ export function LoginScreen() {
             Log ind
           </Button>
         </form>
+
+        <div className="mt-6 pt-5 border-t flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground leading-snug">
+            Demooplysninger gemmes ikke permanent og kan ryddes af admin.
+          </p>
+          <img
+            src={subzLogo.url}
+            alt="SUB-Z — Esprit de corps at work"
+            className="h-8 w-auto shrink-0"
+          />
+        </div>
       </div>
     </div>
   );
