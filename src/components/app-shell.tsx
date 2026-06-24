@@ -26,6 +26,16 @@ export function AppShell({
 
   const home = ROLE_HOME[role];
   const denied = allow && !allow.includes(role);
+  const nav =
+    role === "admin"
+      ? [
+          { to: "/admin", label: "Overblik" },
+          { to: "/admin/rules", label: "Regelgrundlag" },
+          { to: "/admin/companies", label: "Virksomheder" },
+        ]
+      : role === "vikar"
+        ? [{ to: "/vikar", label: "Mine timesedler" }]
+        : [{ to: "/kontaktperson", label: "Til godkendelse" }];
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -60,20 +70,32 @@ export function AppShell({
             >
               Log ud
             </button>
-            <img
-              src={subzLogo}
-              alt="SUB-Z"
-              className="h-7 w-auto hidden sm:block"
-            />
+            <img src={subzLogo} alt="SUB-Z" className="h-7 w-auto hidden sm:block" />
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <div className="border-b bg-card/70">
+        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 md:px-6">
+          {nav.map((item) => (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={cn(
+                "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+                pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`))
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
         {denied ? (
           <div className="rounded-lg border bg-card p-8 text-center">
-            <h1 className="text-xl font-semibold">
-              Du er logget ind som {ROLE_LABEL[role]}
-            </h1>
+            <h1 className="text-xl font-semibold">Du er logget ind som {ROLE_LABEL[role]}</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               Denne side hører til en anden rolle.
             </p>
@@ -86,7 +108,7 @@ export function AppShell({
             <span className="hidden">{pathname}</span>
           </div>
         ) : (
-          children ?? <Outlet />
+          (children ?? <Outlet />)
         )}
       </main>
     </div>

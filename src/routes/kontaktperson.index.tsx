@@ -3,7 +3,13 @@ import { useState } from "react";
 import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { formatWeekRange, totalHours, upsert, weekNumber, type Timesheet } from "@/lib/timesheet-store";
+import {
+  formatWeekRange,
+  totalHours,
+  upsert,
+  weekNumber,
+  type Timesheet,
+} from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/kontaktperson/")({
   head: () => ({ meta: [{ title: "Kontaktperson — Timesedler" }] }),
@@ -14,7 +20,7 @@ function KontaktList() {
   const navigate = useNavigate();
   const all = useTimesheets();
   const list = all.filter((t) => t.status === "sent");
-  const handled = all.filter((t) => t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
+  const handled = all.filter((t) => t.status === "approved" || t.status === "rejected");
 
   const [rejectTarget, setRejectTarget] = useState<Timesheet | null>(null);
   const [comment, setComment] = useState("");
@@ -74,7 +80,14 @@ function KontaktList() {
                   </Link>
                   {canAct && (
                     <>
-                      <Button variant="outline" size="sm" onClick={() => { setRejectTarget(t); setComment(""); }}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setRejectTarget(t);
+                          setComment("");
+                        }}
+                      >
                         Afvis
                       </Button>
                       <Button size="sm" onClick={() => approve(t)}>
@@ -119,7 +132,14 @@ function KontaktList() {
                     Se detaljer →
                   </Link>
                   {t.status !== "rejected" && (
-                    <Button variant="outline" size="sm" onClick={() => { setRejectTarget(t); setComment(""); }}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRejectTarget(t);
+                        setComment("");
+                      }}
+                    >
                       Afvis
                     </Button>
                   )}
@@ -157,7 +177,9 @@ function KontaktList() {
               autoFocus
             />
             <div className="mt-3 flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setRejectTarget(null)}>Annullér</Button>
+              <Button variant="outline" onClick={() => setRejectTarget(null)}>
+                Annullér
+              </Button>
               <Button variant="destructive" onClick={confirmReject} disabled={!comment.trim()}>
                 Bekræft afvisning
               </Button>

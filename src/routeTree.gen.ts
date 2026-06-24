@@ -15,6 +15,8 @@ import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.i
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
+import { Route as AdminRulesRouteImport } from './routes/admin.rules'
+import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +49,16 @@ const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
   path: '/kontaktperson/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRulesRoute = AdminRulesRouteImport.update({
+  id: '/admin/rules',
+  path: '/admin/rules',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCompaniesRoute = AdminCompaniesRouteImport.update({
+  id: '/admin/companies',
+  path: '/admin/companies',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIdRoute = AdminIdRouteImport.update({
   id: '/admin/$id',
   path: '/admin/$id',
@@ -56,6 +68,8 @@ const AdminIdRoute = AdminIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -65,6 +79,8 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/admin': typeof AdminIndexRoute
@@ -75,6 +91,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/admin/': typeof AdminIndexRoute
@@ -86,6 +104,8 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin/$id'
+    | '/admin/companies'
+    | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/admin/'
@@ -95,6 +115,8 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin/$id'
+    | '/admin/companies'
+    | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/admin'
@@ -104,6 +126,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin/$id'
+    | '/admin/companies'
+    | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/admin/'
@@ -114,6 +138,8 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminIdRoute: typeof AdminIdRoute
+  AdminCompaniesRoute: typeof AdminCompaniesRoute
+  AdminRulesRoute: typeof AdminRulesRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   VikarIdRoute: typeof VikarIdRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -165,6 +191,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KontaktpersonIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/rules': {
+      id: '/admin/rules'
+      path: '/admin/rules'
+      fullPath: '/admin/rules'
+      preLoaderRoute: typeof AdminRulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/companies': {
+      id: '/admin/companies'
+      path: '/admin/companies'
+      fullPath: '/admin/companies'
+      preLoaderRoute: typeof AdminCompaniesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/$id': {
       id: '/admin/$id'
       path: '/admin/$id'
@@ -178,6 +218,8 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminIdRoute: AdminIdRoute,
+  AdminCompaniesRoute: AdminCompaniesRoute,
+  AdminRulesRoute: AdminRulesRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   VikarIdRoute: VikarIdRoute,
   AdminIndexRoute: AdminIndexRoute,
