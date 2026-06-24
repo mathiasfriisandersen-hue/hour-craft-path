@@ -1,12 +1,15 @@
 import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { DEMO_PASSWORD, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
+import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import subzLogo from "@/assets/sub-z-logo.png.asset.json";
 
 const ROLES: Role[] = ["vikar", "kontaktperson", "admin"];
 
 export function LoginScreen() {
   const { login } = useAuth();
+  const navigate = useNavigate();
   const [role, setRole] = useState<Role>("vikar");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,6 +22,7 @@ export function LoginScreen() {
     }
     setError(null);
     login(role);
+    navigate({ to: ROLE_HOME[role], replace: true });
   };
 
   return (
@@ -94,6 +98,17 @@ export function LoginScreen() {
             Log ind
           </Button>
         </form>
+
+        <div className="mt-6 pt-5 border-t flex items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground leading-snug">
+            Demooplysninger gemmes ikke permanent og kan ryddes af admin.
+          </p>
+          <img
+            src={subzLogo.url}
+            alt="SUB-Z — Esprit de corps at work"
+            className="h-8 w-auto shrink-0"
+          />
+        </div>
       </div>
     </div>
   );

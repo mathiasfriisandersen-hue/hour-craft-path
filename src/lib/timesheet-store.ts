@@ -156,6 +156,12 @@ export function upsert(t: Timesheet): Timesheet {
   return updated;
 }
 
+export function clearAll(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(KEY);
+  window.dispatchEvent(new Event("timesheets-changed"));
+}
+
 export function createBlank(): Timesheet {
   const now = new Date().toISOString();
   return {

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_CLASS, STATUS_LABEL, type Status } from "@/lib/timesheet-store";
 import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
+import subzLogo from "@/assets/sub-z-logo.png.asset.json";
 
 export function AppShell({
   children,
@@ -59,15 +60,22 @@ export function AppShell({
             >
               Log ud
             </button>
+            <img
+              src={subzLogo.url}
+              alt="SUB-Z"
+              className="h-7 w-auto hidden sm:block"
+            />
           </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">
         {denied ? (
           <div className="rounded-lg border bg-card p-8 text-center">
-            <h1 className="text-xl font-semibold">Ingen adgang</h1>
+            <h1 className="text-xl font-semibold">
+              Du er logget ind som {ROLE_LABEL[role]}
+            </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Din rolle ({ROLE_LABEL[role]}) har ikke adgang til denne side.
+              Denne side hører til en anden rolle.
             </p>
             <Link
               to={home}
@@ -75,7 +83,6 @@ export function AppShell({
             >
               Gå til {ROLE_LABEL[role]}-visning
             </Link>
-            {/* avoid unused pathname warning */}
             <span className="hidden">{pathname}</span>
           </div>
         ) : (
