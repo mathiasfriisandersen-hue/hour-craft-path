@@ -92,22 +92,44 @@ function KontaktList() {
       {handled.length > 0 && (
         <div className="mt-8">
           <h2 className="text-lg font-semibold mb-3">Behandlede timesedler</h2>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {handled.map((t) => (
-              <Link
-                key={t.id}
-                to="/kontaktperson/$id"
-                params={{ id: t.id }}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 hover:bg-muted/30"
-              >
-                <div className="min-w-0">
-                  <div className="font-medium">{t.vikar}</div>
-                  <div className="text-xs text-muted-foreground">
-                    Uge {weekNumber(t.weekStart)} · {totalHours(t.days).toFixed(2)} timer
+              <div key={t.id} className="rounded-lg border bg-card p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold">{t.vikar}</div>
+                    <div className="text-sm text-muted-foreground">{t.brugervirksomhed}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Uge {weekNumber(t.weekStart)} · {formatWeekRange(t.weekStart)}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <StatusBadge status={t.status} />
+                    <div className="text-sm tabular-nums font-medium">
+                      {totalHours(t.days).toFixed(2)} timer
+                    </div>
                   </div>
                 </div>
-                <StatusBadge status={t.status} />
-              </Link>
+                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                  <Link
+                    to="/kontaktperson/$id"
+                    params={{ id: t.id }}
+                    className="text-sm text-primary font-medium hover:underline mr-auto"
+                  >
+                    Se detaljer →
+                  </Link>
+                  {t.status !== "rejected" && (
+                    <Button variant="outline" size="sm" onClick={() => { setRejectTarget(t); setComment(""); }}>
+                      Afvis
+                    </Button>
+                  )}
+                  {t.status !== "approved" && (
+                    <Button size="sm" onClick={() => approve(t)}>
+                      Godkend
+                    </Button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         </div>
