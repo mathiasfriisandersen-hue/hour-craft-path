@@ -10,33 +10,115 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as VikarIndexRouteImport } from './routes/vikar.index'
+import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as VikarIdRouteImport } from './routes/vikar.$id'
+import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
+import { Route as AdminIdRouteImport } from './routes/admin.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VikarIndexRoute = VikarIndexRouteImport.update({
+  id: '/vikar/',
+  path: '/vikar/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KontaktpersonIndexRoute = KontaktpersonIndexRouteImport.update({
+  id: '/kontaktperson/',
+  path: '/kontaktperson/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/admin/',
+  path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VikarIdRoute = VikarIdRouteImport.update({
+  id: '/vikar/$id',
+  path: '/vikar/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
+  id: '/kontaktperson/$id',
+  path: '/kontaktperson/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIdRoute = AdminIdRouteImport.update({
+  id: '/admin/$id',
+  path: '/admin/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin/$id': typeof AdminIdRoute
+  '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/vikar/$id': typeof VikarIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/kontaktperson/': typeof KontaktpersonIndexRoute
+  '/vikar/': typeof VikarIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin/$id': typeof AdminIdRoute
+  '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/vikar/$id': typeof VikarIdRoute
+  '/admin': typeof AdminIndexRoute
+  '/kontaktperson': typeof KontaktpersonIndexRoute
+  '/vikar': typeof VikarIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin/$id': typeof AdminIdRoute
+  '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/vikar/$id': typeof VikarIdRoute
+  '/admin/': typeof AdminIndexRoute
+  '/kontaktperson/': typeof KontaktpersonIndexRoute
+  '/vikar/': typeof VikarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin/$id'
+    | '/kontaktperson/$id'
+    | '/vikar/$id'
+    | '/admin/'
+    | '/kontaktperson/'
+    | '/vikar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/admin/$id'
+    | '/kontaktperson/$id'
+    | '/vikar/$id'
+    | '/admin'
+    | '/kontaktperson'
+    | '/vikar'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin/$id'
+    | '/kontaktperson/$id'
+    | '/vikar/$id'
+    | '/admin/'
+    | '/kontaktperson/'
+    | '/vikar/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminIdRoute: typeof AdminIdRoute
+  KontaktpersonIdRoute: typeof KontaktpersonIdRoute
+  VikarIdRoute: typeof VikarIdRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+  KontaktpersonIndexRoute: typeof KontaktpersonIndexRoute
+  VikarIndexRoute: typeof VikarIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,22 +130,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vikar/': {
+      id: '/vikar/'
+      path: '/vikar'
+      fullPath: '/vikar/'
+      preLoaderRoute: typeof VikarIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kontaktperson/': {
+      id: '/kontaktperson/'
+      path: '/kontaktperson'
+      fullPath: '/kontaktperson/'
+      preLoaderRoute: typeof KontaktpersonIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/admin'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vikar/$id': {
+      id: '/vikar/$id'
+      path: '/vikar/$id'
+      fullPath: '/vikar/$id'
+      preLoaderRoute: typeof VikarIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kontaktperson/$id': {
+      id: '/kontaktperson/$id'
+      path: '/kontaktperson/$id'
+      fullPath: '/kontaktperson/$id'
+      preLoaderRoute: typeof KontaktpersonIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/$id': {
+      id: '/admin/$id'
+      path: '/admin/$id'
+      fullPath: '/admin/$id'
+      preLoaderRoute: typeof AdminIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminIdRoute: AdminIdRoute,
+  KontaktpersonIdRoute: KontaktpersonIdRoute,
+  VikarIdRoute: VikarIdRoute,
+  AdminIndexRoute: AdminIndexRoute,
+  KontaktpersonIndexRoute: KontaktpersonIndexRoute,
+  VikarIndexRoute: VikarIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
