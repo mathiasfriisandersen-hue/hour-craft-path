@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { STATUS_CLASS, STATUS_LABEL, type Status } from "@/lib/timesheet-store";
 import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
-import subzLogo from "@/assets/sub-z-logo.png.asset.json";
+import subzLogo from "@/assets/sub-z-logo.png";
 
 export function AppShell({
   children,
@@ -61,7 +61,7 @@ export function AppShell({
               Log ud
             </button>
             <img
-              src={subzLogo.url}
+              src={subzLogo}
               alt="SUB-Z"
               className="h-7 w-auto hidden sm:block"
             />

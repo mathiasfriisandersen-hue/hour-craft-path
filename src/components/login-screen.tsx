@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
-import subzLogo from "@/assets/sub-z-logo.png.asset.json";
+import subzLogo from "@/assets/sub-z-logo.png";
 
 const ROLES: Role[] = ["vikar", "kontaktperson", "admin"];
 
@@ -104,7 +104,7 @@ export function LoginScreen() {
             Demooplysninger gemmes ikke permanent og kan ryddes af admin.
           </p>
           <img
-            src={subzLogo.url}
+            src={subzLogo}
             alt="SUB-Z — Esprit de corps at work"
             className="h-8 w-auto shrink-0"
           />
