@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { createBlank, formatWeekRange, totalHours, upsert, weekNumber } from "@/lib/timesheet-store";
+import { createBlank, formatWeekRange, remove, totalHours, upsert, weekNumber } from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/vikar/")({
   head: () => ({ meta: [{ title: "Vikar — Mine timesedler" }] }),
@@ -30,8 +30,8 @@ function VikarList() {
         <Button onClick={create}>Ny timeseddel</Button>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="rounded-lg border bg-card overflow-x-auto">
+        <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-muted/50 text-left text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Uge</th>
@@ -52,12 +52,12 @@ function VikarList() {
             )}
             {list.map((t) => (
               <tr key={t.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3 font-medium">Uge {weekNumber(t.weekStart)}</td>
-                <td className="px-4 py-3 text-muted-foreground">{formatWeekRange(t.weekStart)}</td>
+                <td className="px-4 py-3 font-medium whitespace-nowrap">Uge {weekNumber(t.weekStart)}</td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatWeekRange(t.weekStart)}</td>
                 <td className="px-4 py-3">{t.brugervirksomhed || <em className="text-muted-foreground">—</em>}</td>
                 <td className="px-4 py-3 tabular-nums">{totalHours(t.days).toFixed(2)}</td>
                 <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-right whitespace-nowrap">
                   <Link
                     to="/vikar/$id"
                     params={{ id: t.id }}
@@ -65,6 +65,16 @@ function VikarList() {
                   >
                     Åbn →
                   </Link>
+                  {t.status === "draft" && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Slet denne kladde?")) remove(t.id);
+                      }}
+                      className="ml-3 text-status-rejected-fg font-medium hover:underline"
+                    >
+                      Slet
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

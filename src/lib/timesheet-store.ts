@@ -162,6 +162,12 @@ export function clearAll(): void {
   window.dispatchEvent(new Event("timesheets-changed"));
 }
 
+export function remove(id: string): void {
+  write(read().filter((t) => t.id !== id));
+}
+
+
+
 export function createBlank(): Timesheet {
   const now = new Date().toISOString();
   return {
