@@ -13,7 +13,8 @@ export const Route = createFileRoute("/kontaktperson/")({
 function KontaktList() {
   const navigate = useNavigate();
   const all = useTimesheets();
-  const list = all.filter((t) => t.status === "sent" || t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
+  const list = all.filter((t) => t.status === "sent");
+  const handled = all.filter((t) => t.status === "approved" || t.status === "rejected" || t.status === "reviewed");
 
   const [rejectTarget, setRejectTarget] = useState<Timesheet | null>(null);
   const [comment, setComment] = useState("");
@@ -39,7 +40,7 @@ function KontaktList() {
 
       {list.length === 0 ? (
         <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-          Ingen timesedler at vise.
+          Ingen timesedler venter på godkendelse.
         </div>
       ) : (
         <div className="space-y-3">
@@ -85,6 +86,30 @@ function KontaktList() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {handled.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold mb-3">Behandlede timesedler</h2>
+          <div className="space-y-2">
+            {handled.map((t) => (
+              <Link
+                key={t.id}
+                to="/kontaktperson/$id"
+                params={{ id: t.id }}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3 hover:bg-muted/30"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium">{t.vikar}</div>
+                  <div className="text-xs text-muted-foreground">
+                    Uge {weekNumber(t.weekStart)} · {totalHours(t.days).toFixed(2)} timer
+                  </div>
+                </div>
+                <StatusBadge status={t.status} />
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 
