@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
+import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,30 +23,39 @@ const VikarIndexRoute = VikarIndexRouteImport.update({
   path: '/vikar/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VikarIdRoute = VikarIdRouteImport.update({
+  id: '/vikar/$id',
+  path: '/vikar/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/vikar/$id': typeof VikarIdRoute
   '/vikar/': typeof VikarIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/vikar/$id': typeof VikarIdRoute
   '/vikar': typeof VikarIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/vikar/$id': typeof VikarIdRoute
   '/vikar/': typeof VikarIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/vikar/'
+  fullPaths: '/' | '/vikar/$id' | '/vikar/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/vikar'
-  id: '__root__' | '/' | '/vikar/'
+  to: '/' | '/vikar/$id' | '/vikar'
+  id: '__root__' | '/' | '/vikar/$id' | '/vikar/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  VikarIdRoute: typeof VikarIdRoute
   VikarIndexRoute: typeof VikarIndexRoute
 }
 
@@ -65,11 +75,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VikarIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vikar/$id': {
+      id: '/vikar/$id'
+      path: '/vikar/$id'
+      fullPath: '/vikar/$id'
+      preLoaderRoute: typeof VikarIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  VikarIdRoute: VikarIdRoute,
   VikarIndexRoute: VikarIndexRoute,
 }
 export const routeTree = rootRouteImport
