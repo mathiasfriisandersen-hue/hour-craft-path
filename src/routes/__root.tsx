@@ -81,9 +81,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Timeseddel — Vikartimer" },
       { name: "description", content: "Simpelt timeregistreringssystem til vikarer, kontaktpersoner og admin." },
       { property: "og:title", content: "Timeseddel — Vikartimer" },
-      { property: "og:description", content: "Simpelt timeregistreringssystem til vikarer." },
+      { property: "og:description", content: "Simpelt timeregistreringssystem til vikarer, kontaktpersoner og admin." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "Timeseddel — Vikartimer" },
+      { name: "twitter:description", content: "Simpelt timeregistreringssystem til vikarer, kontaktpersoner og admin." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/335f61ea-c274-4890-9beb-84300547f14d/id-preview-6bed5f9f--28aafbfb-7fad-4077-89f6-b29bdd5a152e.lovable.app-1782296678734.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/335f61ea-c274-4890-9beb-84300547f14d/id-preview-6bed5f9f--28aafbfb-7fad-4077-89f6-b29bdd5a152e.lovable.app-1782296678734.png" },
     ],
     links: [
       {
