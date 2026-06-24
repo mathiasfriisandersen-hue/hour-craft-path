@@ -36,7 +36,7 @@ function VikarEdit() {
     else setT(found);
   }, [id, navigate]);
 
-  if (!t) return <AppShell><div>Indlæser…</div></AppShell>;
+  if (!t) return <AppShell allow={["vikar"]}><div>Indlæser…</div></AppShell>;
 
   const locked = t.status !== "draft" && t.status !== "rejected";
   const update = (patch: Partial<Timesheet>) => setT({ ...t, ...patch });
@@ -64,7 +64,7 @@ function VikarEdit() {
   const total = totalHours(t.days);
 
   return (
-    <AppShell>
+    <AppShell allow={["vikar"]}>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <Link to="/vikar" className="text-sm text-muted-foreground hover:text-foreground">

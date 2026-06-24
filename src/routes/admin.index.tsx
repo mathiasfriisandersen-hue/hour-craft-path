@@ -11,7 +11,7 @@ export const Route = createFileRoute("/admin/")({
 function AdminList() {
   const list = useTimesheets();
   return (
-    <AppShell>
+    <AppShell allow={["admin"]}>
       <div className="mb-6">
         <h1 className="text-2xl font-semibold">Admin-overblik</h1>
         <p className="text-sm text-muted-foreground mt-1">
