@@ -46,6 +46,19 @@ export type AgreementRule = {
 
 type AgreementRuleSourcePages = number | number[];
 
+const AGREEMENT_RULE_SOURCE_CONTEXT: Record<AgreementRuleSourceKey, string> = {
+  normalDayHours: "Kilde til normal daglig arbejdstid.",
+  normalWeekHours: "Kilde til normal ugentlig arbejdstid.",
+  overtimeRule: "Direkte kilde til overarbejdsbetaling, overtidstillæg eller overtidsats.",
+  saturdayRule: "Direkte kilde til lørdags-, weekend-, fridags- eller lørdagsrelateret betaling.",
+  sundayRule: "Direkte kilde til søndags-, helligdags- eller søgnehelligdagsbetaling.",
+  eveningRule: "Direkte kilde til forskudt arbejdstid/aftentillæg efter kl. 18.",
+  nightRule: "Direkte kilde til nat-, forskudt-tid- eller før-kl.-6 betaling.",
+  shiftRule: "Direkte kilde til skifteholds-/holddriftstillæg.",
+  specialRule:
+    "Direkte kilde til særlige tillæg som udearbejde, rejse, kørsel, bolig, værktøj, akkord eller smuds.",
+};
+
 const EXTRACTED_RULE_SOURCE_PAGES: Record<
   string,
   Partial<Record<AgreementRuleSourceKey, AgreementRuleSourcePages>>
@@ -57,38 +70,38 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
     sundayRule: 41,
     eveningRule: [45, 46],
     nightRule: 46,
-    shiftRule: [48, 51, 52, 53],
+    shiftRule: [52, 53],
     specialRule: 62,
   },
   "industri-trae-moebeloverenskomsten": {
     normalWeekHours: 34,
-    overtimeRule: [42, 43, 45],
+    overtimeRule: [42, 43],
     saturdayRule: [32, 42],
     sundayRule: 42,
     eveningRule: [117, 118],
     nightRule: 118,
-    shiftRule: [36, 37, 38, 39],
-    specialRule: 129,
+    shiftRule: [36, 38, 39],
+    specialRule: [51, 53],
   },
   "trae-moebeloverenskomsten": {
     normalWeekHours: 23,
-    overtimeRule: [34, 35, 36, 37],
+    overtimeRule: [35, 36, 37],
     saturdayRule: [17, 27, 129],
     sundayRule: [27, 129],
     eveningRule: [14, 15],
     nightRule: [15, 27],
-    shiftRule: [22, 25, 26, 27, 28],
-    specialRule: 237,
+    shiftRule: [26, 27, 28],
+    specialRule: 122,
   },
   "industrioverenskomsten-byggeri": {
     normalWeekHours: 106,
-    overtimeRule: [117, 118],
-    saturdayRule: 33,
-    sundayRule: 118,
+    overtimeRule: [110, 117, 123, 162],
+    saturdayRule: [33, 162],
+    sundayRule: [110, 123, 162],
     eveningRule: [27, 28],
     nightRule: 28,
     shiftRule: [29, 31],
-    specialRule: 155,
+    specialRule: [43, 129, 130, 143],
   },
   bygningsoverenskomsten: {
     normalWeekHours: 29,
@@ -101,13 +114,13 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
   },
   "bygge-anlaegsoverenskomsten": {
     normalWeekHours: 24,
-    overtimeRule: [30, 31, 32],
+    overtimeRule: [31, 32],
     saturdayRule: [26, 31, 32],
     sundayRule: [31, 32],
     eveningRule: [32, 33],
     nightRule: 33,
     shiftRule: [34, 36],
-    specialRule: 143,
+    specialRule: [40, 46, 57],
   },
   "bygge-anlaegsoverenskomsten-dansk-haandvaerk-3f": {
     normalWeekHours: 26,
@@ -116,21 +129,21 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
     sundayRule: 36,
     eveningRule: [28, 29],
     nightRule: [28, 29],
-    specialRule: 163,
+    specialRule: 62,
   },
   "jord-betonoverenskomsten": {
     normalWeekHours: 22,
     overtimeRule: [29, 30],
-    saturdayRule: [24, 29, 30],
+    saturdayRule: [24, 34, 35],
     sundayRule: [30, 35],
     eveningRule: [30, 31],
     nightRule: [30, 31],
     shiftRule: [32, 33, 34, 35],
-    specialRule: 135,
+    specialRule: [38, 43, 54],
   },
   "murer-murerarbejdsmandsarbejde": {
     normalWeekHours: 111,
-    overtimeRule: [30, 31],
+    overtimeRule: 30,
     saturdayRule: 30,
     sundayRule: 30,
     specialRule: 130,
@@ -147,8 +160,7 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
     overtimeRule: 13,
     saturdayRule: 13,
     sundayRule: 13,
-    shiftRule: 14,
-    specialRule: 9,
+    specialRule: [14, 129, 151, 153, 169],
   },
   elektrikeroverenskomsten: {
     normalWeekHours: 23,
@@ -157,12 +169,11 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
     sundayRule: [61, 62],
     eveningRule: [20, 21],
     nightRule: 21,
-    shiftRule: 26,
     specialRule: 70,
   },
   "el-overenskomsten-di-def": {
     normalWeekHours: 24,
-    overtimeRule: [23, 25],
+    overtimeRule: 25,
     saturdayRule: 18,
     sundayRule: 30,
     eveningRule: [26, 27],
@@ -180,12 +191,12 @@ const EXTRACTED_RULE_SOURCE_PAGES: Record<
   },
   "industri-vvs-overenskomsten": {
     normalWeekHours: 31,
-    overtimeRule: [24, 25, 26, 27],
+    overtimeRule: [25, 26, 27],
     saturdayRule: [18, 26],
     sundayRule: [26, 27],
-    eveningRule: [37, 38],
+    eveningRule: 38,
     nightRule: 38,
-    shiftRule: [31, 33, 34],
+    shiftRule: [33, 34],
     specialRule: 39,
   },
   "vvs-blikkenslageroverenskomsten": {
@@ -241,7 +252,7 @@ function hasRuleSourcePages(pages?: AgreementRuleSourcePages) {
 function ruleText(field: AgreementRuleSourceKey, pages?: AgreementRuleSourcePages) {
   const sourcePages = agreementRuleSourcePages(pages);
   return sourcePages.length
-    ? `${AGREEMENT_RULE_SOURCE_LABEL[field]} er fundet i PDF-kilden. Brug kildehenvisningen til side ${formatAgreementRulePages(sourcePages)} for den konkrete regeltekst og sats.`
+    ? `${AGREEMENT_RULE_SOURCE_LABEL[field]}: ${AGREEMENT_RULE_SOURCE_CONTEXT[field]} Brug kildehenvisningen til PDF-side ${formatAgreementRulePages(sourcePages)} for konkret regeltekst, sats og eventuelle betingelser/lokalaftaler.`
     : "";
 }
 
@@ -281,7 +292,7 @@ export const defaultAgreementRules: AgreementRule[] = collectiveAgreements.map((
   validFrom: "",
   validTo: "",
   sources: ruleSources(agreement),
-  updatedAt: "2026-06-24T00:00:00.000Z",
+  updatedAt: "2026-06-25T00:00:00.000Z",
 }));
 
 export function agreementRuleSourceHref(source: AgreementRuleSource) {

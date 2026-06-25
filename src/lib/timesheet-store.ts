@@ -385,7 +385,11 @@ type StoredAgreementRule = AgreementRule & {
 };
 
 function isGeneratedRuleText(value?: string) {
-  return Boolean(value?.trim().includes("er fundet i PDF-kilden. Brug kildehenvisningen til side"));
+  const text = value?.trim() ?? "";
+  return (
+    text.includes("er fundet i PDF-kilden. Brug kildehenvisningen til side") ||
+    text.includes("Brug kildehenvisningen til PDF-side")
+  );
 }
 
 function ruleTextOrDefault(storedValue: string | undefined, defaultValue: string) {
