@@ -171,9 +171,17 @@ const tests = [
     },
   },
   {
-    id: "public-holiday-placeholder",
-    pending: true,
-    reason: "Helligdagskalender er ikke implementeret og skal stadig blokere validering.",
+    id: "public-holiday-calendar",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[4, { start: "08:00", end: "14:00" }]], {
+          weekStart: "2026-12-21",
+        }),
+      );
+      assertEqual(result.total, 6, "public holiday total");
+      assertEqual(result.publicHoliday, 6, "public holiday hours");
+      assertGuarded(result, "public holiday");
+    },
   },
 ];
 

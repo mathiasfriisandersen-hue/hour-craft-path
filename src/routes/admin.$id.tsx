@@ -132,6 +132,7 @@ function AdminDetail() {
                 label="Lørdag / søndag"
                 value={`${calc.saturday.toFixed(2)} / ${calc.sunday.toFixed(2)} t`}
               />
+              <Row label="Helligdage" value={`${calc.publicHoliday.toFixed(2)} t`} />
               <Row
                 label="Aften / nat"
                 value={`${calc.evening.toFixed(2)} / ${calc.night.toFixed(2)} t`}

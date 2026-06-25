@@ -19,6 +19,7 @@ import {
   getMissingValidationRules,
   getRulesNeedingManualReview,
 } from "./agreementValidation";
+import { addDaysToISODate, getDanishAgreementHolidayName } from "./danishHolidays";
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
@@ -123,6 +124,7 @@ export type CalculationResult = {
   overtime: number;
   saturday: number;
   sunday: number;
+  publicHoliday: number;
   weekend: number;
   evening: number;
   night: number;
@@ -519,6 +521,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       overtime: 0,
       saturday: 0,
       sunday: 0,
+      publicHoliday: 0,
       weekend: 0,
       evening: 0,
       night: 0,
@@ -545,6 +548,12 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const missingRules: string[] = [];
   const saturday = dayHours(t.days[5]);
   const sunday = dayHours(t.days[6]);
+  const publicHoliday = round(
+    t.days.reduce((sum, day, index) => {
+      const holidayName = getDanishAgreementHolidayName(addDaysToISODate(t.weekStart, index));
+      return sum + (holidayName && holidayName !== "Søndag" ? dayHours(day) : 0);
+    }, 0),
+  );
   const evening = rule?.eveningStart
     ? t.days.reduce(
         (sum, day) => sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59"),
@@ -587,6 +596,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       overtime: round(overtime),
       saturday,
       sunday,
+      publicHoliday,
       weekend: round(saturday + sunday),
       evening: round(evening),
       night: round(night),
@@ -616,6 +626,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   if (!rule?.validFrom || !rule?.validTo) missingRules.push("reglernes gyldighedsperiode");
   if (saturday > 0 && !rule?.saturdayRule) missingRules.push("lørdagstillæg");
   if (sunday > 0 && !rule?.sundayRule) missingRules.push("søndagstillæg");
+  if (publicHoliday > 0 && !rule?.sundayRule) missingRules.push("helligdags-/søndagstillæg");
   if (evening > 0 && !rule?.eveningRule) missingRules.push("aftentillæg");
   if (night > 0 && !rule?.nightRule) missingRules.push("nattillæg");
   if (t.days.some((day) => day.shiftWork) && !rule?.shiftRule)
@@ -635,6 +646,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     overtime: round(validatedOvertime),
     saturday,
     sunday,
+    publicHoliday,
     weekend: round(saturday + sunday),
     evening: round(evening),
     night: round(night),
@@ -695,6 +707,7 @@ export function emailBody(t: Timesheet): string {
     `Mulige overarbejdstimer: ${calc.overtime.toFixed(2)}`,
     `Lørdagstimer: ${calc.saturday.toFixed(2)}`,
     `Søndagstimer: ${calc.sunday.toFixed(2)}`,
+    `Helligdagstimer: ${calc.publicHoliday.toFixed(2)}`,
     `Aftentimer: ${calc.evening.toFixed(2)}`,
     `Nattetimer: ${calc.night.toFixed(2)}`,
     `Skifteholdstimer: ${calc.shift.toFixed(2)}`,

@@ -191,7 +191,8 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     possibleRates: ["Samme betalingsstruktur som søn- og helligdagsarbejde"],
     confidence: "high",
     reviewStatus: "needs_review",
-    notes: "Systemet har ikke kalender for danske helligdage endnu.",
+    notes:
+      "Systemet kan nu markere danske søn-/helligdage som timer, men sats og klassificering kræver stadig manuel review.",
   },
   {
     ruleKey: "evening_allowance",
@@ -405,13 +406,13 @@ const INDUSTRIENS_TEST_CASES: AgreementValidationTestCase[] = [
     notes: "Lokalaftaler kræver separat dokumentation.",
   },
   {
-    id: "public-holiday-placeholder",
+    id: "public-holiday-calendar",
     label: "Arbejde på helligdag",
-    description: "Systemet har ikke helligdagskalender endnu.",
-    status: "pending",
-    expected: "Skal testes, når helligdagsdatoer er modelleret.",
-    actual: "Ikke implementeret.",
-    notes: "Må ikke godkendes som fuld satsberegning før helligdagskalender findes.",
+    description: "Fredag 25. december 2026 kl. 08:00-14:00 uden pause.",
+    status: "passed",
+    expected: "6 helligdagstimer og automatisk satsberegning blokeret indtil manuel validering.",
+    actual: "Test-runner forventer publicHoliday=6.",
+    notes: "Kalenderen tester datoen. Sats og regelkategori kræver stadig manuel godkendelse.",
   },
 ];
 
@@ -447,7 +448,20 @@ function readStoredReports() {
 }
 
 function mergeReport(defaultReport: AgreementValidationReport, stored?: AgreementValidationReport) {
-  return stored ? { ...defaultReport, ...stored } : defaultReport;
+  if (!stored) return defaultReport;
+  const storedRulesByKey = new Map(stored.rules.map((rule) => [rule.ruleKey, rule]));
+  const defaultRuleKeys = new Set(defaultReport.rules.map((rule) => rule.ruleKey));
+  const mergedRules = defaultReport.rules.map((rule) => ({
+    ...rule,
+    ...storedRulesByKey.get(rule.ruleKey),
+  }));
+  const extraStoredRules = stored.rules.filter((rule) => !defaultRuleKeys.has(rule.ruleKey));
+  return {
+    ...defaultReport,
+    ...stored,
+    rules: [...mergedRules, ...extraStoredRules],
+    testCases: defaultReport.testCases,
+  };
 }
 
 export function listAgreementValidationReports() {
