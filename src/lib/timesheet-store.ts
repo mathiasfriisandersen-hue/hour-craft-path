@@ -384,6 +384,15 @@ type StoredAgreementRule = AgreementRule & {
   sources?: AgreementRuleSource[];
 };
 
+function isGeneratedRuleText(value?: string) {
+  return Boolean(value?.trim().includes("er fundet i PDF-kilden. Brug kildehenvisningen til side"));
+}
+
+function ruleTextOrDefault(storedValue: string | undefined, defaultValue: string) {
+  if (!storedValue?.trim() || isGeneratedRuleText(storedValue)) return defaultValue;
+  return storedValue;
+}
+
 function normalizeAgreementRule(rule: AgreementRule, stored?: StoredAgreementRule): AgreementRule {
   const agreement = getCollectiveAgreementById(rule.agreementId);
   const legacySources = Object.entries(stored?.sourcePages ?? {})
@@ -397,30 +406,38 @@ function normalizeAgreementRule(rule: AgreementRule, stored?: StoredAgreementRul
       pdfUrl: agreement?.pdfUrl ?? "",
       pdfFileName: agreement?.pdfFileName,
     }));
+  const storedSources = stored?.sources ?? [];
+  const hasCustomSourcePdf = storedSources.some(
+    (source) => source.pdfUrl && source.pdfUrl !== (agreement?.pdfUrl ?? ""),
+  );
 
   const merged = {
     ...rule,
     ...(stored ?? {}),
     id: rule.id,
     agreementId: rule.agreementId,
-    sources: stored?.sources?.length ? stored.sources : legacySources,
+    sources: hasCustomSourcePdf
+      ? storedSources
+      : legacySources.length
+        ? legacySources
+        : rule.sources,
   };
 
   return {
     ...merged,
     normalDayHours: stored?.normalDayHours ?? rule.normalDayHours,
     normalWeekHours: stored?.normalWeekHours ?? rule.normalWeekHours,
-    overtimeRule: stored?.overtimeRule?.trim() ? stored.overtimeRule : rule.overtimeRule,
-    saturdayRule: stored?.saturdayRule?.trim() ? stored.saturdayRule : rule.saturdayRule,
-    sundayRule: stored?.sundayRule?.trim() ? stored.sundayRule : rule.sundayRule,
-    eveningRule: stored?.eveningRule?.trim() ? stored.eveningRule : rule.eveningRule,
-    nightRule: stored?.nightRule?.trim() ? stored.nightRule : rule.nightRule,
-    shiftRule: stored?.shiftRule?.trim() ? stored.shiftRule : rule.shiftRule,
-    specialRule: stored?.specialRule?.trim() ? stored.specialRule : rule.specialRule,
+    overtimeRule: ruleTextOrDefault(stored?.overtimeRule, rule.overtimeRule),
+    saturdayRule: ruleTextOrDefault(stored?.saturdayRule, rule.saturdayRule),
+    sundayRule: ruleTextOrDefault(stored?.sundayRule, rule.sundayRule),
+    eveningRule: ruleTextOrDefault(stored?.eveningRule, rule.eveningRule),
+    nightRule: ruleTextOrDefault(stored?.nightRule, rule.nightRule),
+    shiftRule: ruleTextOrDefault(stored?.shiftRule, rule.shiftRule),
+    specialRule: ruleTextOrDefault(stored?.specialRule, rule.specialRule),
     eveningStart: stored?.eveningStart?.trim() ? stored.eveningStart : rule.eveningStart,
     nightStart: stored?.nightStart?.trim() ? stored.nightStart : rule.nightStart,
     nightEnd: stored?.nightEnd?.trim() ? stored.nightEnd : rule.nightEnd,
-    sources: stored?.sources?.length || legacySources.length ? merged.sources : rule.sources,
+    sources: hasCustomSourcePdf ? merged.sources : rule.sources,
   };
 }
 
