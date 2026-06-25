@@ -16,6 +16,11 @@ import {
   type Timesheet,
 } from "@/lib/timesheet-store";
 import { publicAgreementPdfHref } from "@/lib/collectiveAgreements";
+import {
+  agreementRuleSourceHref,
+  type AgreementRuleSource,
+  type AgreementRuleSourceKey,
+} from "@/lib/agreementRules";
 
 export const Route = createFileRoute("/admin/$id")({
   head: () => ({ meta: [{ title: "Admin — Detaljer" }] }),
@@ -183,13 +188,41 @@ function AdminDetail() {
           </p>
         )}
         <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-          <Rule label="Overarbejde" value={rule?.overtimeRule} />
-          <Rule label="Lørdag" value={rule?.saturdayRule} />
-          <Rule label="Søndag" value={rule?.sundayRule} />
-          <Rule label="Aften" value={rule?.eveningRule} />
-          <Rule label="Nat" value={rule?.nightRule} />
-          <Rule label="Skiftehold" value={rule?.shiftRule} />
-          <Rule label="Særlige tillæg" value={rule?.specialRule} />
+          <Rule
+            label="Overarbejde"
+            value={rule?.overtimeRule}
+            source={sourceFor(rule?.sources, "overtimeRule")}
+          />
+          <Rule
+            label="Lørdag"
+            value={rule?.saturdayRule}
+            source={sourceFor(rule?.sources, "saturdayRule")}
+          />
+          <Rule
+            label="Søndag"
+            value={rule?.sundayRule}
+            source={sourceFor(rule?.sources, "sundayRule")}
+          />
+          <Rule
+            label="Aften"
+            value={rule?.eveningRule}
+            source={sourceFor(rule?.sources, "eveningRule")}
+          />
+          <Rule
+            label="Nat"
+            value={rule?.nightRule}
+            source={sourceFor(rule?.sources, "nightRule")}
+          />
+          <Rule
+            label="Skiftehold"
+            value={rule?.shiftRule}
+            source={sourceFor(rule?.sources, "shiftRule")}
+          />
+          <Rule
+            label="Særlige tillæg"
+            value={rule?.specialRule}
+            source={sourceFor(rule?.sources, "specialRule")}
+          />
         </div>
       </section>
 
@@ -258,7 +291,19 @@ function Row({ label, value }: { label: string; value?: string }) {
     </div>
   );
 }
-function Rule({ label, value }: { label: string; value?: string }) {
+function sourceFor(sources: AgreementRuleSource[] | undefined, field: AgreementRuleSourceKey) {
+  return sources?.find((source) => source.field === field);
+}
+
+function Rule({
+  label,
+  value,
+  source,
+}: {
+  label: string;
+  value?: string;
+  source?: AgreementRuleSource;
+}) {
   return (
     <div className="rounded-md border p-3">
       <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -267,6 +312,16 @@ function Rule({ label, value }: { label: string; value?: string }) {
       <div className="mt-1">
         {value || <span className="text-status-sent-fg">Ikke udfyldt</span>}
       </div>
+      {source && (
+        <a
+          href={agreementRuleSourceHref(source)}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-flex text-xs font-medium text-primary hover:underline"
+        >
+          Kilde: {source.pdfFileName || source.pdfUrl}, side {source.page} →
+        </a>
+      )}
     </div>
   );
 }

@@ -4,7 +4,15 @@ import {
   getCollectiveAgreementById,
   getCollectiveAgreementByName,
 } from "./collectiveAgreements";
-import { defaultAgreementRules, type AgreementRule } from "./agreementRules";
+import {
+  AGREEMENT_RULE_SOURCE_LABEL,
+  agreementRuleSourceHref,
+  agreementRuleSourceLabel,
+  defaultAgreementRules,
+  type AgreementRule,
+  type AgreementRuleSource,
+  type AgreementRuleSourceKey,
+} from "./agreementRules";
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
@@ -370,19 +378,50 @@ export function validate(t: Timesheet): string[] {
   return errors;
 }
 
+type StoredAgreementRule = AgreementRule & {
+  name?: string;
+  sourcePages?: Partial<Record<AgreementRuleSourceKey, number>>;
+  sources?: AgreementRuleSource[];
+};
+
+function normalizeAgreementRule(rule: AgreementRule, stored?: StoredAgreementRule): AgreementRule {
+  const agreement = getCollectiveAgreementById(rule.agreementId);
+  const legacySources = Object.entries(stored?.sourcePages ?? {})
+    .filter((entry): entry is [AgreementRuleSourceKey, number] => {
+      const [field, page] = entry;
+      return field in AGREEMENT_RULE_SOURCE_LABEL && Number.isFinite(page) && page > 0;
+    })
+    .map(([field, page]) => ({
+      field,
+      page,
+      pdfUrl: agreement?.pdfUrl ?? "",
+      pdfFileName: agreement?.pdfFileName,
+    }));
+
+  return {
+    ...rule,
+    ...stored,
+    id: rule.id,
+    agreementId: rule.agreementId,
+    sources: stored?.sources?.length ? stored.sources : legacySources,
+  };
+}
+
 export function listRules(): AgreementRule[] {
-  const stored = safeParse<Array<AgreementRule & { name?: string }>>(RULE_KEY, []);
+  const stored = safeParse<StoredAgreementRule[]>(RULE_KEY, []);
   const byAgreementId = new Map(stored.map((rule) => [rule.agreementId, rule]));
   const byLegacyName = new Map(stored.filter((rule) => rule.name).map((rule) => [rule.name, rule]));
   const now = new Date().toISOString();
-  return defaultAgreementRules.map((rule) => ({
-    ...rule,
-    ...(byAgreementId.get(rule.agreementId) ??
-      byLegacyName.get(getCollectiveAgreementById(rule.agreementId)?.name)),
-    id: rule.id,
-    agreementId: rule.agreementId,
-    updatedAt: byAgreementId.get(rule.agreementId)?.updatedAt ?? rule.updatedAt ?? now,
-  }));
+  return defaultAgreementRules.map((rule) => {
+    const storedRule =
+      byAgreementId.get(rule.agreementId) ??
+      byLegacyName.get(getCollectiveAgreementById(rule.agreementId)?.name);
+    const normalized = normalizeAgreementRule(rule, storedRule);
+    return {
+      ...normalized,
+      updatedAt: storedRule?.updatedAt ?? rule.updatedAt ?? now,
+    };
+  });
 }
 
 export function saveRule(rule: AgreementRule): void {
@@ -551,6 +590,7 @@ export function emailSubject(t: Timesheet): string {
 
 export function emailBody(t: Timesheet): string {
   const calc = calculateTimesheet(t);
+  const rule = getRule(t.selectedAgreementId);
   const dayLines = WEEKDAYS.map((name, index) => {
     const day = t.days[index];
     const registration =
@@ -564,6 +604,11 @@ export function emailBody(t: Timesheet): string {
       .join(" · ");
     return `${name}: ${registration}${details ? ` (${details})` : ""}`;
   });
+  const sourceLines =
+    rule?.sources.map(
+      (source) =>
+        `${agreementRuleSourceLabel(source)}: ${source.pdfFileName || source.pdfUrl}, side ${source.page} (${agreementRuleSourceHref(source)})`,
+    ) ?? [];
   return [
     "TIMESSEDDEL",
     "",
@@ -596,6 +641,9 @@ export function emailBody(t: Timesheet): string {
     calc.canCalculateRatesAutomatically
       ? "Automatisk satsberegning er aktiveret for denne overenskomst."
       : "Automatisk satsberegning er ikke aktiveret for denne overenskomst.",
+    "",
+    "KILDER",
+    ...(sourceLines.length ? sourceLines : ["Ingen regel-/tillægskilder er registreret endnu."]),
     "",
     "Timesedlen er afsendt til kontrol. Tillæg, satser og eventuelle lokalaftaler skal kontrolleres mod PDF-kilden før løn- eller fakturabehandling.",
   ].join("\n");

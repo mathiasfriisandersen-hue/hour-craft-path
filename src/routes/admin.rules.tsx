@@ -4,7 +4,12 @@ import { AppShell, InfoBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { listRules, saveRule } from "@/lib/timesheet-store";
-import type { AgreementRule } from "@/lib/agreementRules";
+import {
+  AGREEMENT_RULE_SOURCE_LABEL,
+  agreementRuleSourceHref,
+  type AgreementRule,
+  type AgreementRuleSourceKey,
+} from "@/lib/agreementRules";
 import {
   collectiveAgreements,
   getCollectiveAgreementById,
@@ -27,6 +32,34 @@ function RulesPage() {
     setRules((current) =>
       current.map((item) => (item.agreementId === selectedId ? { ...item, ...patch } : item)),
     );
+  };
+  const updateSource = (
+    field: AgreementRuleSourceKey,
+    patch: { page?: number; pdfUrl?: string; pdfFileName?: string },
+  ) => {
+    if (!rule) return;
+    const existing = rule.sources.find((source) => source.field === field);
+    const pdfUrl = patch.pdfUrl ?? existing?.pdfUrl ?? agreement?.pdfUrl ?? "";
+    const pdfFileName = patch.pdfFileName ?? existing?.pdfFileName ?? agreement?.pdfFileName ?? "";
+    const page = patch.page ?? existing?.page;
+    const otherSources = rule.sources.filter((source) => source.field !== field);
+
+    if (!page || page < 1 || !pdfUrl.trim()) {
+      update({ sources: otherSources });
+      return;
+    }
+
+    update({
+      sources: [
+        ...otherSources,
+        {
+          field,
+          page,
+          pdfUrl: pdfUrl.trim(),
+          pdfFileName: pdfFileName.trim() || undefined,
+        },
+      ],
+    });
   };
   const save = () => {
     if (!rule) return;
@@ -177,6 +210,65 @@ function RulesPage() {
                 className="md:col-span-2"
               />
             </div>
+            <section className="mt-6 rounded-lg border bg-muted/20 p-4">
+              <h3 className="font-semibold">Kildehenvisninger til PDF</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Angiv den faktiske PDF-side, hvor reglen eller tillægget er fundet. Linket åbner
+                direkte på siden, fx Jord- og Betonoverenskomsten side 17 hvis reglen står der.
+              </p>
+              <div className="mt-4 grid grid-cols-1 gap-3">
+                {(Object.keys(AGREEMENT_RULE_SOURCE_LABEL) as AgreementRuleSourceKey[]).map(
+                  (field) => {
+                    const source = rule.sources.find((item) => item.field === field);
+                    return (
+                      <div
+                        key={field}
+                        className="grid grid-cols-1 gap-2 rounded-md border bg-card p-3 md:grid-cols-[220px_1fr_120px_auto]"
+                      >
+                        <div className="text-sm font-medium">
+                          {AGREEMENT_RULE_SOURCE_LABEL[field]}
+                        </div>
+                        <Input
+                          value={source?.pdfUrl ?? agreement?.pdfUrl ?? ""}
+                          placeholder="/overenskomster/filnavn.pdf"
+                          onChange={(e) =>
+                            updateSource(field, {
+                              pdfUrl: e.target.value,
+                              pdfFileName: e.target.value.split("/").pop() ?? "",
+                            })
+                          }
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          value={source?.page ?? ""}
+                          placeholder="Side"
+                          onChange={(e) =>
+                            updateSource(field, {
+                              page: e.target.value ? Number(e.target.value) : undefined,
+                            })
+                          }
+                        />
+                        <div className="flex items-center justify-end">
+                          {source ? (
+                            <a
+                              href={agreementRuleSourceHref(source)}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-sm font-medium text-primary hover:underline"
+                            >
+                              Åbn side {source.page} →
+                            </a>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">Ingen kilde</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+            </section>
             <div className="mt-5 flex items-center justify-between gap-3">
               <span className="text-sm text-muted-foreground">{message}</span>
               <Button onClick={save}>Gem regler</Button>
