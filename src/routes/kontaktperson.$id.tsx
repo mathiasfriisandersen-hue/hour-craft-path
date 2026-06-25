@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppShell, InfoBanner, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import {
+  calculateTimesheet,
   dayHours,
   formatWeekRange,
   getById,
@@ -31,9 +32,15 @@ function KontaktDetail() {
     else setT(found);
   }, [id, navigate]);
 
-  if (!t) return <AppShell allow={["kontaktperson"]}><div>Indlæser…</div></AppShell>;
+  if (!t)
+    return (
+      <AppShell allow={["kontaktperson"]}>
+        <div>Indlæser…</div>
+      </AppShell>
+    );
 
   const canAct = t.status === "sent";
+  const calc = calculateTimesheet(t);
 
   const approve = () => {
     upsert({ ...t, status: "approved", rejectionComment: undefined });
@@ -52,16 +59,14 @@ function KontaktDetail() {
           ← Tilbage
         </Link>
         <div className="mt-1 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">
-            Timeseddel · Uge {weekNumber(t.weekStart)}
-          </h1>
+          <h1 className="text-2xl font-semibold">Timeseddel · Uge {weekNumber(t.weekStart)}</h1>
           <StatusBadge status={t.status} />
         </div>
       </div>
 
       <InfoBanner>
-        Når kontaktpersonen godkender timesedlen, registreres godkendelsen som dokumentation for,
-        at brugervirksomheden har modtaget og accepteret de indsendte timer.
+        Når kontaktpersonen godkender timesedlen, registreres godkendelsen som dokumentation for, at
+        brugervirksomheden har modtaget og accepteret de indsendte timer.
       </InfoBanner>
 
       <section className="mt-6 rounded-lg border bg-card p-6">
@@ -73,6 +78,9 @@ function KontaktDetail() {
           <Row label="Mail" value={t.kontaktpersonEmail} />
           <Row label="Arbejdssted" value={t.arbejdssted} />
           <Row label="Periode" value={formatWeekRange(t.weekStart)} />
+          <Row label="Overenskomst" value={calc.agreementName} />
+          <Row label="PDF-status" value={calc.rateValidationStatus} />
+          <Row label="Lokalaftale" value={t.localAgreementApplies ? "Ja" : "Nej"} />
         </dl>
       </section>
 
@@ -106,8 +114,12 @@ function KontaktDetail() {
           </tbody>
           <tfoot>
             <tr className="border-t bg-muted/30">
-              <td colSpan={5} className="px-4 py-3 text-right font-medium">Samlede timer</td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums">{totalHours(t.days).toFixed(2)}</td>
+              <td colSpan={5} className="px-4 py-3 text-right font-medium">
+                Samlede timer
+              </td>
+              <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                {totalHours(t.days).toFixed(2)}
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -132,7 +144,9 @@ function KontaktDetail() {
                 placeholder="Beskriv kort hvorfor timesedlen afvises…"
               />
               <div className="mt-3 flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setShowReject(false)}>Annullér</Button>
+                <Button variant="outline" onClick={() => setShowReject(false)}>
+                  Annullér
+                </Button>
                 <Button variant="destructive" onClick={reject} disabled={!comment.trim()}>
                   Bekræft afvisning
                 </Button>
@@ -140,7 +154,9 @@ function KontaktDetail() {
             </div>
           ) : (
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowReject(true)}>Afvis timer</Button>
+              <Button variant="outline" onClick={() => setShowReject(true)}>
+                Afvis timer
+              </Button>
               <Button onClick={approve}>Godkend timer</Button>
             </div>
           )}

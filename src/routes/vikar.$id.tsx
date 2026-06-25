@@ -8,9 +8,8 @@ import {
   dayHours,
   formatWeekRange,
   getById,
-  listCompanies,
   mailtoUrl,
-  OVERENSKOMSTER,
+  listCompanies,
   totalHours,
   upsert,
   validate,
@@ -19,6 +18,7 @@ import {
   type AbsenceType,
   type Timesheet,
 } from "@/lib/timesheet-store";
+import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/vikar/$id")({
@@ -33,7 +33,6 @@ function VikarEdit() {
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const companies = listCompanies();
-  const selectedCompany = companies.find((item) => item.name === t?.brugervirksomhed);
 
   useEffect(() => {
     const found = getById(id);
@@ -71,7 +70,7 @@ function VikarEdit() {
 
   const handleSave = () => {
     setT(upsert(t));
-    setMessage("Kladde gemt lokalt i denne browser.");
+    setMessage("Kladde gemt midlertidigt i denne browsersession.");
   };
 
   const handleSend = () => {
@@ -127,6 +126,14 @@ function VikarEdit() {
               onChange={(e) => update({ vikar: e.target.value })}
             />
           </Field>
+          <Field label="Vikarens e-mail *">
+            <Input
+              type="email"
+              value={t.vikarEmail}
+              disabled={locked}
+              onChange={(e) => update({ vikarEmail: e.target.value })}
+            />
+          </Field>
           <Field label="Brugervirksomhed *">
             <Input
               list="company-list"
@@ -172,13 +179,23 @@ function VikarEdit() {
           <Field label="Overenskomst *">
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={t.overenskomst}
+              value={t.selectedAgreementId}
               disabled={locked}
-              onChange={(e) => update({ overenskomst: e.target.value })}
+              onChange={(e) => {
+                const agreement = activeCollectiveAgreements.find(
+                  (item) => item.id === e.target.value,
+                );
+                update({
+                  selectedAgreementId: e.target.value,
+                  overenskomst: agreement?.name ?? "",
+                });
+              }}
             >
               <option value="">Vælg overenskomst…</option>
-              {OVERENSKOMSTER.map((name) => (
-                <option key={name}>{name}</option>
+              {activeCollectiveAgreements.map((agreement) => (
+                <option key={agreement.id} value={agreement.id}>
+                  {agreement.name} — {agreement.industryArea}
+                </option>
               ))}
             </select>
           </Field>
@@ -202,13 +219,14 @@ function VikarEdit() {
                   disabled={locked}
                   onClick={() =>
                     update({
+                      localAgreementApplies: option.value,
                       lokalaftale: option.value,
-                      localAgreementId: option.value ? t.localAgreementId : undefined,
+                      localAgreementId: undefined,
                     })
                   }
                   className={cn(
                     "h-9 rounded-md border px-4 text-sm font-medium",
-                    t.lokalaftale === option.value
+                    t.localAgreementApplies === option.value
                       ? "border-primary bg-primary text-primary-foreground"
                       : "bg-background hover:bg-accent",
                     locked && "cursor-not-allowed opacity-60",
@@ -219,24 +237,14 @@ function VikarEdit() {
               ))}
             </div>
           </Field>
-          {t.lokalaftale && selectedCompany && selectedCompany.localAgreements.length > 0 && (
-            <Field label="Vælg lokalaftale" className="md:col-span-2">
-              <select
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                value={t.localAgreementId ?? ""}
-                disabled={locked}
-                onChange={(e) => update({ localAgreementId: e.target.value || undefined })}
-              >
-                <option value="">Vælg lokalaftale…</option>
-                {selectedCompany.localAgreements.map((agreement) => (
-                  <option key={agreement.id} value={agreement.id}>
-                    {agreement.name}
-                    {agreement.validFrom ? ` · fra ${agreement.validFrom}` : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
+          <Field label="Noter" className="md:col-span-2">
+            <textarea
+              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={t.notes}
+              disabled={locked}
+              onChange={(e) => update({ notes: e.target.value })}
+            />
+          </Field>
         </div>
       </section>
 

@@ -15,6 +15,7 @@ import {
   weekNumber,
   type Timesheet,
 } from "@/lib/timesheet-store";
+import { publicAgreementPdfHref } from "@/lib/collectiveAgreements";
 
 export const Route = createFileRoute("/admin/$id")({
   head: () => ({ meta: [{ title: "Admin — Detaljer" }] }),
@@ -41,7 +42,7 @@ function AdminDetail() {
       </AppShell>
     );
   const calc = calculateTimesheet(t);
-  const rule = getRule(t.overenskomst);
+  const rule = getRule(t.selectedAgreementId);
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
@@ -65,8 +66,8 @@ function AdminDetail() {
       </div>
 
       <InfoBanner tone="warning">
-        Beregninger er vejledende og skal kontrolleres mod gældende overenskomst, lokalaftaler og
-        konkrete aftaler.
+        Systemet beregner kun samlet timetal, indtil overenskomstens PDF-kilde og satser er manuelt
+        valideret i regelgrundlaget.
       </InfoBanner>
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -74,14 +75,17 @@ function AdminDetail() {
           <h2 className="mb-4 font-semibold">Oplysninger</h2>
           <dl className="space-y-1 text-sm">
             <Row label="Vikar" value={t.vikar} />
+            <Row label="Vikarens e-mail" value={t.vikarEmail} />
             <Row label="Brugervirksomhed" value={t.brugervirksomhed} />
             <Row label="Kontaktperson" value={t.kontaktperson} />
             <Row label="Mail" value={t.kontaktpersonEmail} />
             <Row label="Reference" value={t.referenceNo} />
             <Row label="Arbejdssted" value={t.arbejdssted} />
             <Row label="Periode" value={formatWeekRange(t.weekStart)} />
-            <Row label="Overenskomst" value={t.overenskomst} />
-            <Row label="Lokalaftale" value={t.lokalaftale ? "Ja" : "Nej"} />
+            <Row label="Overenskomst" value={calc.agreementName} />
+            <Row label="Kategori" value={calc.agreementCategory} />
+            <Row label="Brancheområde" value={calc.industryArea} />
+            <Row label="Lokalaftale" value={t.localAgreementApplies ? "Ja" : "Nej"} />
           </dl>
         </section>
 
@@ -94,20 +98,27 @@ function AdminDetail() {
           </div>
           <dl className="space-y-1 text-sm">
             <Row label="Samlede timer" value={`${calc.total.toFixed(2)} t`} />
-            <Row label="Normaltimer" value={`${calc.normal.toFixed(2)} t`} />
-            <Row label="Mulige overarbejdstimer" value={`${calc.overtime.toFixed(2)} t`} />
+            <Row label="PDF-kilde" value={calc.pdfFileName || "PDF mangler"} />
+            <Row label="Valideringsstatus" value={calc.rateValidationStatus} />
             <Row
-              label="Lørdag / søndag"
-              value={`${calc.saturday.toFixed(2)} / ${calc.sunday.toFixed(2)} t`}
+              label="Automatisk satsberegning"
+              value={calc.canCalculateRatesAutomatically ? "Tilladt" : "Ikke tilladt"}
             />
-            <Row
-              label="Aften / nat"
-              value={`${calc.evening.toFixed(2)} / ${calc.night.toFixed(2)} t`}
-            />
-            <Row label="Skiftehold" value={`${calc.shift.toFixed(2)} t`} />
-            <Row label="Omfattet af lokalaftale" value={`${calc.localAgreement.toFixed(2)} t`} />
           </dl>
-          {calc.missingRules.length > 0 && (
+          {calc.pdfUrl && (
+            <a
+              href={publicAgreementPdfHref(calc.pdfUrl)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 inline-flex text-sm font-medium text-primary hover:underline"
+            >
+              Åbn PDF-kilde →
+            </a>
+          )}
+          <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
+            {calc.validationNote}
+          </div>
+          {calc.canCalculateRatesAutomatically && calc.missingRules.length > 0 && (
             <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
               <strong>Manuel kontrol kræves:</strong> {calc.missingRules.join(", ")}.
             </div>
@@ -166,6 +177,11 @@ function AdminDetail() {
 
       <section className="mt-6 rounded-lg border bg-card p-5 md:p-6">
         <h2 className="mb-3 font-semibold">Regelgrundlag og tillæg</h2>
+        {!calc.canCalculateRatesAutomatically && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            Tillæg og satser vises ikke som beregning, før overenskomsten er markeret som valideret.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
           <Rule label="Overarbejde" value={rule?.overtimeRule} />
           <Rule label="Lørdag" value={rule?.saturdayRule} />

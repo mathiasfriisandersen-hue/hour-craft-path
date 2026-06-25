@@ -1,3 +1,12 @@
+import {
+  activeCollectiveAgreements,
+  collectiveAgreements,
+  getCollectiveAgreementById,
+  getCollectiveAgreementByName,
+} from "./collectiveAgreements";
+import { defaultAgreementRules, type AgreementRule } from "./agreementRules";
+import { calculateTimesheetSummary } from "./timesheetCalculationService";
+
 export type Status = "draft" | "sent" | "approved" | "rejected";
 
 export const STATUS_LABEL: Record<Status, string> = {
@@ -14,26 +23,7 @@ export const STATUS_CLASS: Record<Status, string> = {
   rejected: "bg-status-rejected text-status-rejected-fg",
 };
 
-export const OVERENSKOMSTER = [
-  "Industriens Overenskomst",
-  "Industriens Funktionæroverenskomst",
-  "Industri-, Træ- og Møbeloverenskomsten",
-  "Træ- og Møbeloverenskomsten",
-  "Industrioverenskomsten (Byggeri)",
-  "Bygge- og Anlægsoverenskomsten",
-  "Jord- og Betonoverenskomsten",
-  "Isoleringsoverenskomsten",
-  "Maleroverenskomsten",
-  "Elektrikeroverenskomsten",
-  "VVS-overenskomsten",
-  "Industri- og VVS-overenskomsten",
-  "VVS- og Blikkenslageroverenskomsten",
-  "Industri- og Værkstedsoverenskomsten",
-  "Auto- og Boligmonteringsoverenskomsten",
-  "HK-industrioverenskomsten",
-  "HK-installationsoverenskomsten",
-  "TL-overenskomsten",
-] as const;
+export const OVERENSKOMSTER = collectiveAgreements.map((agreement) => agreement.name);
 
 export const WEEKDAYS = [
   "Mandag",
@@ -67,39 +57,23 @@ export type DayEntry = {
 export type Timesheet = {
   id: string;
   vikar: string;
+  vikarEmail: string;
   brugervirksomhed: string;
   kontaktperson: string;
   kontaktpersonEmail: string;
   referenceNo: string;
   arbejdssted: string;
-  overenskomst: string;
-  lokalaftale: boolean;
+  selectedAgreementId: string;
+  overenskomst?: string;
+  localAgreementApplies: boolean;
+  lokalaftale?: boolean;
   localAgreementId?: string;
   weekStart: string;
   days: DayEntry[];
+  notes: string;
   status: Status;
   rejectionComment?: string;
   createdAt: string;
-  updatedAt: string;
-};
-
-export type AgreementRule = {
-  id: string;
-  name: string;
-  normalDayHours?: number;
-  normalWeekHours?: number;
-  overtimeRule: string;
-  saturdayRule: string;
-  sundayRule: string;
-  eveningRule: string;
-  nightRule: string;
-  shiftRule: string;
-  specialRule: string;
-  eveningStart: string;
-  nightStart: string;
-  nightEnd: string;
-  validFrom: string;
-  validTo: string;
   updatedAt: string;
 };
 
@@ -122,6 +96,15 @@ export type LocalAgreement = {
 
 export type CalculationResult = {
   total: number;
+  agreementId: string;
+  agreementName: string;
+  agreementCategory: string;
+  industryArea: string;
+  pdfUrl?: string;
+  pdfFileName?: string;
+  rateValidationStatus: string;
+  canCalculateRatesAutomatically: boolean;
+  validationNote: string;
   normal: number;
   overtime: number;
   saturday: number;
@@ -159,12 +142,36 @@ function normalizeDay(value: Partial<DayEntry> | undefined): DayEntry {
   return { ...emptyDay(), ...value };
 }
 
-function normalizeTimesheet(value: Omit<Timesheet, "status"> & { status?: string }): Timesheet {
+type StoredTimesheet = Omit<
+  Timesheet,
+  "status" | "selectedAgreementId" | "localAgreementApplies"
+> & {
+  status?: string;
+  selectedAgreementId?: string;
+  localAgreementApplies?: boolean;
+  overenskomst?: string;
+  lokalaftale?: boolean;
+  vikarEmail?: string;
+  notes?: string;
+};
+
+function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
   const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index]));
+  const migratedAgreementId =
+    value.selectedAgreementId || getCollectiveAgreementByName(value.overenskomst ?? "")?.id || "";
+  const agreementName =
+    getCollectiveAgreementById(migratedAgreementId)?.name ?? value.overenskomst ?? "";
+  const localAgreementApplies = value.localAgreementApplies ?? value.lokalaftale ?? false;
   return {
     ...value,
+    vikarEmail: value.vikarEmail ?? "",
     referenceNo: value.referenceNo ?? "",
+    selectedAgreementId: migratedAgreementId,
+    overenskomst: agreementName,
+    localAgreementApplies,
+    lokalaftale: localAgreementApplies,
+    notes: value.notes ?? "",
     status: value.status === "reviewed" ? "approved" : (value.status as Status),
     days,
     createdAt: value.createdAt ?? now,
@@ -252,14 +259,28 @@ function overlapHours(day: DayEntry, from: string, to: string): number {
   );
 }
 
+function storageForKey(key: string): Storage | undefined {
+  if (typeof window === "undefined") return undefined;
+  return key === RULE_KEY ? window.localStorage : window.sessionStorage;
+}
+
 function safeParse<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
+  const storage = storageForKey(key);
+  if (!storage) return fallback;
   try {
-    const raw = localStorage.getItem(key);
+    const raw = storage.getItem(key);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
+}
+
+function setStorageItem(key: string, value: string): void {
+  storageForKey(key)?.setItem(key, value);
+}
+
+function removeStorageItem(key: string): void {
+  storageForKey(key)?.removeItem(key);
 }
 
 function emit(): void {
@@ -271,7 +292,7 @@ function readTimesheets(): Timesheet[] {
 }
 
 function writeTimesheets(list: Timesheet[]): void {
-  localStorage.setItem(TIMESHEET_KEY, JSON.stringify(list));
+  setStorageItem(TIMESHEET_KEY, JSON.stringify(list));
   emit();
 }
 
@@ -299,7 +320,7 @@ export function remove(id: string): void {
 
 export function clearAll(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(TIMESHEET_KEY);
+  removeStorageItem(TIMESHEET_KEY);
   emit();
 }
 
@@ -308,15 +329,19 @@ export function createBlank(): Timesheet {
   return {
     id: crypto.randomUUID(),
     vikar: "",
+    vikarEmail: "",
     brugervirksomhed: "",
     kontaktperson: "",
     kontaktpersonEmail: "",
     referenceNo: "",
     arbejdssted: "",
+    selectedAgreementId: "",
     overenskomst: "",
+    localAgreementApplies: false,
     lokalaftale: false,
     weekStart: getMondayISO(),
     days: Array.from({ length: 7 }, emptyDay),
+    notes: "",
     status: "draft",
     createdAt: now,
     updatedAt: now,
@@ -326,12 +351,15 @@ export function createBlank(): Timesheet {
 export function validate(t: Timesheet): string[] {
   const errors: string[] = [];
   if (!t.vikar.trim()) errors.push("Vikarnavn mangler");
+  if (!/^\S+@\S+\.\S+$/.test(t.vikarEmail))
+    errors.push("Vikarens mailadresse mangler eller er ugyldig");
   if (!t.brugervirksomhed.trim()) errors.push("Brugervirksomhed mangler");
   if (!t.kontaktperson.trim()) errors.push("Kontaktperson mangler");
   if (!/^\S+@\S+\.\S+$/.test(t.kontaktpersonEmail))
     errors.push("Kontaktpersonens mailadresse mangler eller er ugyldig");
   if (!t.arbejdssted.trim()) errors.push("Arbejdssted mangler");
-  if (!t.overenskomst) errors.push("Vælg en overenskomst");
+  if (!t.selectedAgreementId || !getCollectiveAgreementById(t.selectedAgreementId))
+    errors.push("Vælg en aktiv overenskomst");
   t.days.forEach((day, index) => {
     if (day.absence === "none" && Boolean(day.start) !== Boolean(day.end))
       errors.push(`${WEEKDAYS[index]}: Udfyld både start og slut`);
@@ -343,43 +371,32 @@ export function validate(t: Timesheet): string[] {
 }
 
 export function listRules(): AgreementRule[] {
-  const stored = safeParse<AgreementRule[]>(RULE_KEY, []);
-  const byName = new Map(stored.map((rule) => [rule.name, rule]));
+  const stored = safeParse<Array<AgreementRule & { name?: string }>>(RULE_KEY, []);
+  const byAgreementId = new Map(stored.map((rule) => [rule.agreementId, rule]));
+  const byLegacyName = new Map(stored.filter((rule) => rule.name).map((rule) => [rule.name, rule]));
   const now = new Date().toISOString();
-  return OVERENSKOMSTER.map(
-    (name): AgreementRule =>
-      byName.get(name) ?? {
-        id: crypto.randomUUID(),
-        name,
-        overtimeRule: "",
-        saturdayRule: "",
-        sundayRule: "",
-        eveningRule: "",
-        nightRule: "",
-        shiftRule: "",
-        specialRule: "",
-        eveningStart: "",
-        nightStart: "",
-        nightEnd: "",
-        validFrom: "",
-        validTo: "",
-        updatedAt: now,
-      },
-  );
+  return defaultAgreementRules.map((rule) => ({
+    ...rule,
+    ...(byAgreementId.get(rule.agreementId) ??
+      byLegacyName.get(getCollectiveAgreementById(rule.agreementId)?.name)),
+    id: rule.id,
+    agreementId: rule.agreementId,
+    updatedAt: byAgreementId.get(rule.agreementId)?.updatedAt ?? rule.updatedAt ?? now,
+  }));
 }
 
 export function saveRule(rule: AgreementRule): void {
   const list = listRules();
   const updated = { ...rule, updatedAt: new Date().toISOString() };
-  const index = list.findIndex((item) => item.name === rule.name);
+  const index = list.findIndex((item) => item.agreementId === rule.agreementId);
   if (index >= 0) list[index] = updated;
   else list.push(updated);
-  localStorage.setItem(RULE_KEY, JSON.stringify(list));
+  setStorageItem(RULE_KEY, JSON.stringify(list));
   emit();
 }
 
-export function getRule(name: string): AgreementRule | undefined {
-  return listRules().find((rule) => rule.name === name);
+export function getRule(agreementId: string): AgreementRule | undefined {
+  return listRules().find((rule) => rule.agreementId === agreementId);
 }
 
 export function listCompanies(): Company[] {
@@ -391,12 +408,12 @@ export function saveCompany(company: Company): void {
   const index = list.findIndex((item) => item.id === company.id);
   if (index >= 0) list[index] = company;
   else list.push(company);
-  localStorage.setItem(COMPANY_KEY, JSON.stringify(list));
+  setStorageItem(COMPANY_KEY, JSON.stringify(list));
   emit();
 }
 
 export function removeCompany(id: string): void {
-  localStorage.setItem(
+  setStorageItem(
     COMPANY_KEY,
     JSON.stringify(listCompanies().filter((company) => company.id !== id)),
   );
@@ -404,9 +421,70 @@ export function removeCompany(id: string): void {
 }
 
 export function calculateTimesheet(t: Timesheet): CalculationResult {
-  const rule = getRule(t.overenskomst);
+  if (!t.selectedAgreementId) {
+    const total = totalHours(t.days);
+    return {
+      total,
+      agreementId: "",
+      agreementName: "",
+      agreementCategory: "",
+      industryArea: "",
+      canCalculateRatesAutomatically: false,
+      rateValidationStatus: "missing_pdf",
+      validationNote: "Vælg en overenskomst, før regelgrundlaget kan vurderes.",
+      normal: total,
+      overtime: 0,
+      saturday: 0,
+      sunday: 0,
+      weekend: 0,
+      evening: 0,
+      night: 0,
+      shift: 0,
+      localAgreement: t.localAgreementApplies ? total : 0,
+      missingRules: ["valgt overenskomst"],
+    };
+  }
+  const summary = calculateTimesheetSummary({
+    workerName: t.vikar,
+    workerEmail: t.vikarEmail,
+    userCompany: t.brugervirksomhed,
+    contactPerson: t.kontaktperson,
+    referenceNumber: t.referenceNo,
+    workAddress: t.arbejdssted,
+    selectedAgreementId: t.selectedAgreementId,
+    localAgreementApplies: t.localAgreementApplies,
+    days: WEEKDAYS.map((day, index) => ({ day, hours: dayHours(t.days[index]) })),
+    notes: t.notes,
+  });
+  const rule = getRule(t.selectedAgreementId);
   const total = totalHours(t.days);
   const missingRules: string[] = [];
+
+  if (!summary.canCalculateRatesAutomatically) {
+    return {
+      total,
+      agreementId: summary.agreementId,
+      agreementName: summary.agreementName,
+      agreementCategory: summary.agreementCategory,
+      industryArea: summary.industryArea,
+      pdfUrl: summary.pdfUrl,
+      pdfFileName: summary.pdfFileName,
+      rateValidationStatus: summary.rateValidationStatus,
+      canCalculateRatesAutomatically: summary.canCalculateRatesAutomatically,
+      validationNote: summary.validationNote,
+      normal: total,
+      overtime: 0,
+      saturday: 0,
+      sunday: 0,
+      weekend: 0,
+      evening: 0,
+      night: 0,
+      shift: 0,
+      localAgreement: t.localAgreementApplies ? total : 0,
+      missingRules: [summary.validationNote],
+    };
+  }
+
   let overtime = 0;
 
   if (rule?.normalWeekHours) {
@@ -443,10 +521,17 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   if (night > 0 && !rule?.nightRule) missingRules.push("nattillæg");
   if (t.days.some((day) => day.shiftWork) && !rule?.shiftRule)
     missingRules.push("skifteholdstillæg");
-  if (t.lokalaftale && !t.localAgreementId) missingRules.push("valgt lokalaftale");
-
   return {
     total,
+    agreementId: summary.agreementId,
+    agreementName: summary.agreementName,
+    agreementCategory: summary.agreementCategory,
+    industryArea: summary.industryArea,
+    pdfUrl: summary.pdfUrl,
+    pdfFileName: summary.pdfFileName,
+    rateValidationStatus: summary.rateValidationStatus,
+    canCalculateRatesAutomatically: summary.canCalculateRatesAutomatically,
+    validationNote: summary.validationNote,
     normal: round(Math.max(0, total - overtime)),
     overtime: round(overtime),
     saturday,
@@ -455,7 +540,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     evening: round(evening),
     night: round(night),
     shift: round(t.days.reduce((sum, day) => sum + (day.shiftWork ? dayHours(day) : 0), 0)),
-    localAgreement: t.lokalaftale ? total : 0,
+    localAgreement: t.localAgreementApplies ? total : 0,
     missingRules: [...new Set(missingRules)],
   };
 }
@@ -483,31 +568,36 @@ export function emailBody(t: Timesheet): string {
     "TIMESSEDDEL",
     "",
     `Vikar: ${t.vikar}`,
+    `Vikarens e-mail: ${t.vikarEmail}`,
     `Brugervirksomhed: ${t.brugervirksomhed}`,
     `Kontaktperson: ${t.kontaktperson}`,
+    `Kontaktpersonens e-mail: ${t.kontaktpersonEmail}`,
     `Reference: ${t.referenceNo || "—"}`,
     `Arbejdssted: ${t.arbejdssted}`,
     `Uge: ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
-    `Overenskomst: ${t.overenskomst}`,
-    `Lokalaftale: ${t.lokalaftale ? "Ja" : "Nej"}`,
+    `Valgt overenskomst: ${calc.agreementName || "—"}`,
+    `Kategori: ${calc.agreementCategory || "—"}`,
+    `Brancheområde: ${calc.industryArea || "—"}`,
+    `PDF-kilde: ${calc.pdfUrl || calc.pdfFileName || "PDF mangler"}`,
+    `Valideringsstatus: ${calc.rateValidationStatus}`,
+    `Lokalaftale: ${t.localAgreementApplies ? "Ja" : "Nej"}`,
     "",
     "REGISTRERINGER",
     ...dayLines,
     "",
-    "VEJLEDENDE ADMINBEREGNING",
+    "SAMLET TIMETAL",
     `Samlede timer: ${calc.total.toFixed(2)}`,
-    `Normaltimer: ${calc.normal.toFixed(2)}`,
-    `Mulige overarbejdstimer: ${calc.overtime.toFixed(2)}`,
-    `Lørdagstimer: ${calc.saturday.toFixed(2)}`,
-    `Søndagstimer: ${calc.sunday.toFixed(2)}`,
-    `Aftentimer: ${calc.evening.toFixed(2)}`,
-    `Nattetimer: ${calc.night.toFixed(2)}`,
-    `Skifteholdstimer: ${calc.shift.toFixed(2)}`,
-    calc.missingRules.length
-      ? `Manglende regelgrundlag: ${calc.missingRules.join(", ")}`
-      : "Regelgrundlag udfyldt",
     "",
-    "Beregningerne er vejledende og skal kontrolleres mod gældende overenskomst, lokalaftaler og konkrete aftaler.",
+    "NOTER",
+    t.notes || "—",
+    "",
+    "VALIDERINGSNOTE FOR TILLÆG",
+    calc.validationNote,
+    calc.canCalculateRatesAutomatically
+      ? "Automatisk satsberegning er aktiveret for denne overenskomst."
+      : "Automatisk satsberegning er ikke aktiveret for denne overenskomst.",
+    "",
+    "Timesedlen er afsendt til kontrol. Tillæg, satser og eventuelle lokalaftaler skal kontrolleres mod PDF-kilden før løn- eller fakturabehandling.",
   ].join("\n");
 }
 
@@ -529,23 +619,30 @@ export function timesheetsToCsv(list: Timesheet[]): string {
       "Reference",
       "Uge",
       "Periode",
+      "Overenskomst-ID",
       "Overenskomst",
+      "PDF-status",
       "Lokalaftale",
       "Status",
       "Timer",
     ],
-    ...list.map((t) => [
-      t.vikar,
-      t.brugervirksomhed,
-      t.kontaktperson,
-      t.referenceNo,
-      weekNumber(t.weekStart),
-      formatWeekRange(t.weekStart),
-      t.overenskomst,
-      t.lokalaftale ? "Ja" : "Nej",
-      STATUS_LABEL[t.status],
-      totalHours(t.days).toFixed(2),
-    ]),
+    ...list.map((t) => {
+      const calc = calculateTimesheet(t);
+      return [
+        t.vikar,
+        t.brugervirksomhed,
+        t.kontaktperson,
+        t.referenceNo,
+        weekNumber(t.weekStart),
+        formatWeekRange(t.weekStart),
+        calc.agreementId,
+        calc.agreementName,
+        calc.rateValidationStatus,
+        t.localAgreementApplies ? "Ja" : "Nej",
+        STATUS_LABEL[t.status],
+        totalHours(t.days).toFixed(2),
+      ];
+    }),
   ];
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\n")}`;
 }

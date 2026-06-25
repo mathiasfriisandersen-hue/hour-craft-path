@@ -5,14 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
+  calculateTimesheet,
   formatWeekRange,
-  OVERENSKOMSTER,
   STATUS_LABEL,
   timesheetsToCsv,
   totalHours,
   weekNumber,
   type Status,
 } from "@/lib/timesheet-store";
+import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin — Overblik" }] }),
@@ -35,7 +36,7 @@ function AdminList() {
       return (
         (!needle || text.includes(needle)) &&
         (status === "all" || item.status === status) &&
-        (agreement === "all" || item.overenskomst === agreement) &&
+        (agreement === "all" || item.selectedAgreementId === agreement) &&
         (!week || String(weekNumber(item.weekStart)) === week)
       );
     });
@@ -105,8 +106,10 @@ function AdminList() {
             onChange={(e) => setAgreement(e.target.value)}
           >
             <option value="all">Alle overenskomster</option>
-            {OVERENSKOMSTER.map((name) => (
-              <option key={name}>{name}</option>
+            {activeCollectiveAgreements.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
             ))}
           </select>
           <Input
@@ -139,37 +142,45 @@ function AdminList() {
               </tr>
             </thead>
             <tbody>
-              {list.map((item) => (
-                <tr key={item.id} className="border-t hover:bg-muted/20">
-                  <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
-                  <td className="px-4 py-3">
-                    <div>{item.brugervirksomhed || "—"}</div>
-                    <div className="text-xs text-muted-foreground">{item.kontaktperson || "—"}</div>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    <div>Uge {weekNumber(item.weekStart)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatWeekRange(item.weekStart)}
-                    </div>
-                  </td>
-                  <td className="max-w-56 truncate px-4 py-3" title={item.overenskomst}>
-                    {item.overenskomst || "—"}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums">{totalHours(item.days).toFixed(2)}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={item.status} />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <Link
-                      to="/admin/$id"
-                      params={{ id: item.id }}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      Åbn →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
+              {list.map((item) => {
+                const calc = calculateTimesheet(item);
+                return (
+                  <tr key={item.id} className="border-t hover:bg-muted/20">
+                    <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div>{item.brugervirksomhed || "—"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {item.kontaktperson || "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div>Uge {weekNumber(item.weekStart)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatWeekRange(item.weekStart)}
+                      </div>
+                    </td>
+                    <td className="max-w-56 truncate px-4 py-3" title={calc.agreementName}>
+                      <div>{calc.agreementName || "—"}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {calc.rateValidationStatus}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 tabular-nums">{totalHours(item.days).toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={item.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        to="/admin/$id"
+                        params={{ id: item.id }}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Åbn →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

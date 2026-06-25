@@ -3,7 +3,13 @@ import { useState } from "react";
 import { AppShell, InfoBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listRules, saveRule, type AgreementRule } from "@/lib/timesheet-store";
+import { listRules, saveRule } from "@/lib/timesheet-store";
+import type { AgreementRule } from "@/lib/agreementRules";
+import {
+  collectiveAgreements,
+  getCollectiveAgreementById,
+  publicAgreementPdfHref,
+} from "@/lib/collectiveAgreements";
 
 export const Route = createFileRoute("/admin/rules")({
   head: () => ({ meta: [{ title: "Admin — Regelgrundlag" }] }),
@@ -12,13 +18,14 @@ export const Route = createFileRoute("/admin/rules")({
 
 function RulesPage() {
   const [rules, setRules] = useState(listRules);
-  const [selectedName, setSelectedName] = useState(rules[0]?.name ?? "");
+  const [selectedId, setSelectedId] = useState(rules[0]?.agreementId ?? "");
   const [message, setMessage] = useState("");
-  const rule = rules.find((item) => item.name === selectedName);
+  const rule = rules.find((item) => item.agreementId === selectedId);
+  const agreement = rule ? getCollectiveAgreementById(rule.agreementId) : undefined;
 
   const update = (patch: Partial<AgreementRule>) => {
     setRules((current) =>
-      current.map((item) => (item.name === selectedName ? { ...item, ...patch } : item)),
+      current.map((item) => (item.agreementId === selectedId ? { ...item, ...patch } : item)),
     );
   };
   const save = () => {
@@ -43,19 +50,36 @@ function RulesPage() {
       </InfoBanner>
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
         <aside className="max-h-[720px] overflow-y-auto rounded-lg border bg-card p-2">
-          {rules.map((item) => (
+          {collectiveAgreements.map((agreement) => (
             <button
-              key={item.name}
-              onClick={() => setSelectedName(item.name)}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm ${selectedName === item.name ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              key={agreement.id}
+              onClick={() => setSelectedId(agreement.id)}
+              className={`block w-full rounded-md px-3 py-2 text-left text-sm ${selectedId === agreement.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
             >
-              {item.name}
+              <span className="block">{agreement.name}</span>
+              <span className="block text-xs opacity-80">{agreement.rateValidationStatus}</span>
             </button>
           ))}
         </aside>
         {rule && (
           <section className="rounded-lg border bg-card p-5 md:p-6">
-            <h2 className="mb-5 text-lg font-semibold">{rule.name}</h2>
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold">{agreement?.name ?? rule.agreementId}</h2>
+              <div className="mt-1 text-sm text-muted-foreground">
+                {agreement?.industryArea ?? "Ukendt brancheområde"} ·{" "}
+                {agreement?.rateValidationStatus ?? "missing_pdf"}
+              </div>
+              {agreement?.pdfUrl && (
+                <a
+                  href={publicAgreementPdfHref(agreement.pdfUrl)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+                >
+                  Åbn PDF-kilde →
+                </a>
+              )}
+            </div>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Normal daglig arbejdstid (timer)">
                 <Input
