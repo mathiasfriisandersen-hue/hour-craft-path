@@ -30,6 +30,10 @@ AGREEMENT_NAMES = {
     "industriens-overenskomst": "Industriens Overenskomst",
 }
 
+SOURCE_AUDIT_VERSIONS = {
+    "industriens-overenskomst": "co-industri-industriens-overenskomst-2025-2028-2025-07-31-audit-2",
+}
+
 RULE_DEFINITIONS = [
     {
         "ruleKey": "normal_daily_working_time",
@@ -372,6 +376,7 @@ def build_report(agreement: str, pdf_path: Path) -> dict[str, Any]:
     return {
         "agreementSlug": agreement,
         "agreementName": AGREEMENT_NAMES.get(agreement, agreement),
+        "sourceAuditVersion": SOURCE_AUDIT_VERSIONS.get(agreement, ""),
         "status": "rules_extracted",
         "validatedForCalculation": False,
         "sourcePdf": pdf_path.name,

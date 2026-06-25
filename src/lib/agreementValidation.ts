@@ -56,6 +56,7 @@ export type AgreementValidationTestCase = {
 export type AgreementValidationReport = {
   agreementSlug: string;
   agreementName: string;
+  sourceAuditVersion: string;
   status: AgreementValidationWorkflowStatus;
   validatedForCalculation: boolean;
   sourcePdf: string;
@@ -129,12 +130,15 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
       "Overarbejde afhænger af klokketimer, hverdagsfridag, før/efter normal arbejdstid samt søn-/helligdage.",
     pdfPages: [38, 39, 40, 41],
     sourceText:
-      "Stk. 7 Betaling for overarbejde. Tillæg for overarbejde betales afhængigt af, hvornår overarbejdet finder sted. Betalingssatser fremgår for første/anden klokketime, tredje/fjerde klokketime og femte klokketime samt søn- og helligdage.",
+      "Stk. 7 Betaling for overarbejde. Tillæg for overarbejde betales afhængigt af, hvornår overarbejdet finder sted. Betalingssatser fremgår for første/anden klokketime, tredje/fjerde klokketime, femte klokketime, hverdagsfridage og søn- og helligdage for 2025, 2026 og 2027.",
     possibleRates: [
-      "1.5.2025: 46,70 kr. første/anden klokketime",
-      "1.5.2025: 74,55 kr. tredje/fjerde klokketime",
-      "1.5.2025: 139,50 kr. femte klokketime/nat",
-      "1.5.2025: 92,95 kr. søn-/helligdag indtil kl. 12",
+      "Første/anden klokketime efter normal arbejdstid: 1.5.2025 46,70 kr.; 1.3.2026 48,10 kr.; 1.3.2027 49,55 kr.",
+      "Tredje/fjerde klokketime efter normal arbejdstid: 1.5.2025 74,55 kr.; 1.3.2026 76,80 kr.; 1.3.2027 79,10 kr.",
+      "Femte klokketime og derefter indtil normal arbejdstids begyndelse: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+      "Overarbejde før normal arbejdstid kl. 06-18: 1.5.2025 46,70 kr.; 1.3.2026 48,10 kr.; 1.3.2027 49,55 kr.",
+      "Overarbejde før normal arbejdstid kl. 18-06: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+      "Hel hverdagsfridag kl. 06-18: 1.5.2025 74,55 kr.; 1.3.2026 76,80 kr.; 1.3.2027 79,10 kr.",
+      "Hel hverdagsfridag kl. 18-06: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
     ],
     confidence: "medium",
     reviewStatus: "needs_review",
@@ -154,8 +158,9 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     sourceText:
       "En i forvejen tilsikret hverdagsfridag omfatter bl.a. lørdag hvis man arbejder mandag-fredag. For skifteholdsarbejde: Fra lørdag kl. 14.00 til søndagsdøgnets afslutning: Tillæg 2.",
     possibleRates: [
-      "1.5.2025: 74,55 kr. hverdagsfridag kl. 6-18",
-      "1.5.2025: 104,35 kr. skiftehold Tillæg 2",
+      "Hel hverdagsfridag kl. 06-18: 1.5.2025 74,55 kr.; 1.3.2026 76,80 kr.; 1.3.2027 79,10 kr.",
+      "Hel hverdagsfridag kl. 18-06: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+      "Skiftehold fra lørdag kl. 14 til søndagsdøgnets afslutning, Tillæg 2: 1.5.2025 104,35 kr.; 1.3.2026 108,00 kr.; 1.3.2027 111,75 kr.",
     ],
     confidence: "medium",
     reviewStatus: "needs_review",
@@ -172,7 +177,11 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [39, 41],
     sourceText:
       "Følgende dage er søn- og helligdage. Arbejde på søn- og helligdage betales med tillæg fra normal daglig arbejdstids begyndelse indtil kl. 12 og fra kl. 12 til normal arbejdstids begyndelse.",
-    possibleRates: ["1.5.2025: 92,95 kr. indtil kl. 12", "1.5.2025: 139,50 kr. fra kl. 12/nat"],
+    possibleRates: [
+      "Søn-/helligdag fra normal daglig arbejdstids begyndelse til kl. 12: 1.5.2025 92,95 kr.; 1.3.2026 95,75 kr.; 1.3.2027 98,60 kr.",
+      "Søn-/helligdag fra kl. 12 til normal arbejdstids begyndelse: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+      "Søndag morgen før normal arbejdstids begyndelse: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes: "Kontroller om den konkrete dag er søndag eller helligdag.",
@@ -188,7 +197,11 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [39, 41],
     sourceText:
       "Alle almindelige søndage samt 1. juledag, 2. juledag, nytårsdag, skærtorsdag, langfredag, påskedage, Kr. Himmelfartsdag og pinsedage nævnes som søn- og helligdage.",
-    possibleRates: ["Samme betalingsstruktur som søn- og helligdagsarbejde"],
+    possibleRates: [
+      "Søn-/helligdag fra normal daglig arbejdstids begyndelse til kl. 12: 1.5.2025 92,95 kr.; 1.3.2026 95,75 kr.; 1.3.2027 98,60 kr.",
+      "Søn-/helligdag fra kl. 12 til normal arbejdstids begyndelse: 1.5.2025 139,50 kr.; 1.3.2026 143,70 kr.; 1.3.2027 148,00 kr.",
+      "Skiftehold på søgnehelligdage, Tillæg 2: 1.5.2025 104,35 kr.; 1.3.2026 108,00 kr.; 1.3.2027 111,75 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes:
@@ -205,7 +218,9 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [45, 46],
     sourceText:
       "Stk. 6 Tillægsbetaling for forskudt arbejdstid. Hverdage fra kl. 18.00 til kl. 22.00: Tillæg 1.",
-    possibleRates: ["1.5.2025: Tillæg 1 = 31,50 kr."],
+    possibleRates: [
+      "Forskudt tid Tillæg 1 pr. time: 1.5.2025 31,50 kr.; 1.3.2026 32,60 kr.; 1.3.2027 33,75 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes: "Kræver kontrol af om arbejdet er etableret som forskudt arbejdstid.",
@@ -222,7 +237,10 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [46],
     sourceText:
       "Hverdage fra kl. 22.00 til kl. 06.00: Tillæg 2. Påbegyndes den forskudte arbejdstid kl. 24.00 eller derefter, betales indtil kl. 06.00: Tillæg 3.",
-    possibleRates: ["1.5.2025: Tillæg 2 = 51,40 kr.", "1.5.2025: Tillæg 3 = 60,60 kr."],
+    possibleRates: [
+      "Forskudt tid Tillæg 2 pr. time: 1.5.2025 51,40 kr.; 1.3.2026 53,20 kr.; 1.3.2027 55,05 kr.",
+      "Forskudt tid Tillæg 3 pr. time: 1.5.2025 60,60 kr.; 1.3.2026 62,70 kr.; 1.3.2027 64,90 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes: "Kræver kontrol af om arbejde er forskudt tid, overarbejde eller skiftehold.",
@@ -238,7 +256,11 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [45, 46],
     sourceText:
       "Ved forskudt arbejdstid er den fastlagte normale arbejdstid helt eller delvist inden for tidsrummet kl. 18.00-kl. 06.00. Arbejde på forskudt tid betales med Tillæg 1, 2 eller 3.",
-    possibleRates: ["Tillæg 1/2/3 afhængigt af tidsrum"],
+    possibleRates: [
+      "Tillæg 1 pr. time: 1.5.2025 31,50 kr.; 1.3.2026 32,60 kr.; 1.3.2027 33,75 kr.",
+      "Tillæg 2 pr. time: 1.5.2025 51,40 kr.; 1.3.2026 53,20 kr.; 1.3.2027 55,05 kr.",
+      "Tillæg 3 pr. time: 1.5.2025 60,60 kr.; 1.3.2026 62,70 kr.; 1.3.2027 64,90 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes: "Forskudt tid må ikke forveksles med skiftehold.",
@@ -255,9 +277,11 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     sourceText:
       "Stk. 6 Tillægsbetaling for skifteholdsarbejde. Tillæg 1-5 fremgår. Hverdage 18.00-06.00: Tillæg 1. Fra lørdag kl. 14.00 til søndagsdøgnets afslutning: Tillæg 2.",
     possibleRates: [
-      "1.5.2025: Tillæg 1 = 48,70 kr.",
-      "1.5.2025: Tillæg 2 = 104,35 kr.",
-      "1.5.2025: Tillæg 5 = 261,20 kr. pr. gang",
+      "Tillæg 1 pr. time: 1.5.2025 48,70 kr.; 1.3.2026 50,40 kr.; 1.3.2027 52,15 kr.",
+      "Tillæg 2 pr. time: 1.5.2025 104,35 kr.; 1.3.2026 108,00 kr.; 1.3.2027 111,75 kr.",
+      "Tillæg 3 pr. time: 1.5.2025 104,70 kr.; 1.3.2026 108,35 kr.; 1.3.2027 112,15 kr.",
+      "Tillæg 4 pr. time: 1.5.2025 32,80 kr.; 1.3.2026 33,95 kr.; 1.3.2027 35,15 kr.",
+      "Tillæg 5 pr. gang: 1.5.2025 261,20 kr.; 1.3.2026 270,30 kr.; 1.3.2027 279,80 kr.",
     ],
     confidence: "high",
     reviewStatus: "needs_review",
@@ -308,7 +332,9 @@ const INDUSTRIENS_RULES: AgreementValidationRule[] = [
     pdfPages: [41],
     sourceText:
       "Tilsiges en medarbejder til arbejde i spisepausen, og denne derved udskydes ud over 1/2 time, betales der pr. gang herfor.",
-    possibleRates: ["1.5.2025: 33,05 kr. pr. gang"],
+    possibleRates: [
+      "Arbejde i spisepause pr. gang: 1.5.2025 33,05 kr.; 1.3.2026 34,05 kr.; 1.3.2027 35,10 kr.",
+    ],
     confidence: "high",
     reviewStatus: "needs_review",
     notes: "Timesedlen registrerer pause i minutter, men ikke om spisepausen er tilsagt/udskudt.",
@@ -420,6 +446,7 @@ export const defaultAgreementValidationReports: AgreementValidationReport[] = [
   {
     agreementSlug: "industriens-overenskomst",
     agreementName: "Industriens Overenskomst",
+    sourceAuditVersion: "co-industri-industriens-overenskomst-2025-2028-2025-07-31-audit-2",
     status: "needs_manual_review",
     validatedForCalculation: false,
     sourcePdf: "industriens-overenskomst.pdf",
@@ -427,7 +454,7 @@ export const defaultAgreementValidationReports: AgreementValidationReport[] = [
     validatedAt: "",
     validatedBy: "",
     validationNote:
-      "Regler og mulige satser er udtrukket fra PDF, men kræver manuel review. Automatisk kroneberegning må ikke aktiveres før alle obligatoriske regler, kildehenvisninger og testcases er godkendt.",
+      "Regler og mulige satser er kontrolleret mod officiel CO-industri PDF: Industriens Overenskomst 2025-2028, fil dateret 2025_07_31. Satser for 2025, 2026 og 2027 er udtrukket, men kræver stadig manuel review. Automatisk kroneberegning må ikke aktiveres før alle obligatoriske regler, kildehenvisninger og testcases er godkendt.",
     rules: INDUSTRIENS_RULES,
     testCases: INDUSTRIENS_TEST_CASES,
   },
@@ -449,6 +476,12 @@ function readStoredReports() {
 
 function mergeReport(defaultReport: AgreementValidationReport, stored?: AgreementValidationReport) {
   if (!stored) return defaultReport;
+  if (stored.sourceAuditVersion !== defaultReport.sourceAuditVersion) {
+    return {
+      ...defaultReport,
+      validationNote: `${defaultReport.validationNote} Tidligere lokal review er nulstillet, fordi kildegrundlaget er opdateret til audit-version ${defaultReport.sourceAuditVersion}.`,
+    };
+  }
   const storedRulesByKey = new Map(stored.rules.map((rule) => [rule.ruleKey, rule]));
   const defaultRuleKeys = new Set(defaultReport.rules.map((rule) => rule.ruleKey));
   const mergedRules = defaultReport.rules.map((rule) => ({
@@ -487,6 +520,7 @@ export function getAgreementValidationReport(agreementSlug: string) {
   return {
     agreementSlug: agreement.id,
     agreementName: agreement.name,
+    sourceAuditVersion: "",
     status: agreement.pdfUrl ? "source_uploaded" : "needs_manual_review",
     validatedForCalculation: false,
     sourcePdf: agreement.pdfFileName ?? agreement.pdfUrl ?? "",

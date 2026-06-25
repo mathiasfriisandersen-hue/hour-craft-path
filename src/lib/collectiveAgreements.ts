@@ -42,7 +42,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfFileName: "industriens-overenskomst.pdf",
     pdfUploadedAt: "2026-06-24",
     rateValidationStatus: "pdf_uploaded",
-    note: uploadedNote,
+    note: "Officiel CO-industri PDF: Industriens Overenskomst 2025-2028, filversion 2025_07_31. Satser og tillæg er struktureret til manuel validering, men automatisk kroneberegning er ikke aktiveret.",
   },
   {
     id: "industri-trae-moebeloverenskomsten",

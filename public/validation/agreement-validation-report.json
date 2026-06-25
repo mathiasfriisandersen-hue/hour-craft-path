@@ -1,6 +1,7 @@
 {
   "agreementSlug": "industriens-overenskomst",
   "agreementName": "Industriens Overenskomst",
+  "sourceAuditVersion": "co-industri-industriens-overenskomst-2025-2028-2025-07-31-audit-2",
   "status": "rules_extracted",
   "validatedForCalculation": false,
   "sourcePdf": "industriens-overenskomst.pdf",
