@@ -398,12 +398,29 @@ function normalizeAgreementRule(rule: AgreementRule, stored?: StoredAgreementRul
       pdfFileName: agreement?.pdfFileName,
     }));
 
-  return {
+  const merged = {
     ...rule,
-    ...stored,
+    ...(stored ?? {}),
     id: rule.id,
     agreementId: rule.agreementId,
     sources: stored?.sources?.length ? stored.sources : legacySources,
+  };
+
+  return {
+    ...merged,
+    normalDayHours: stored?.normalDayHours ?? rule.normalDayHours,
+    normalWeekHours: stored?.normalWeekHours ?? rule.normalWeekHours,
+    overtimeRule: stored?.overtimeRule?.trim() ? stored.overtimeRule : rule.overtimeRule,
+    saturdayRule: stored?.saturdayRule?.trim() ? stored.saturdayRule : rule.saturdayRule,
+    sundayRule: stored?.sundayRule?.trim() ? stored.sundayRule : rule.sundayRule,
+    eveningRule: stored?.eveningRule?.trim() ? stored.eveningRule : rule.eveningRule,
+    nightRule: stored?.nightRule?.trim() ? stored.nightRule : rule.nightRule,
+    shiftRule: stored?.shiftRule?.trim() ? stored.shiftRule : rule.shiftRule,
+    specialRule: stored?.specialRule?.trim() ? stored.specialRule : rule.specialRule,
+    eveningStart: stored?.eveningStart?.trim() ? stored.eveningStart : rule.eveningStart,
+    nightStart: stored?.nightStart?.trim() ? stored.nightStart : rule.nightStart,
+    nightEnd: stored?.nightEnd?.trim() ? stored.nightEnd : rule.nightEnd,
+    sources: stored?.sources?.length || legacySources.length ? merged.sources : rule.sources,
   };
 }
 
@@ -498,6 +515,20 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const rule = getRule(t.selectedAgreementId);
   const total = totalHours(t.days);
   const missingRules: string[] = [];
+  const saturday = dayHours(t.days[5]);
+  const sunday = dayHours(t.days[6]);
+  const evening = rule?.eveningStart
+    ? t.days.reduce(
+        (sum, day) => sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59"),
+        0,
+      )
+    : 0;
+  const night =
+    rule?.nightStart && rule.nightEnd
+      ? t.days.reduce((sum, day) => sum + overlapHours(day, rule.nightStart, rule.nightEnd), 0)
+      : 0;
+  const shift = round(t.days.reduce((sum, day) => sum + (day.shiftWork ? dayHours(day) : 0), 0));
+  const overtime = rule?.normalWeekHours ? Math.max(0, total - rule.normalWeekHours) : 0;
 
   if (!summary.canCalculateRatesAutomatically) {
     return {
@@ -511,23 +542,23 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       rateValidationStatus: summary.rateValidationStatus,
       canCalculateRatesAutomatically: summary.canCalculateRatesAutomatically,
       validationNote: summary.validationNote,
-      normal: total,
-      overtime: 0,
-      saturday: 0,
-      sunday: 0,
-      weekend: 0,
-      evening: 0,
-      night: 0,
-      shift: 0,
+      normal: round(Math.max(0, total - overtime)),
+      overtime: round(overtime),
+      saturday,
+      sunday,
+      weekend: round(saturday + sunday),
+      evening: round(evening),
+      night: round(night),
+      shift,
       localAgreement: t.localAgreementApplies ? total : 0,
       missingRules: [summary.validationNote],
     };
   }
 
-  let overtime = 0;
+  let validatedOvertime = overtime;
 
   if (rule?.normalWeekHours) {
-    overtime = Math.max(overtime, total - rule.normalWeekHours);
+    validatedOvertime = Math.max(validatedOvertime, total - rule.normalWeekHours);
   } else {
     missingRules.push("normal ugentlig arbejdstid");
   }
@@ -536,22 +567,10 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       (sum, day) => sum + Math.max(0, dayHours(day) - rule.normalDayHours!),
       0,
     );
-    overtime = Math.max(overtime, daily);
+    validatedOvertime = Math.max(validatedOvertime, daily);
   } else {
     missingRules.push("normal daglig arbejdstid");
   }
-  const saturday = dayHours(t.days[5]);
-  const sunday = dayHours(t.days[6]);
-  const evening = rule?.eveningStart
-    ? t.days.reduce(
-        (sum, day) => sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59"),
-        0,
-      )
-    : 0;
-  const night =
-    rule?.nightStart && rule.nightEnd
-      ? t.days.reduce((sum, day) => sum + overlapHours(day, rule.nightStart, rule.nightEnd), 0)
-      : 0;
   if (!rule?.overtimeRule) missingRules.push("overarbejdsregel");
   if (!rule?.validFrom || !rule?.validTo) missingRules.push("reglernes gyldighedsperiode");
   if (saturday > 0 && !rule?.saturdayRule) missingRules.push("lørdagstillæg");
@@ -571,14 +590,14 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     rateValidationStatus: summary.rateValidationStatus,
     canCalculateRatesAutomatically: summary.canCalculateRatesAutomatically,
     validationNote: summary.validationNote,
-    normal: round(Math.max(0, total - overtime)),
-    overtime: round(overtime),
+    normal: round(Math.max(0, total - validatedOvertime)),
+    overtime: round(validatedOvertime),
     saturday,
     sunday,
     weekend: round(saturday + sunday),
     evening: round(evening),
     night: round(night),
-    shift: round(t.days.reduce((sum, day) => sum + (day.shiftWork ? dayHours(day) : 0), 0)),
+    shift,
     localAgreement: t.localAgreementApplies ? total : 0,
     missingRules: [...new Set(missingRules)],
   };
@@ -632,6 +651,12 @@ export function emailBody(t: Timesheet): string {
     "",
     "SAMLET TIMETAL",
     `Samlede timer: ${calc.total.toFixed(2)}`,
+    `Mulige overarbejdstimer: ${calc.overtime.toFixed(2)}`,
+    `Lørdagstimer: ${calc.saturday.toFixed(2)}`,
+    `Søndagstimer: ${calc.sunday.toFixed(2)}`,
+    `Aftentimer: ${calc.evening.toFixed(2)}`,
+    `Nattetimer: ${calc.night.toFixed(2)}`,
+    `Skifteholdstimer: ${calc.shift.toFixed(2)}`,
     "",
     "NOTER",
     t.notes || "—",

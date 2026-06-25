@@ -123,6 +123,21 @@ function AdminDetail() {
           <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
             {calc.validationNote}
           </div>
+          <div className="mt-4 border-t pt-4">
+            <h3 className="mb-2 text-sm font-medium">Mulige tillægstimer</h3>
+            <dl className="space-y-1 text-sm">
+              <Row label="Mulige overarbejdstimer" value={`${calc.overtime.toFixed(2)} t`} />
+              <Row
+                label="Lørdag / søndag"
+                value={`${calc.saturday.toFixed(2)} / ${calc.sunday.toFixed(2)} t`}
+              />
+              <Row
+                label="Aften / nat"
+                value={`${calc.evening.toFixed(2)} / ${calc.night.toFixed(2)} t`}
+              />
+              <Row label="Skiftehold" value={`${calc.shift.toFixed(2)} t`} />
+            </dl>
+          </div>
           {calc.canCalculateRatesAutomatically && calc.missingRules.length > 0 && (
             <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
               <strong>Manuel kontrol kræves:</strong> {calc.missingRules.join(", ")}.
