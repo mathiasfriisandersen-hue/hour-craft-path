@@ -1,4 +1,8 @@
 import { getCollectiveAgreementById } from "./collectiveAgreements";
+import {
+  AGREEMENT_VALIDATION_STATUS_LABEL,
+  getAgreementValidationReport,
+} from "./agreementValidation";
 
 export type TimesheetDay = {
   day: string;
@@ -19,6 +23,18 @@ export type TimesheetInput = {
 };
 
 export function validationNoteForStatus(status: string) {
+  if (status === "validated_for_calculation") {
+    return "Overenskomsten er manuelt valideret til den beregning, systemet understøtter.";
+  }
+  if (status === "needs_manual_review") {
+    return "Regler og satser er udtrukket fra PDF, men kræver manuel review. Brug ikke automatisk satsberegning endnu.";
+  }
+  if (status === "rules_extracted") {
+    return "Regler og satser er udtrukket fra PDF, men mangler manuel review, kildekontrol og test.";
+  }
+  if (status === "source_uploaded") {
+    return "PDF er uploadet som juridisk kilde. Regler og satser skal udtrækkes, reviewes og testes før beregning.";
+  }
   if (status === "validated") {
     return "Satser og tillæg er valideret til automatisk beregning.";
   }
@@ -37,12 +53,19 @@ export function calculateTimesheetSummary(input: TimesheetInput) {
   if (!agreement) {
     throw new Error("Valgt overenskomst kunne ikke findes.");
   }
+  const validationReport = getAgreementValidationReport(agreement.id);
+  const workflowStatus =
+    validationReport?.status ??
+    (agreement.pdfUrl ? "source_uploaded" : agreement.rateValidationStatus);
 
   const totalHours = input.days.reduce((sum, day) => {
     return sum + (Number(day.hours) || 0);
   }, 0);
 
-  const canCalculateRatesAutomatically = agreement.rateValidationStatus === "validated";
+  const canCalculateRatesAutomatically = validationReport?.validatedForCalculation === true;
+  const validationNote = validationReport?.validatedForCalculation
+    ? validationReport.validationNote || validationNoteForStatus(workflowStatus)
+    : validationReport?.validationNote || validationNoteForStatus(workflowStatus);
 
   return {
     totalHours: Math.round(totalHours * 100) / 100,
@@ -53,8 +76,13 @@ export function calculateTimesheetSummary(input: TimesheetInput) {
     localAgreementApplies: input.localAgreementApplies,
     pdfUrl: agreement.pdfUrl,
     pdfFileName: agreement.pdfFileName,
-    rateValidationStatus: agreement.rateValidationStatus,
+    rateValidationStatus:
+      workflowStatus in AGREEMENT_VALIDATION_STATUS_LABEL
+        ? AGREEMENT_VALIDATION_STATUS_LABEL[
+            workflowStatus as keyof typeof AGREEMENT_VALIDATION_STATUS_LABEL
+          ]
+        : workflowStatus,
     canCalculateRatesAutomatically,
-    validationNote: validationNoteForStatus(agreement.rateValidationStatus),
+    validationNote,
   };
 }

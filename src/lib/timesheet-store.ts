@@ -13,6 +13,12 @@ import {
   type AgreementRuleSource,
   type AgreementRuleSourceKey,
 } from "./agreementRules";
+import {
+  getAgreementValidationReport,
+  getFailingValidationTests,
+  getMissingValidationRules,
+  getRulesNeedingManualReview,
+} from "./agreementValidation";
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
@@ -534,6 +540,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     notes: t.notes,
   });
   const rule = getRule(t.selectedAgreementId);
+  const validationReport = getAgreementValidationReport(t.selectedAgreementId);
   const total = totalHours(t.days);
   const missingRules: string[] = [];
   const saturday = dayHours(t.days[5]);
@@ -552,6 +559,19 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const overtime = rule?.normalWeekHours ? Math.max(0, total - rule.normalWeekHours) : 0;
 
   if (!summary.canCalculateRatesAutomatically) {
+    const validationBlockers = validationReport
+      ? [
+          ...getMissingValidationRules(validationReport).map(
+            (item) => `mangler godkendelse: ${item.label}`,
+          ),
+          ...getRulesNeedingManualReview(validationReport).map(
+            (item) => `kræver review: ${item.label}`,
+          ),
+          ...getFailingValidationTests(validationReport).map(
+            (item) => `testcase ikke bestået: ${item.label}`,
+          ),
+        ]
+      : [];
     return {
       total,
       agreementId: summary.agreementId,
@@ -572,7 +592,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       night: round(night),
       shift,
       localAgreement: t.localAgreementApplies ? total : 0,
-      missingRules: [summary.validationNote],
+      missingRules: [...new Set([summary.validationNote, ...validationBlockers])],
     };
   }
 

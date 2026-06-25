@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "validate:agreements": "python3 scripts/extract-agreement-rules.py",
+    "test:validation": "node scripts/run-validation-tests.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {
