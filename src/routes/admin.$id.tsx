@@ -6,9 +6,11 @@ import {
   ABSENCE_LABEL,
   calculateTimesheet,
   dayHours,
+  delayedMealBreakCalculationText,
   formatWeekRange,
   getById,
   getRule,
+  isIndustriensAgreement,
   mailtoUrl,
   upsert,
   WEEKDAYS,
@@ -49,6 +51,7 @@ function AdminDetail() {
     );
   const calc = calculateTimesheet(t);
   const rule = getRule(t.selectedAgreementId);
+  const showDelayedMealBreak = isIndustriensAgreement(t.selectedAgreementId);
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
@@ -140,6 +143,17 @@ function AdminDetail() {
               <Row label="Skiftehold" value={`${calc.shift.toFixed(2)} t`} />
             </dl>
           </div>
+          {showDelayedMealBreak && (
+            <div className="mt-4 border-t pt-4">
+              <h3 className="mb-2 text-sm font-medium">Manuelle tillæg</h3>
+              <dl className="space-y-1 text-sm">
+                <Row
+                  label="Udsat spisepause"
+                  value={delayedMealBreakCalculationText(calc.delayedMealBreakDays)}
+                />
+              </dl>
+            </div>
+          )}
           {calc.canCalculateRatesAutomatically && calc.missingRules.length > 0 && (
             <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
               <strong>Manuel kontrol kræves:</strong> {calc.missingRules.join(", ")}.
@@ -151,7 +165,7 @@ function AdminDetail() {
       <section className="mt-6 overflow-hidden rounded-lg border bg-card">
         <h2 className="p-5 pb-3 font-semibold md:p-6 md:pb-3">Registreringer</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-sm">
+          <table className="w-full min-w-[1040px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
                 {[
@@ -160,6 +174,7 @@ function AdminDetail() {
                   "Start",
                   "Slut",
                   "Pause",
+                  ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
                   "Opgave",
                   "Skiftehold",
                   "Kommentar",
@@ -181,6 +196,11 @@ function AdminDetail() {
                     <td className="px-3 py-3 tabular-nums">{day.start || "—"}</td>
                     <td className="px-3 py-3 tabular-nums">{day.end || "—"}</td>
                     <td className="px-3 py-3">{day.pause ? `${day.pause} min` : "—"}</td>
+                    {showDelayedMealBreak && (
+                      <td className="px-3 py-3">
+                        {day.absence === "none" && day.delayedMealBreakCompensation ? "Ja" : "Nej"}
+                      </td>
+                    )}
                     <td className="px-3 py-3">{day.taskType || "—"}</td>
                     <td className="px-3 py-3">{day.shiftWork ? "Ja" : "Nej"}</td>
                     <td className="max-w-64 px-3 py-3 text-muted-foreground">

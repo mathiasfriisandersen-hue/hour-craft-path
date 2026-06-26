@@ -6,8 +6,11 @@ import { Input } from "@/components/ui/input";
 import {
   ABSENCE_LABEL,
   dayHours,
+  delayedMealBreakDaysForTimesheet,
+  delayedMealBreakSummaryText,
   formatWeekRange,
   getById,
+  isIndustriensAgreement,
   mailtoUrl,
   listCompanies,
   totalHours,
@@ -60,6 +63,9 @@ function VikarEdit() {
   const pauseHasDisplayValue = (index: number, pause: number) =>
     Boolean(touchedPauseRows[index]) || pause > 0;
   const normalizePause = (pause: number) => Math.max(0, Math.round(pause / 5) * 5);
+  const delayedMealBreakEnabled = isIndustriensAgreement(t.selectedAgreementId);
+  const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
+  const timesheetTableSummaryColSpan = delayedMealBreakEnabled ? 9 : 8;
 
   const selectCompany = (name: string) => {
     const company = companies.find((item) => item.name === name);
@@ -189,12 +195,19 @@ function VikarEdit() {
               value={t.selectedAgreementId}
               disabled={locked}
               onChange={(e) => {
+                const nextAgreementId = e.target.value;
                 const agreement = activeCollectiveAgreements.find(
-                  (item) => item.id === e.target.value,
+                  (item) => item.id === nextAgreementId,
                 );
                 update({
-                  selectedAgreementId: e.target.value,
+                  selectedAgreementId: nextAgreementId,
                   overenskomst: agreement?.name ?? "",
+                  days: isIndustriensAgreement(nextAgreementId)
+                    ? t.days
+                    : t.days.map((day) => ({
+                        ...day,
+                        delayedMealBreakCompensation: false,
+                      })),
                 });
               }}
             >
@@ -261,9 +274,21 @@ function VikarEdit() {
           <p className="mt-1 text-sm text-muted-foreground">
             Vælg fraværstype på dage uden arbejdstimer. Tillægsberegninger vises kun for admin.
           </p>
+          {delayedMealBreakEnabled && (
+            <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis
+              du blev bedt om at arbejde videre, og din spisepause blev udsat mere end 30 minutter.
+              Gælder ikke frivilligt ekstraarbejde.
+            </div>
+          )}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-sm">
+          <table
+            className={cn(
+              "w-full text-sm",
+              delayedMealBreakEnabled ? "min-w-[1260px]" : "min-w-[1120px]",
+            )}
+          >
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
                 {[
@@ -272,6 +297,7 @@ function VikarEdit() {
                   "Start",
                   "Slut",
                   "Pause",
+                  ...(delayedMealBreakEnabled ? ["Udsat spisepause"] : []),
                   "Opgavetype",
                   "Skiftehold",
                   "Kommentar",
@@ -299,7 +325,14 @@ function VikarEdit() {
                           if (e.target.value !== "none") setPauseTouched(index, false);
                           updateDay(index, {
                             absence: e.target.value as AbsenceType,
-                            ...(e.target.value !== "none" ? { start: "", end: "", pause: 0 } : {}),
+                            ...(e.target.value !== "none"
+                              ? {
+                                  start: "",
+                                  end: "",
+                                  pause: 0,
+                                  delayedMealBreakCompensation: false,
+                                }
+                              : {}),
                           });
                         }}
                       >
@@ -365,6 +398,32 @@ function VikarEdit() {
                         }}
                       />
                     </td>
+                    {delayedMealBreakEnabled && (
+                      <td className="px-3 py-2">
+                        <label
+                          className={cn(
+                            "inline-flex min-h-8 items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
+                            locked || absent
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:bg-accent",
+                          )}
+                          title="Markér kun hvis du blev bedt om at arbejde videre, og din spisepause blev udsat mere end 30 minutter. Gælder ikke frivilligt ekstraarbejde."
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 accent-primary"
+                            checked={day.delayedMealBreakCompensation}
+                            disabled={locked || absent}
+                            onChange={(e) =>
+                              updateDay(index, {
+                                delayedMealBreakCompensation: e.target.checked,
+                              })
+                            }
+                          />
+                          <span>30+ min</span>
+                        </label>
+                      </td>
+                    )}
                     <td className="px-3 py-2">
                       <Input
                         className="h-8 w-36"
@@ -399,7 +458,10 @@ function VikarEdit() {
             </tbody>
             <tfoot>
               <tr className="border-t bg-muted/30">
-                <td colSpan={8} className="px-3 py-3 text-right font-medium">
+                <td
+                  colSpan={timesheetTableSummaryColSpan}
+                  className="px-3 py-3 text-right font-medium"
+                >
                   Samlede timer
                 </td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums">
@@ -409,6 +471,11 @@ function VikarEdit() {
             </tfoot>
           </table>
         </div>
+        {delayedMealBreakEnabled && (
+          <div className="border-t bg-muted/20 px-5 py-3 text-sm md:px-6">
+            {delayedMealBreakSummaryText(delayedMealBreakDays)}
+          </div>
+        )}
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-4">

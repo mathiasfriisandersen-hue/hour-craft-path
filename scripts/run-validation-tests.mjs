@@ -171,6 +171,48 @@ const tests = [
     },
   },
   {
+    id: "delayed-meal-break-industriens",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([
+          [0, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }],
+          [1, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }],
+        ]),
+      );
+      assertEqual(result.delayedMealBreakDays, 2, "delayed meal break days");
+      assertEqual(result.delayedMealBreakAmount, 68.1, "delayed meal break amount");
+      assertGuarded(result, "delayed meal break");
+    },
+  },
+  {
+    id: "delayed-meal-break-not-automatic-from-pause",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[0, { start: "07:00", end: "15:30", pause: 60 }]]),
+      );
+      assertEqual(result.delayedMealBreakDays, 0, "delayed meal break days without flag");
+      assertEqual(result.delayedMealBreakAmount, 0, "delayed meal break amount without flag");
+      assertGuarded(result, "delayed meal break without flag");
+    },
+  },
+  {
+    id: "delayed-meal-break-only-industriens",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet(
+          [[0, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }]],
+          {
+            selectedAgreementId: "bygningsoverenskomsten",
+            overenskomst: "Bygningsoverenskomsten",
+          },
+        ),
+      );
+      assertEqual(result.delayedMealBreakDays, 0, "delayed meal break wrong agreement days");
+      assertEqual(result.delayedMealBreakAmount, 0, "delayed meal break wrong agreement amount");
+      assertGuarded(result, "delayed meal break wrong agreement");
+    },
+  },
+  {
     id: "public-holiday-calendar",
     run() {
       const result = store.calculateTimesheet(

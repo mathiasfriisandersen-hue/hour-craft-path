@@ -63,6 +63,7 @@ export type DayEntry = {
   start: string;
   end: string;
   pause: number;
+  delayedMealBreakCompensation: boolean;
   taskType: string;
   comment: string;
   absence: AbsenceType;
@@ -129,6 +130,8 @@ export type CalculationResult = {
   evening: number;
   night: number;
   shift: number;
+  delayedMealBreakDays: number;
+  delayedMealBreakAmount: number;
   localAgreement: number;
   missingRules: string[];
 };
@@ -137,12 +140,15 @@ const TIMESHEET_KEY = "timesheets-v1";
 const RULE_KEY = "timesheet-rules-v1";
 const COMPANY_KEY = "timesheet-companies-v1";
 const ADMIN_EMAIL = "mathiasfriisandersen@gmail.com";
+export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
+export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
 export function emptyDay(): DayEntry {
   return {
     start: "",
     end: "",
     pause: 0,
+    delayedMealBreakCompensation: false,
     taskType: "",
     comment: "",
     absence: "none",
@@ -154,8 +160,41 @@ function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+export function formatDkk(value: number): string {
+  return `${round(value).toLocaleString("da-DK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} DKK`;
+}
+
 function normalizeDay(value: Partial<DayEntry> | undefined): DayEntry {
   return { ...emptyDay(), ...value };
+}
+
+export function isIndustriensAgreement(agreementId: string): boolean {
+  return agreementId === INDUSTRIENS_AGREEMENT_ID;
+}
+
+export function delayedMealBreakDaysForTimesheet(
+  t: Pick<Timesheet, "selectedAgreementId" | "days">,
+): number {
+  if (!isIndustriensAgreement(t.selectedAgreementId)) return 0;
+  return t.days.filter((day) => day.absence === "none" && Boolean(day.delayedMealBreakCompensation))
+    .length;
+}
+
+export function delayedMealBreakAmountForDays(days: number): number {
+  return round(days * DELAYED_MEAL_BREAK_RATE_DKK);
+}
+
+export function delayedMealBreakCalculationText(days: number): string {
+  return `${days} ${days === 1 ? "dag" : "dage"} x ${formatDkk(
+    DELAYED_MEAL_BREAK_RATE_DKK,
+  )} = ${formatDkk(delayedMealBreakAmountForDays(days))}`;
+}
+
+export function delayedMealBreakSummaryText(days: number): string {
+  return `Udsat spisepause: ${delayedMealBreakCalculationText(days)}`;
 }
 
 type StoredTimesheet = Omit<
@@ -506,6 +545,9 @@ export function removeCompany(id: string): void {
 }
 
 export function calculateTimesheet(t: Timesheet): CalculationResult {
+  const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
+  const delayedMealBreakAmount = delayedMealBreakAmountForDays(delayedMealBreakDays);
+
   if (!t.selectedAgreementId) {
     const total = totalHours(t.days);
     return {
@@ -526,6 +568,8 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       evening: 0,
       night: 0,
       shift: 0,
+      delayedMealBreakDays,
+      delayedMealBreakAmount,
       localAgreement: t.localAgreementApplies ? total : 0,
       missingRules: ["valgt overenskomst"],
     };
@@ -601,6 +645,8 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       evening: round(evening),
       night: round(night),
       shift,
+      delayedMealBreakDays,
+      delayedMealBreakAmount,
       localAgreement: t.localAgreementApplies ? total : 0,
       missingRules: [...new Set([summary.validationNote, ...validationBlockers])],
     };
@@ -651,6 +697,8 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     evening: round(evening),
     night: round(night),
     shift,
+    delayedMealBreakDays,
+    delayedMealBreakAmount,
     localAgreement: t.localAgreementApplies ? total : 0,
     missingRules: [...new Set(missingRules)],
   };
@@ -671,7 +719,18 @@ export function emailBody(t: Timesheet): string {
         : day.start && day.end
           ? `${day.start}–${day.end}, pause ${day.pause} min, ${dayHours(day).toFixed(2)} t`
           : "Ingen registrering";
-    const details = [day.taskType, day.shiftWork ? "Skiftehold" : "", day.comment]
+    const delayedMealBreakDetail =
+      isIndustriensAgreement(t.selectedAgreementId) &&
+      day.absence === "none" &&
+      day.delayedMealBreakCompensation
+        ? "Udsat spisepause 30+ min efter besked fra virksomheden"
+        : "";
+    const details = [
+      day.taskType,
+      day.shiftWork ? "Skiftehold" : "",
+      delayedMealBreakDetail,
+      day.comment,
+    ]
       .filter(Boolean)
       .join(" · ");
     return `${name}: ${registration}${details ? ` (${details})` : ""}`;
@@ -711,6 +770,9 @@ export function emailBody(t: Timesheet): string {
     `Aftentimer: ${calc.evening.toFixed(2)}`,
     `Nattetimer: ${calc.night.toFixed(2)}`,
     `Skifteholdstimer: ${calc.shift.toFixed(2)}`,
+    ...(isIndustriensAgreement(t.selectedAgreementId)
+      ? ["", "MANUELLE TILLÆG", delayedMealBreakSummaryText(calc.delayedMealBreakDays)]
+      : []),
     "",
     "NOTER",
     t.notes || "—",

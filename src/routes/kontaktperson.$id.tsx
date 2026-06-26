@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import {
   calculateTimesheet,
   dayHours,
+  delayedMealBreakCalculationText,
   formatWeekRange,
   getById,
+  isIndustriensAgreement,
   totalHours,
   upsert,
   WEEKDAYS,
@@ -41,6 +43,7 @@ function KontaktDetail() {
 
   const canAct = t.status === "sent";
   const calc = calculateTimesheet(t);
+  const showDelayedMealBreak = isIndustriensAgreement(t.selectedAgreementId);
 
   const approve = () => {
     upsert({ ...t, status: "approved", rejectionComment: undefined });
@@ -81,48 +84,67 @@ function KontaktDetail() {
           <Row label="Overenskomst" value={calc.agreementName} />
           <Row label="PDF-status" value={calc.rateValidationStatus} />
           <Row label="Lokalaftale" value={t.localAgreementApplies ? "Ja" : "Nej"} />
+          {showDelayedMealBreak && (
+            <Row
+              label="Udsat spisepause"
+              value={delayedMealBreakCalculationText(calc.delayedMealBreakDays)}
+            />
+          )}
         </dl>
       </section>
 
       <section className="mt-6 rounded-lg border bg-card overflow-hidden">
         <h2 className="font-semibold p-6 pb-3">Registrerede timer</h2>
-        <table className="w-full text-sm">
-          <thead className="bg-muted/50 text-left text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2 font-medium">Dag</th>
-              <th className="px-4 py-2 font-medium">Start</th>
-              <th className="px-4 py-2 font-medium">Slut</th>
-              <th className="px-4 py-2 font-medium">Pause</th>
-              <th className="px-4 py-2 font-medium">Kommentar</th>
-              <th className="px-4 py-2 font-medium text-right">Timer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {WEEKDAYS.map((n, i) => {
-              const d = t.days[i];
-              return (
-                <tr key={n} className="border-t">
-                  <td className="px-4 py-2 font-medium">{n}</td>
-                  <td className="px-4 py-2 tabular-nums">{d.start || "—"}</td>
-                  <td className="px-4 py-2 tabular-nums">{d.end || "—"}</td>
-                  <td className="px-4 py-2 tabular-nums">{d.pause ? `${d.pause} min` : "—"}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{d.comment || ""}</td>
-                  <td className="px-4 py-2 text-right tabular-nums">{dayHours(d).toFixed(2)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr className="border-t bg-muted/30">
-              <td colSpan={5} className="px-4 py-3 text-right font-medium">
-                Samlede timer
-              </td>
-              <td className="px-4 py-3 text-right font-semibold tabular-nums">
-                {totalHours(t.days).toFixed(2)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[760px] text-sm">
+            <thead className="bg-muted/50 text-left text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2 font-medium">Dag</th>
+                <th className="px-4 py-2 font-medium">Start</th>
+                <th className="px-4 py-2 font-medium">Slut</th>
+                <th className="px-4 py-2 font-medium">Pause</th>
+                {showDelayedMealBreak && (
+                  <th className="px-4 py-2 font-medium">Udsat spisepause</th>
+                )}
+                <th className="px-4 py-2 font-medium">Kommentar</th>
+                <th className="px-4 py-2 font-medium text-right">Timer</th>
+              </tr>
+            </thead>
+            <tbody>
+              {WEEKDAYS.map((n, i) => {
+                const d = t.days[i];
+                return (
+                  <tr key={n} className="border-t">
+                    <td className="px-4 py-2 font-medium">{n}</td>
+                    <td className="px-4 py-2 tabular-nums">{d.start || "—"}</td>
+                    <td className="px-4 py-2 tabular-nums">{d.end || "—"}</td>
+                    <td className="px-4 py-2 tabular-nums">{d.pause ? `${d.pause} min` : "—"}</td>
+                    {showDelayedMealBreak && (
+                      <td className="px-4 py-2">
+                        {d.absence === "none" && d.delayedMealBreakCompensation ? "Ja" : "Nej"}
+                      </td>
+                    )}
+                    <td className="px-4 py-2 text-muted-foreground">{d.comment || ""}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{dayHours(d).toFixed(2)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t bg-muted/30">
+                <td
+                  colSpan={showDelayedMealBreak ? 6 : 5}
+                  className="px-4 py-3 text-right font-medium"
+                >
+                  Samlede timer
+                </td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                  {totalHours(t.days).toFixed(2)}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </section>
 
       {t.status === "rejected" && t.rejectionComment && (
