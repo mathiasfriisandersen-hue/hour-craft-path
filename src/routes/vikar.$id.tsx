@@ -32,6 +32,7 @@ function VikarEdit() {
   const [t, setT] = useState<Timesheet | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [touchedPauseRows, setTouchedPauseRows] = useState<Record<number, boolean>>({});
   const companies = listCompanies();
 
   useEffect(() => {
@@ -53,6 +54,12 @@ function VikarEdit() {
     const days = t.days.map((day, i) => (i === index ? { ...day, ...patch } : day));
     setT({ ...t, days });
   };
+  const setPauseTouched = (index: number, touched: boolean) => {
+    setTouchedPauseRows((current) => ({ ...current, [index]: touched }));
+  };
+  const pauseHasDisplayValue = (index: number, pause: number) =>
+    Boolean(touchedPauseRows[index]) || pause > 0;
+  const normalizePause = (pause: number) => Math.max(0, Math.round(pause / 5) * 5);
 
   const selectCompany = (name: string) => {
     const company = companies.find((item) => item.name === name);
@@ -288,12 +295,13 @@ function VikarEdit() {
                         className="h-8 rounded-md border border-input bg-background px-2"
                         value={day.absence}
                         disabled={locked}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          if (e.target.value !== "none") setPauseTouched(index, false);
                           updateDay(index, {
                             absence: e.target.value as AbsenceType,
                             ...(e.target.value !== "none" ? { start: "", end: "", pause: 0 } : {}),
-                          })
-                        }
+                          });
+                        }}
                       >
                         {Object.entries(ABSENCE_LABEL).map(([value, label]) => (
                           <option key={value} value={value}>
@@ -306,8 +314,12 @@ function VikarEdit() {
                       <Input
                         type="time"
                         className="h-8 w-28"
+                        step={300}
                         value={day.start}
                         disabled={locked || absent}
+                        onFocus={() => {
+                          if (!day.start) updateDay(index, { start: "07:00" });
+                        }}
                         onChange={(e) => updateDay(index, { start: e.target.value })}
                       />
                     </td>
@@ -315,8 +327,12 @@ function VikarEdit() {
                       <Input
                         type="time"
                         className="h-8 w-28"
+                        step={300}
                         value={day.end}
                         disabled={locked || absent}
+                        onFocus={() => {
+                          if (!day.end) updateDay(index, { end: "15:30" });
+                        }}
                         onChange={(e) => updateDay(index, { end: e.target.value })}
                       />
                     </td>
@@ -324,10 +340,29 @@ function VikarEdit() {
                       <Input
                         type="number"
                         min={0}
+                        step={5}
                         className="h-8 w-20"
-                        value={day.pause}
+                        value={pauseHasDisplayValue(index, day.pause) ? day.pause : ""}
                         disabled={locked || absent}
-                        onChange={(e) => updateDay(index, { pause: Number(e.target.value) || 0 })}
+                        onFocus={() => {
+                          if (!pauseHasDisplayValue(index, day.pause)) {
+                            setPauseTouched(index, true);
+                            updateDay(index, { pause: 30 });
+                          }
+                        }}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const pause = Number(value);
+                          setPauseTouched(index, value !== "");
+                          updateDay(index, {
+                            pause: value === "" || !Number.isFinite(pause) ? 0 : Math.max(0, pause),
+                          });
+                        }}
+                        onBlur={() => {
+                          if (pauseHasDisplayValue(index, day.pause)) {
+                            updateDay(index, { pause: normalizePause(day.pause) });
+                          }
+                        }}
                       />
                     </td>
                     <td className="px-3 py-2">
