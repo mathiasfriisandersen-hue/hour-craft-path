@@ -21,6 +21,7 @@ import {
   type AbsenceType,
   type Timesheet,
 } from "@/lib/timesheet-store";
+import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +36,7 @@ function VikarEdit() {
   const [t, setT] = useState<Timesheet | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
+  const [sendingMail, setSendingMail] = useState(false);
   const [touchedPauseRows, setTouchedPauseRows] = useState<Record<number, boolean>>({});
   const companies = listCompanies();
 
@@ -86,16 +88,30 @@ function VikarEdit() {
     setMessage("Kladde gemt midlertidigt i denne browsersession.");
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const validationErrors = validate(t);
     setErrors(validationErrors);
     if (validationErrors.length) return;
     const saved = upsert({ ...t, status: "sent", rejectionComment: undefined });
     setT(saved);
-    setMessage(
-      "Timesedlen er markeret som sendt. Din mailapp åbnes nu — tryk Send dér for at afsende mailen.",
-    );
-    window.location.href = mailtoUrl(saved);
+
+    setSendingMail(true);
+    setMessage("Sender timesedlen via mailsystemet…");
+    try {
+      const result = await sendTimesheetEmail(saved);
+      setMessage(
+        result === "api"
+          ? "Timesedlen er sendt via mailsystemet."
+          : "Timesedlen er markeret som sendt. Mailsystemet er ikke konfigureret endnu, så din mailapp åbnes som fallback.",
+      );
+    } catch {
+      setMessage(
+        "Mailsystemet kunne ikke sende lige nu. Timesedlen er markeret som sendt, og mailkladde åbnes som fallback.",
+      );
+      window.location.href = mailtoUrl(saved);
+    } finally {
+      setSendingMail(false);
+    }
   };
 
   return (
@@ -485,7 +501,9 @@ function VikarEdit() {
             <Button variant="outline" onClick={handleSave}>
               Gem kladde
             </Button>
-            <Button onClick={handleSend}>Send timeseddel</Button>
+            <Button onClick={handleSend} disabled={sendingMail}>
+              {sendingMail ? "Sender…" : "Send timeseddel"}
+            </Button>
           </div>
         )}
       </div>

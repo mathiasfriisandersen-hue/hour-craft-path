@@ -9,6 +9,8 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
+    "mail:dev": "npx --yes wrangler@latest dev --config mail-worker/wrangler.toml",
+    "mail:deploy": "npx --yes wrangler@latest deploy --config mail-worker/wrangler.toml",
     "validate:agreements": "python3 scripts/extract-agreement-rules.py",
     "test:validation": "node scripts/run-validation-tests.mjs",
     "format": "prettier --write ."

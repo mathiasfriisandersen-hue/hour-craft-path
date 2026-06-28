@@ -24,6 +24,7 @@ import {
   type AgreementRuleSource,
   type AgreementRuleSourceKey,
 } from "@/lib/agreementRules";
+import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 
 export const Route = createFileRoute("/admin/$id")({
   head: () => ({ meta: [{ title: "Admin — Detaljer" }] }),
@@ -36,6 +37,8 @@ function AdminDetail() {
   const [t, setT] = useState<Timesheet | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState("");
+  const [mailMessage, setMailMessage] = useState("");
+  const [sendingMail, setSendingMail] = useState(false);
 
   useEffect(() => {
     const found = getById(id);
@@ -58,6 +61,24 @@ function AdminDetail() {
     setT(saved);
     setRejecting(false);
     setComment("");
+  };
+
+  const handleMail = async () => {
+    setSendingMail(true);
+    setMailMessage("Sender mail via mailsystemet…");
+    try {
+      const result = await sendTimesheetEmail(t);
+      setMailMessage(
+        result === "api"
+          ? "Mail sendt via mailsystemet."
+          : "Mailsystemet er ikke konfigureret endnu. Mailkladde åbnes som fallback.",
+      );
+    } catch {
+      setMailMessage("Mailsystemet kunne ikke sende lige nu. Mailkladde åbnes som fallback.");
+      window.location.href = mailtoUrl(t);
+    } finally {
+      setSendingMail(false);
+    }
   };
 
   return (
@@ -293,28 +314,26 @@ function AdminDetail() {
         </div>
       )}
 
-      <div className="mt-6 flex flex-wrap justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={() => {
-            window.location.href = mailtoUrl(t);
-          }}
-        >
-          Åbn mailkladde
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">{mailMessage}</div>
+        <Button variant="outline" onClick={handleMail} disabled={sendingMail}>
+          {sendingMail ? "Sender…" : "Send mail"}
         </Button>
-        {t.status !== "draft" && (
-          <Button variant="outline" onClick={() => changeStatus("draft")}>
-            Genåbn som kladde
-          </Button>
-        )}
-        {!rejecting && t.status !== "rejected" && (
-          <Button variant="outline" onClick={() => setRejecting(true)}>
-            Afvis
-          </Button>
-        )}
-        {t.status !== "approved" && (
-          <Button onClick={() => changeStatus("approved")}>Godkend</Button>
-        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          {t.status !== "draft" && (
+            <Button variant="outline" onClick={() => changeStatus("draft")}>
+              Genåbn som kladde
+            </Button>
+          )}
+          {!rejecting && t.status !== "rejected" && (
+            <Button variant="outline" onClick={() => setRejecting(true)}>
+              Afvis
+            </Button>
+          )}
+          {t.status !== "approved" && (
+            <Button onClick={() => changeStatus("approved")}>Godkend</Button>
+          )}
+        </div>
       </div>
     </AppShell>
   );
