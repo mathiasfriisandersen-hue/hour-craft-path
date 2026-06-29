@@ -91,8 +91,8 @@ function CreateWorkerPage() {
     if (!Number.isFinite(Number(form.defaultPause)) || Number(form.defaultPause) < 0)
       nextErrors.push("Pause skal være et tal på 0 minutter eller mere");
     if (!form.startDate) nextErrors.push("Startdato mangler");
-    if (!/^\d{4}$/.test(form.workerAccessCode))
-      nextErrors.push("Midlertidig login-kode skal være 4 cifre");
+    if (!/^\d{6}$/.test(form.workerAccessCode))
+      nextErrors.push("Midlertidig login-kode skal være 6 cifre");
     return nextErrors;
   };
 
@@ -177,15 +177,16 @@ function CreateWorkerPage() {
           <Field label="Midlertidig login-kode *">
             <Input
               inputMode="numeric"
-              maxLength={4}
+              maxLength={6}
               value={form.workerAccessCode}
               onChange={(e) =>
-                update({ workerAccessCode: e.target.value.replace(/\D/g, "").slice(0, 4) })
+                update({ workerAccessCode: e.target.value.replace(/\D/g, "").slice(0, 6) })
               }
-              placeholder="Sidste 4 cifre"
+              placeholder="Første 6 cifre i CPR (DDMMÅÅ)"
             />
             <p className="mt-1 text-xs text-muted-foreground">
-              Bruges som første login. Vikaren bliver bedt om at ændre adgangskoden efter login.
+              Bruges som første login. Indtast de første 6 cifre i CPR-nummeret som datoformat
+              DDMMÅÅ. Vikaren bliver bedt om at ændre adgangskoden efter login.
             </p>
           </Field>
           <Field label="Brugervirksomhed *">

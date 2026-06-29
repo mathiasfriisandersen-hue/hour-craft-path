@@ -81,10 +81,10 @@ function VikarInvitePage() {
               autoComplete="one-time-code"
               value={temporaryCode}
               onChange={(e) => {
-                setTemporaryCode(e.target.value.replace(/\D/g, "").slice(0, 4));
+                setTemporaryCode(e.target.value.replace(/\D/g, "").slice(0, 6));
                 setError("");
               }}
-              placeholder="Sidste 4 cifre"
+              placeholder="Første 6 cifre i CPR (DDMMÅÅ)"
             />
           </label>
           {error && <p className="text-sm font-medium text-status-rejected-fg">{error}</p>}

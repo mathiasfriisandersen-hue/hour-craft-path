@@ -896,7 +896,7 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
     `Startdato/uge: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
     "",
     "LOGIN",
-    "Åbn linket herunder og log ind første gang med de sidste 4 cifre i dit CPR-nummer som midlertidig adgangskode.",
+    "Åbn linket herunder og log ind første gang med de første 6 cifre i dit CPR-nummer (DDMMÅÅ) som midlertidig adgangskode.",
     "Efter første login bliver du bedt om at ændre adgangskoden.",
     "",
     inviteUrl,
