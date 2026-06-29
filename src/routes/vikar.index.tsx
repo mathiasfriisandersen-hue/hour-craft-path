@@ -1,8 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell, StatusBadge } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { createBlank, formatWeekRange, remove, totalHours, upsert, weekNumber } from "@/lib/timesheet-store";
+import { formatWeekRange, remove, totalHours, weekNumber } from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/vikar/")({
   head: () => ({ meta: [{ title: "Vikar — Mine timesedler" }] }),
@@ -11,12 +10,6 @@ export const Route = createFileRoute("/vikar/")({
 
 function VikarList() {
   const list = useTimesheets();
-  const navigate = useNavigate();
-
-  const create = () => {
-    const t = upsert(createBlank());
-    navigate({ to: "/vikar/$id", params: { id: t.id } });
-  };
 
   return (
     <AppShell allow={["vikar"]}>
@@ -24,10 +17,9 @@ function VikarList() {
         <div>
           <h1 className="text-2xl font-semibold">Mine timesedler</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Registrér timer for én uge ad gangen og send til godkendelse.
+            Timesedler oprettes af admin. Åbn din timeseddel fra invitationsmailen.
           </p>
         </div>
-        <Button onClick={create}>Ny timeseddel</Button>
       </div>
 
       <div className="rounded-lg border bg-card overflow-x-auto">
@@ -46,17 +38,25 @@ function VikarList() {
             {list.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Ingen timesedler endnu. Opret en for at komme i gang.
+                  Ingen timesedler endnu. Brug linket i invitationsmailen fra Sub-Z.
                 </td>
               </tr>
             )}
             {list.map((t) => (
               <tr key={t.id} className="border-t hover:bg-muted/30">
-                <td className="px-4 py-3 font-medium whitespace-nowrap">Uge {weekNumber(t.weekStart)}</td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{formatWeekRange(t.weekStart)}</td>
-                <td className="px-4 py-3">{t.brugervirksomhed || <em className="text-muted-foreground">—</em>}</td>
+                <td className="px-4 py-3 font-medium whitespace-nowrap">
+                  Uge {weekNumber(t.weekStart)}
+                </td>
+                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
+                  {formatWeekRange(t.weekStart)}
+                </td>
+                <td className="px-4 py-3">
+                  {t.brugervirksomhed || <em className="text-muted-foreground">—</em>}
+                </td>
                 <td className="px-4 py-3 tabular-nums">{totalHours(t.days).toFixed(2)}</td>
-                <td className="px-4 py-3"><StatusBadge status={t.status} /></td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={t.status} />
+                </td>
                 <td className="px-4 py-3 text-right whitespace-nowrap">
                   <Link
                     to="/vikar/$id"

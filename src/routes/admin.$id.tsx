@@ -108,9 +108,11 @@ function AdminDetail() {
             <Row label="Vikarens e-mail" value={t.vikarEmail} />
             <Row label="Brugervirksomhed" value={t.brugervirksomhed} />
             <Row label="Kontaktperson" value={t.kontaktperson} />
+            <Row label="Kontaktperson telefon" value={t.kontaktpersonPhone} />
             <Row label="Mail" value={t.kontaktpersonEmail} />
             <Row label="Reference" value={t.referenceNo} />
             <Row label="Arbejdssted" value={t.arbejdssted} />
+            <Row label="Timeløn" value={t.hourlyWage ? `${t.hourlyWage.toFixed(2)} DKK` : "—"} />
             <Row label="Periode" value={formatWeekRange(t.weekStart)} />
             <Row label="Overenskomst" value={calc.agreementName} />
             <Row label="Kategori" value={calc.agreementCategory} />

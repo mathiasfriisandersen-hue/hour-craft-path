@@ -74,11 +74,15 @@ export type Timesheet = {
   vikarEmail: string;
   brugervirksomhed: string;
   kontaktperson: string;
+  kontaktpersonPhone: string;
   kontaktpersonEmail: string;
   referenceNo: string;
   arbejdssted: string;
   selectedAgreementId: string;
   overenskomst?: string;
+  hourlyWage: number;
+  workerAccessCode?: string;
+  workerMustChangeAccessCode?: boolean;
   localAgreementApplies: boolean;
   lokalaftale?: boolean;
   localAgreementId?: string;
@@ -95,6 +99,7 @@ export type Company = {
   id: string;
   name: string;
   contactName: string;
+  contactPhone: string;
   contactEmail: string;
   address: string;
   localAgreements: LocalAgreement[];
@@ -204,6 +209,10 @@ type StoredTimesheet = Omit<
   overenskomst?: string;
   lokalaftale?: boolean;
   vikarEmail?: string;
+  kontaktpersonPhone?: string;
+  hourlyWage?: number;
+  workerAccessCode?: string;
+  workerMustChangeAccessCode?: boolean;
   notes?: string;
 };
 
@@ -218,7 +227,11 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   return {
     ...value,
     vikarEmail: value.vikarEmail ?? "",
+    kontaktpersonPhone: value.kontaktpersonPhone ?? "",
     referenceNo: value.referenceNo ?? "",
+    hourlyWage: Number(value.hourlyWage) || 0,
+    workerAccessCode: value.workerAccessCode,
+    workerMustChangeAccessCode: value.workerMustChangeAccessCode ?? false,
     selectedAgreementId: migratedAgreementId,
     overenskomst: agreementName,
     localAgreementApplies,
@@ -393,11 +406,15 @@ export function createBlank(): Timesheet {
     vikarEmail: "",
     brugervirksomhed: "",
     kontaktperson: "",
+    kontaktpersonPhone: "",
     kontaktpersonEmail: "",
     referenceNo: "",
     arbejdssted: "",
     selectedAgreementId: "",
     overenskomst: "",
+    hourlyWage: 0,
+    workerAccessCode: "",
+    workerMustChangeAccessCode: false,
     localAgreementApplies: false,
     lokalaftale: false,
     weekStart: getMondayISO(),
@@ -406,6 +423,59 @@ export function createBlank(): Timesheet {
     status: "draft",
     createdAt: now,
     updatedAt: now,
+  };
+}
+
+export type CreateWorkerTimesheetInput = {
+  vikar: string;
+  vikarEmail: string;
+  brugervirksomhed: string;
+  arbejdssted: string;
+  kontaktperson: string;
+  kontaktpersonPhone: string;
+  kontaktpersonEmail: string;
+  referenceNo: string;
+  selectedAgreementId: string;
+  hourlyWage: number;
+  defaultStart: string;
+  defaultEnd: string;
+  defaultPause: number;
+  startDate: string;
+  workerAccessCode: string;
+};
+
+export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Timesheet {
+  const base = createBlank();
+  const agreement = getCollectiveAgreementById(input.selectedAgreementId);
+  const weekStart = getMondayISO(new Date(`${input.startDate}T12:00:00`));
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = addDaysToISODate(weekStart, index);
+    const isWorkday = index < 5 && (!input.startDate || date >= input.startDate);
+    return {
+      ...emptyDay(),
+      start: isWorkday ? input.defaultStart : "",
+      end: isWorkday ? input.defaultEnd : "",
+      pause: isWorkday ? input.defaultPause : 0,
+    };
+  });
+
+  return {
+    ...base,
+    vikar: input.vikar.trim(),
+    vikarEmail: input.vikarEmail.trim(),
+    brugervirksomhed: input.brugervirksomhed.trim(),
+    arbejdssted: input.arbejdssted.trim(),
+    kontaktperson: input.kontaktperson.trim(),
+    kontaktpersonPhone: input.kontaktpersonPhone.trim(),
+    kontaktpersonEmail: input.kontaktpersonEmail.trim(),
+    referenceNo: input.referenceNo.trim(),
+    selectedAgreementId: input.selectedAgreementId,
+    overenskomst: agreement?.name ?? "",
+    hourlyWage: Number(input.hourlyWage) || 0,
+    workerAccessCode: input.workerAccessCode.trim(),
+    workerMustChangeAccessCode: true,
+    weekStart,
+    days,
   };
 }
 
@@ -530,7 +600,10 @@ export function getRule(agreementId: string): AgreementRule | undefined {
 }
 
 export function listCompanies(): Company[] {
-  return safeParse<Company[]>(COMPANY_KEY, []);
+  return safeParse<Company[]>(COMPANY_KEY, []).map((company) => ({
+    ...company,
+    contactPhone: company.contactPhone ?? "",
+  }));
 }
 
 export function saveCompany(company: Company): void {
@@ -761,6 +834,7 @@ export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string 
     `Vikarnavn: ${t.vikar}`,
     `Brugervirksomhed: ${t.brugervirksomhed}`,
     `Kontaktperson: ${t.kontaktperson}`,
+    `Kontaktperson telefon: ${t.kontaktpersonPhone || "—"}`,
     `Reference: ${t.referenceNo || "—"}`,
     `Arbejdssted: ${t.arbejdssted}`,
     `Uge og dato: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
@@ -790,6 +864,45 @@ export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string 
 
 export function contactPersonEmailBody(t: Timesheet): string {
   return emailBody(t, { includeApprovalTerms: true });
+}
+
+export function workerInviteEmailSubject(t: Timesheet): string {
+  return `Timeseddel oprettet – ${t.brugervirksomhed} – uge ${weekNumber(t.weekStart)}`;
+}
+
+export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
+  const calc = calculateTimesheet(t);
+  const defaultWorkday = t.days.find((day) => day.start && day.end);
+
+  return [
+    `Hej ${t.vikar || "vikar"}`,
+    "",
+    "Sub-Z har oprettet en timeseddel til dig med følgende oplysninger:",
+    "",
+    "OPGAVEOPLYSNINGER",
+    `Vikarnavn: ${t.vikar}`,
+    `Vikarens mail: ${t.vikarEmail}`,
+    `Brugervirksomhed: ${t.brugervirksomhed}`,
+    `Brugervirksomhed adresse/arbejdssted: ${t.arbejdssted}`,
+    `Kontaktperson: ${t.kontaktperson}`,
+    `Kontaktperson telefonnummer: ${t.kontaktpersonPhone || "—"}`,
+    `Kontaktpersonens mail: ${t.kontaktpersonEmail}`,
+    `Reference nr.: ${t.referenceNo || "—"}`,
+    `Overenskomst: ${calc.agreementName || "—"}`,
+    `Timeløn: ${t.hourlyWage ? formatDkk(t.hourlyWage) : "—"}`,
+    `Arbejdstid: ${defaultWorkday?.start || "07:00"}–${defaultWorkday?.end || "15:30"}, pause ${
+      defaultWorkday?.pause || 60
+    } min`,
+    `Startdato/uge: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
+    "",
+    "LOGIN",
+    "Åbn linket herunder og log ind første gang med de sidste 4 cifre i dit CPR-nummer som midlertidig adgangskode.",
+    "Efter første login bliver du bedt om at ændre adgangskoden.",
+    "",
+    inviteUrl,
+    "",
+    "Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.",
+  ].join("\n");
 }
 
 export function mailtoUrl(t: Timesheet): string {

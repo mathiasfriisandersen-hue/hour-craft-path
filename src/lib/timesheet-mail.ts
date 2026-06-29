@@ -3,6 +3,8 @@ import {
   emailBody,
   emailSubject,
   mailtoUrl,
+  workerInviteEmailBody,
+  workerInviteEmailSubject,
   type Timesheet,
 } from "./timesheet-store";
 
@@ -57,6 +59,42 @@ export async function sendTimesheetEmail(t: Timesheet): Promise<TimesheetMailRes
       subject: emailSubject(t),
       text: contactPersonEmailBody(t),
       adminText: emailBody(t),
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Mailserver svarede med HTTP ${response.status}`);
+  }
+
+  return "api";
+}
+
+export async function sendWorkerInviteEmail(
+  t: Timesheet,
+  inviteUrl: string,
+): Promise<TimesheetMailResult> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  const subject = workerInviteEmailSubject(t);
+  const text = workerInviteEmailBody(t, inviteUrl);
+
+  if (!mailApiUrl) {
+    window.location.href = `mailto:${t.vikarEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    return "mailto";
+  }
+
+  const response = await fetch(mailApiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      timesheetId: t.id,
+      contactEmail: t.vikarEmail,
+      replyTo: t.kontaktpersonEmail,
+      subject,
+      text,
+      sendAdminCopy: false,
     }),
   });
 

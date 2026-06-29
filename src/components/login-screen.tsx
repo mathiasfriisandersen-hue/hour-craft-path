@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
+import { getById } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
@@ -10,13 +11,20 @@ const ROLES: Role[] = ["vikar", "kontaktperson", "admin"];
 export function LoginScreen() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [role, setRole] = useState<Role>("vikar");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== DEMO_PASSWORD) {
+    const vikarTimesheetId = pathname.match(/^\/vikar\/([^/]+)$/)?.[1];
+    const vikarTimesheet = vikarTimesheetId ? getById(vikarTimesheetId) : undefined;
+    const validVikarPassword =
+      role === "vikar" && vikarTimesheet?.workerAccessCode === password && password.length >= 4;
+    const validDemoPassword = password === DEMO_PASSWORD;
+
+    if (!validDemoPassword && !validVikarPassword) {
       setError("Forkert adgangskode");
       return;
     }
@@ -43,6 +51,7 @@ export function LoginScreen() {
         <h1 className="text-2xl font-semibold tracking-tight">Log ind</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Demo-login: vælg rolle og brug koden <span className="font-mono font-semibold">0000</span>
+          . Vikarer kan også bruge deres personlige adgangskode via invitationslinket.
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-5">
@@ -85,10 +94,7 @@ export function LoginScreen() {
               placeholder="0000"
             />
             {error && (
-              <p
-                role="alert"
-                className="mt-2 text-sm font-medium text-status-rejected-fg"
-              >
+              <p role="alert" className="mt-2 text-sm font-medium text-status-rejected-fg">
                 {error}
               </p>
             )}

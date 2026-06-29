@@ -22,7 +22,6 @@ import {
   type Timesheet,
 } from "@/lib/timesheet-store";
 import { sendTimesheetEmail } from "@/lib/timesheet-mail";
-import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/vikar/$id")({
@@ -204,36 +203,6 @@ function VikarEdit() {
               disabled={locked}
               onChange={(e) => update({ arbejdssted: e.target.value })}
             />
-          </Field>
-          <Field label="Overenskomst *">
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={t.selectedAgreementId}
-              disabled={locked}
-              onChange={(e) => {
-                const nextAgreementId = e.target.value;
-                const agreement = activeCollectiveAgreements.find(
-                  (item) => item.id === nextAgreementId,
-                );
-                update({
-                  selectedAgreementId: nextAgreementId,
-                  overenskomst: agreement?.name ?? "",
-                  days: isIndustriensAgreement(nextAgreementId)
-                    ? t.days
-                    : t.days.map((day) => ({
-                        ...day,
-                        delayedMealBreakCompensation: false,
-                      })),
-                });
-              }}
-            >
-              <option value="">Vælg overenskomst…</option>
-              {activeCollectiveAgreements.map((agreement) => (
-                <option key={agreement.id} value={agreement.id}>
-                  {agreement.name} — {agreement.industryArea}
-                </option>
-              ))}
-            </select>
           </Field>
           <Field label="Ugestart (mandag)">
             <Input

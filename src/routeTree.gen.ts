@@ -13,9 +13,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
 import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
+import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
 
@@ -39,6 +41,11 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const VikarInviteRoute = VikarInviteRouteImport.update({
+  id: '/vikar/invite',
+  path: '/vikar/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VikarIdRoute = VikarIdRouteImport.update({
   id: '/vikar/$id',
   path: '/vikar/$id',
@@ -52,6 +59,11 @@ const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
 const AdminRulesRoute = AdminRulesRouteImport.update({
   id: '/admin/rules',
   path: '/admin/rules',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminCreateWorkerRoute = AdminCreateWorkerRouteImport.update({
+  id: '/admin/create-worker',
+  path: '/admin/create-worker',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminCompaniesRoute = AdminCompaniesRouteImport.update({
@@ -69,9 +81,11 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
@@ -80,9 +94,11 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/invite': typeof VikarInviteRoute
   '/admin': typeof AdminIndexRoute
   '/kontaktperson': typeof KontaktpersonIndexRoute
   '/vikar': typeof VikarIndexRoute
@@ -92,9 +108,11 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/companies': typeof AdminCompaniesRoute
+  '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
@@ -105,9 +123,11 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/$id'
     | '/admin/companies'
+    | '/admin/create-worker'
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/invite'
     | '/admin/'
     | '/kontaktperson/'
     | '/vikar/'
@@ -116,9 +136,11 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/$id'
     | '/admin/companies'
+    | '/admin/create-worker'
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/invite'
     | '/admin'
     | '/kontaktperson'
     | '/vikar'
@@ -127,9 +149,11 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/$id'
     | '/admin/companies'
+    | '/admin/create-worker'
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/invite'
     | '/admin/'
     | '/kontaktperson/'
     | '/vikar/'
@@ -139,9 +163,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminIdRoute: typeof AdminIdRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
+  AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
   AdminRulesRoute: typeof AdminRulesRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   VikarIdRoute: typeof VikarIdRoute
+  VikarInviteRoute: typeof VikarInviteRoute
   AdminIndexRoute: typeof AdminIndexRoute
   KontaktpersonIndexRoute: typeof KontaktpersonIndexRoute
   VikarIndexRoute: typeof VikarIndexRoute
@@ -177,6 +203,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/vikar/invite': {
+      id: '/vikar/invite'
+      path: '/vikar/invite'
+      fullPath: '/vikar/invite'
+      preLoaderRoute: typeof VikarInviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/vikar/$id': {
       id: '/vikar/$id'
       path: '/vikar/$id'
@@ -196,6 +229,13 @@ declare module '@tanstack/react-router' {
       path: '/admin/rules'
       fullPath: '/admin/rules'
       preLoaderRoute: typeof AdminRulesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/create-worker': {
+      id: '/admin/create-worker'
+      path: '/admin/create-worker'
+      fullPath: '/admin/create-worker'
+      preLoaderRoute: typeof AdminCreateWorkerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/companies': {
@@ -219,9 +259,11 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminIdRoute: AdminIdRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
+  AdminCreateWorkerRoute: AdminCreateWorkerRoute,
   AdminRulesRoute: AdminRulesRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   VikarIdRoute: VikarIdRoute,
+  VikarInviteRoute: VikarInviteRoute,
   AdminIndexRoute: AdminIndexRoute,
   KontaktpersonIndexRoute: KontaktpersonIndexRoute,
   VikarIndexRoute: VikarIndexRoute,

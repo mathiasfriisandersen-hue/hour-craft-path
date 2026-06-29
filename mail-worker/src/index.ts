@@ -12,6 +12,7 @@ type TimesheetMailPayload = {
   subject?: string;
   text?: string;
   adminText?: string;
+  sendAdminCopy?: boolean;
 };
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
@@ -126,7 +127,7 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
 
   const contactEmailResult = await sendEmail(payload.contactEmail, text);
   const adminEmailResult =
-    env.ADMIN_EMAIL === payload.contactEmail
+    payload.sendAdminCopy === false || env.ADMIN_EMAIL === payload.contactEmail
       ? undefined
       : await sendEmail(env.ADMIN_EMAIL, adminText);
 

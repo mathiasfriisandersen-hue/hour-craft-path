@@ -15,6 +15,7 @@ function blankCompany(): Company {
     id: crypto.randomUUID(),
     name: "",
     contactName: "",
+    contactPhone: "",
     contactEmail: "",
     address: "",
     localAgreements: [],
@@ -56,7 +57,7 @@ function CompaniesPage() {
               <div>
                 <div className="font-semibold">{company.name}</div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {company.contactName} · {company.contactEmail}
+                  {company.contactName} · {company.contactPhone || "—"} · {company.contactEmail}
                 </div>
                 <div className="text-sm text-muted-foreground">{company.address}</div>
                 <div className="mt-2 text-xs">{company.localAgreements.length} lokalaftale(r)</div>
@@ -104,6 +105,12 @@ function CompaniesPage() {
                 <Input
                   value={editing.contactName}
                   onChange={(e) => update({ contactName: e.target.value })}
+                />
+              </Field>
+              <Field label="Kontaktperson telefon">
+                <Input
+                  value={editing.contactPhone}
+                  onChange={(e) => update({ contactPhone: e.target.value })}
                 />
               </Field>
               <Field label="Kontaktmail">
