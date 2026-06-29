@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell, InfoBanner, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ABSENCE_LABEL,
   calculateTimesheet,
@@ -63,6 +64,12 @@ function AdminDetail() {
     setT(saved);
     setRejecting(false);
     setComment("");
+  };
+
+  const updateDay = (index: number, patch: Partial<Timesheet["days"][number]>) => {
+    const days = t.days.map((day, dayIndex) => (dayIndex === index ? { ...day, ...patch } : day));
+    const saved = upsert({ ...t, days });
+    setT(saved);
   };
 
   const handleMail = async () => {
@@ -205,6 +212,8 @@ function AdminDetail() {
                   "Start",
                   "Slut",
                   "Pause",
+                  "Pause start",
+                  "Pause slut",
                   ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
                   "Opgave",
                   "Dagstype",
@@ -230,6 +239,26 @@ function AdminDetail() {
                     <td className="px-3 py-3 tabular-nums">{day.start || "—"}</td>
                     <td className="px-3 py-3 tabular-nums">{day.end || "—"}</td>
                     <td className="px-3 py-3">{day.pause ? `${day.pause} min` : "—"}</td>
+                    <td className="px-3 py-3">
+                      <Input
+                        type="time"
+                        step="300"
+                        value={day.pauseStart}
+                        onChange={(e) => updateDay(index, { pauseStart: e.target.value })}
+                        aria-label={`${name} pause start`}
+                        className="h-9 w-32"
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <Input
+                        type="time"
+                        step="300"
+                        value={day.pauseEnd}
+                        onChange={(e) => updateDay(index, { pauseEnd: e.target.value })}
+                        aria-label={`${name} pause slut`}
+                        className="h-9 w-32"
+                      />
+                    </td>
                     {showDelayedMealBreak && (
                       <td className="px-3 py-3">{marker?.delayedMealBreakStatus ?? "—"}</td>
                     )}
