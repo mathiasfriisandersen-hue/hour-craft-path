@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   ABSENCE_LABEL,
   calculateTimesheet,
+  DAY_TYPE_LABEL,
   dayHours,
   delayedMealBreakCalculationText,
   formatWeekRange,
@@ -16,6 +17,7 @@ import {
   WEEKDAYS,
   weekNumber,
   type Timesheet,
+  WORK_TYPE_LABEL,
 } from "@/lib/timesheet-store";
 import { publicAgreementPdfHref } from "@/lib/collectiveAgreements";
 import {
@@ -159,6 +161,7 @@ function AdminDetail() {
                 value={`${calc.saturday.toFixed(2)} / ${calc.sunday.toFixed(2)} t`}
               />
               <Row label="Helligdage" value={`${calc.publicHoliday.toFixed(2)} t`} />
+              <Row label="Weekendarbejde lokalaftale" value={`${calc.weekend.toFixed(2)} t`} />
               <Row
                 label="Aften / nat"
                 value={`${calc.evening.toFixed(2)} / ${calc.night.toFixed(2)} t`}
@@ -182,6 +185,11 @@ function AdminDetail() {
               <strong>Manuel kontrol kræves:</strong> {calc.missingRules.join(", ")}.
             </div>
           )}
+          {calc.manualValidationMessages.length > 0 && (
+            <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
+              <strong>Regelmarkeringer:</strong> {calc.manualValidationMessages.join(" ")}
+            </div>
+          )}
         </section>
       </div>
 
@@ -199,7 +207,9 @@ function AdminDetail() {
                   "Pause",
                   ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
                   "Opgave",
-                  "Skiftehold",
+                  "Dagstype",
+                  "Arbejdstype",
+                  "Validering",
                   "Kommentar",
                   "Timer",
                 ].map((head) => (
@@ -212,6 +222,7 @@ function AdminDetail() {
             <tbody>
               {WEEKDAYS.map((name, index) => {
                 const day = t.days[index];
+                const marker = calc.dayRuleMarkers[index];
                 return (
                   <tr key={name} className="border-t">
                     <td className="px-3 py-3 font-medium">{name}</td>
@@ -220,12 +231,32 @@ function AdminDetail() {
                     <td className="px-3 py-3 tabular-nums">{day.end || "—"}</td>
                     <td className="px-3 py-3">{day.pause ? `${day.pause} min` : "—"}</td>
                     {showDelayedMealBreak && (
-                      <td className="px-3 py-3">
-                        {day.absence === "none" && day.delayedMealBreakCompensation ? "Ja" : "Nej"}
-                      </td>
+                      <td className="px-3 py-3">{marker?.delayedMealBreakStatus ?? "—"}</td>
                     )}
                     <td className="px-3 py-3">{day.taskType || "—"}</td>
-                    <td className="px-3 py-3">{day.shiftWork ? "Ja" : "Nej"}</td>
+                    <td className="px-3 py-3">{marker ? DAY_TYPE_LABEL[marker.dayType] : "—"}</td>
+                    <td className="px-3 py-3">{marker ? WORK_TYPE_LABEL[marker.workType] : "—"}</td>
+                    <td className="max-w-72 px-3 py-3 text-xs text-muted-foreground">
+                      {marker ? (
+                        <div className="space-y-1">
+                          <div>{marker.crossesMidnight ? "Vagt over midnat" : "Samme dag"}</div>
+                          <div>{marker.shiftStatus}</div>
+                          <div>{marker.weekendAgreementStatus}</div>
+                          {marker.warnings.map((warning) => (
+                            <div key={warning} className="text-status-sent-fg">
+                              {warning}
+                            </div>
+                          ))}
+                          {marker.requiresManualValidation.map((item) => (
+                            <div key={item} className="text-status-sent-fg">
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="max-w-64 px-3 py-3 text-muted-foreground">
                       {day.comment || "—"}
                     </td>

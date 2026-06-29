@@ -36,7 +36,7 @@ const server = await createSsrLoader();
 const store = await server.ssrLoadModule("/src/lib/timesheet-store.ts");
 
 function makeDays(entries) {
-  const days = Array.from({ length: 7 }, () => store.emptyDay());
+  const days = Array.from({ length: 7 }, (_, index) => store.emptyDay(index));
   for (const [index, patch] of entries) {
     days[index] = { ...days[index], ...patch };
   }
@@ -91,8 +91,19 @@ const tests = [
     run() {
       const result = store.calculateTimesheet(sheet([[0, { start: "16:00", end: "21:00" }]]));
       assertEqual(result.total, 5, "after-18 total");
-      assertEqual(result.evening, 3, "after-18 evening");
+      assertEqual(result.evening, 0, "after-18 normal work must not auto-trigger evening");
       assertGuarded(result, "after-18");
+    },
+  },
+  {
+    id: "explicit-displaced-evening",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[0, { start: "16:00", end: "21:00", workType: "displaced_work_time" }]]),
+      );
+      assertEqual(result.total, 5, "explicit displaced total");
+      assertEqual(result.evening, 3, "explicit displaced evening");
+      assertGuarded(result, "explicit displaced");
     },
   },
   {
@@ -100,8 +111,19 @@ const tests = [
     run() {
       const result = store.calculateTimesheet(sheet([[0, { start: "21:00", end: "02:00" }]]));
       assertEqual(result.total, 5, "night total");
-      assertEqual(result.night, 4, "night hours");
+      assertEqual(result.night, 0, "night normal work must not auto-trigger night");
       assertGuarded(result, "night");
+    },
+  },
+  {
+    id: "explicit-displaced-night",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[0, { start: "21:00", end: "02:00", workType: "displaced_work_time" }]]),
+      );
+      assertEqual(result.total, 5, "explicit night total");
+      assertEqual(result.night, 4, "explicit night hours");
+      assertGuarded(result, "explicit night");
     },
   },
   {
@@ -110,7 +132,20 @@ const tests = [
       const result = store.calculateTimesheet(sheet([[5, { start: "08:00", end: "14:00" }]]));
       assertEqual(result.total, 6, "saturday total");
       assertEqual(result.saturday, 6, "saturday hours");
+      assertEqual(result.weekend, 0, "saturday must not auto-trigger weekend agreement");
       assertGuarded(result, "saturday");
+    },
+  },
+  {
+    id: "explicit-weekend-agreement",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[5, { start: "08:00", end: "14:00", workType: "weekend_work_agreement" }]]),
+      );
+      assertEqual(result.total, 6, "explicit weekend agreement total");
+      assertEqual(result.saturday, 6, "explicit weekend agreement saturday");
+      assertEqual(result.weekend, 6, "explicit weekend agreement");
+      assertGuarded(result, "explicit weekend agreement");
     },
   },
   {
@@ -135,8 +170,19 @@ const tests = [
         ]),
       );
       assertEqual(result.total, 40, "weekly total");
-      assertEqual(result.overtime, 3, "weekly overtime");
+      assertEqual(result.overtime, 0, "weekly overtime must not be guessed");
       assertGuarded(result, "weekly");
+    },
+  },
+  {
+    id: "explicit-overtime",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[0, { start: "07:00", end: "15:30", pause: 30, workType: "overtime" }]]),
+      );
+      assertEqual(result.total, 8, "explicit overtime total");
+      assertEqual(result.overtime, 8, "explicit overtime");
+      assertGuarded(result, "explicit overtime");
     },
   },
   {
@@ -152,7 +198,7 @@ const tests = [
         ]),
       );
       assertEqual(result.total, 37.5, "multi-day total");
-      assertEqual(result.overtime, 0.5, "multi-day overtime");
+      assertEqual(result.overtime, 0, "multi-day overtime must not be guessed");
       assertGuarded(result, "multi-day");
     },
   },
@@ -175,8 +221,26 @@ const tests = [
     run() {
       const result = store.calculateTimesheet(
         sheet([
-          [0, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }],
-          [1, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }],
+          [
+            0,
+            {
+              start: "07:00",
+              end: "15:30",
+              pause: 30,
+              wasInstructedToWorkDuringMealBreak: true,
+              mealBreakPostponedMoreThan30Min: true,
+            },
+          ],
+          [
+            1,
+            {
+              start: "07:00",
+              end: "15:30",
+              pause: 30,
+              wasInstructedToWorkDuringMealBreak: true,
+              mealBreakPostponedMoreThan30Min: true,
+            },
+          ],
         ]),
       );
       assertEqual(result.delayedMealBreakDays, 2, "delayed meal break days");
@@ -200,7 +264,18 @@ const tests = [
     run() {
       const result = store.calculateTimesheet(
         sheet(
-          [[0, { start: "07:00", end: "15:30", pause: 30, delayedMealBreakCompensation: true }]],
+          [
+            [
+              0,
+              {
+                start: "07:00",
+                end: "15:30",
+                pause: 30,
+                wasInstructedToWorkDuringMealBreak: true,
+                mealBreakPostponedMoreThan30Min: true,
+              },
+            ],
+          ],
           {
             selectedAgreementId: "bygningsoverenskomsten",
             overenskomst: "Bygningsoverenskomsten",
@@ -223,6 +298,33 @@ const tests = [
       assertEqual(result.total, 6, "public holiday total");
       assertEqual(result.publicHoliday, 6, "public holiday hours");
       assertGuarded(result, "public holiday");
+    },
+  },
+  {
+    id: "artificial-holiday-test",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[3, { start: "07:00", end: "15:30", pause: 60, isArtificialHolidayTest: true }]]),
+      );
+      assertEqual(result.total, 7.5, "artificial holiday total");
+      assertEqual(result.publicHoliday, 7.5, "artificial holiday hours");
+      assertGuarded(result, "artificial holiday");
+    },
+  },
+  {
+    id: "pause-placement-warning",
+    run() {
+      const result = store.calculateTimesheet(
+        sheet([[0, { start: "07:00", end: "15:30", pause: 60, workType: "displaced_work_time" }]]),
+      );
+      if (
+        !result.manualValidationMessages.includes(
+          "Pauseplacering mangler. Tillæg kan ikke fordeles præcist.",
+        )
+      ) {
+        throw new Error("pause placement warning: forventede advarsel om manglende pauseplacering");
+      }
+      assertGuarded(result, "pause placement warning");
     },
   },
 ];

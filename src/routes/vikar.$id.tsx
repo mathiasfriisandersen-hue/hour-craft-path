@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   ABSENCE_LABEL,
+  DAY_TYPE_LABEL,
   dayHours,
   delayedMealBreakDaysForTimesheet,
   delayedMealBreakSummaryText,
@@ -19,7 +20,10 @@ import {
   WEEKDAYS,
   weekNumber,
   type AbsenceType,
+  type DayType,
   type Timesheet,
+  type WorkType,
+  WORK_TYPE_LABEL,
 } from "@/lib/timesheet-store";
 import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { cn } from "@/lib/utils";
@@ -66,7 +70,7 @@ function VikarEdit() {
   const normalizePause = (pause: number) => Math.max(0, Math.round(pause / 5) * 5);
   const delayedMealBreakEnabled = isIndustriensAgreement(t.selectedAgreementId);
   const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
-  const timesheetTableSummaryColSpan = delayedMealBreakEnabled ? 9 : 8;
+  const timesheetTableSummaryColSpan = 7;
 
   const selectCompany = (name: string) => {
     const company = companies.find((item) => item.name === name);
@@ -261,37 +265,23 @@ function VikarEdit() {
           </p>
           {delayedMealBreakEnabled && (
             <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis
-              du blev bedt om at arbejde videre, og din spisepause blev udsat mere end 30 minutter.
-              Gælder ikke frivilligt ekstraarbejde.
+              <span className="font-medium text-foreground">Udsat spisepause:</span> Kan kun
+              markeres i avanceret arbejdstidsvalg, når vikaren både blev bedt om at arbejde i
+              pausen, og spisepausen blev udsat mere end 30 minutter.
             </div>
           )}
         </div>
         <div className="overflow-x-auto">
-          <table
-            className={cn(
-              "w-full text-sm",
-              delayedMealBreakEnabled ? "min-w-[1260px]" : "min-w-[1120px]",
-            )}
-          >
+          <table className={cn("w-full text-sm", "min-w-[980px]")}>
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {[
-                  "Dag",
-                  "Type",
-                  "Start",
-                  "Slut",
-                  "Pause",
-                  ...(delayedMealBreakEnabled ? ["Udsat spisepause"] : []),
-                  "Opgavetype",
-                  "Skiftehold",
-                  "Kommentar",
-                  "Timer",
-                ].map((head) => (
-                  <th key={head} className="px-3 py-2 font-medium">
-                    {head}
-                  </th>
-                ))}
+                {["Dag", "Type", "Start", "Slut", "Pause", "Opgavetype", "Kommentar", "Timer"].map(
+                  (head) => (
+                    <th key={head} className="px-3 py-2 font-medium">
+                      {head}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -315,7 +305,8 @@ function VikarEdit() {
                                   start: "",
                                   end: "",
                                   pause: 0,
-                                  delayedMealBreakCompensation: false,
+                                  wasInstructedToWorkDuringMealBreak: false,
+                                  mealBreakPostponedMoreThan30Min: false,
                                 }
                               : {}),
                           });
@@ -383,47 +374,12 @@ function VikarEdit() {
                         }}
                       />
                     </td>
-                    {delayedMealBreakEnabled && (
-                      <td className="px-3 py-2">
-                        <label
-                          className={cn(
-                            "inline-flex min-h-8 items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
-                            locked || absent
-                              ? "cursor-not-allowed opacity-60"
-                              : "cursor-pointer hover:bg-accent",
-                          )}
-                          title="Markér kun hvis du blev bedt om at arbejde videre, og din spisepause blev udsat mere end 30 minutter. Gælder ikke frivilligt ekstraarbejde."
-                        >
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 accent-primary"
-                            checked={day.delayedMealBreakCompensation}
-                            disabled={locked || absent}
-                            onChange={(e) =>
-                              updateDay(index, {
-                                delayedMealBreakCompensation: e.target.checked,
-                              })
-                            }
-                          />
-                          <span>30+ min</span>
-                        </label>
-                      </td>
-                    )}
                     <td className="px-3 py-2">
                       <Input
                         className="h-8 w-36"
                         value={day.taskType}
                         disabled={locked || absent}
                         onChange={(e) => updateDay(index, { taskType: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        className="mt-2 h-4 w-4 accent-primary"
-                        checked={day.shiftWork}
-                        disabled={locked || absent}
-                        onChange={(e) => updateDay(index, { shiftWork: e.target.checked })}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -463,6 +419,127 @@ function VikarEdit() {
         )}
       </section>
 
+      <details className="mb-6 rounded-lg border bg-card p-5 md:p-6">
+        <summary className="cursor-pointer font-semibold">Avanceret arbejdstidsvalg</summary>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Bruges til regelvalidering. Forskudt arbejdstid, skiftehold og weekendarbejde efter
+          lokalaftale aktiveres kun, hvis de markeres eksplicit her.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-4">
+          {WEEKDAYS.map((name, index) => {
+            const day = t.days[index];
+            const absent = day.absence !== "none";
+            return (
+              <div key={name} className="rounded-md border p-3">
+                <div className="mb-3 font-medium">{name}</div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <Field label="Pause start">
+                    <Input
+                      type="time"
+                      className="h-8"
+                      step={300}
+                      value={day.pauseStart}
+                      disabled={locked || absent}
+                      onChange={(e) => updateDay(index, { pauseStart: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Pause slut">
+                    <Input
+                      type="time"
+                      className="h-8"
+                      step={300}
+                      value={day.pauseEnd}
+                      disabled={locked || absent}
+                      onChange={(e) => updateDay(index, { pauseEnd: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Arbejdstype">
+                    <select
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={day.workType}
+                      disabled={locked || absent}
+                      onChange={(e) => {
+                        const workType = e.target.value as WorkType;
+                        updateDay(index, {
+                          workType,
+                          shiftWork: workType === "shift_work",
+                          weekendAgreementApplies: workType === "weekend_work_agreement",
+                        });
+                      }}
+                    >
+                      {Object.entries(WORK_TYPE_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Dagstype">
+                    <select
+                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                      value={day.dayType}
+                      disabled={locked || absent}
+                      onChange={(e) => updateDay(index, { dayType: e.target.value as DayType })}
+                    >
+                      {Object.entries(DAY_TYPE_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+                  <CheckField
+                    label="Behandl som helligdag i test"
+                    checked={day.isArtificialHolidayTest}
+                    disabled={locked || absent}
+                    onChange={(checked) => updateDay(index, { isArtificialHolidayTest: checked })}
+                  />
+                  <CheckField
+                    label="Lokalaftale gælder denne dag"
+                    checked={day.localAgreementApplies}
+                    disabled={locked || absent}
+                    onChange={(checked) => updateDay(index, { localAgreementApplies: checked })}
+                  />
+                  <CheckField
+                    label="Weekendarbejde efter lokalaftale"
+                    checked={day.weekendAgreementApplies}
+                    disabled={locked || absent}
+                    onChange={(checked) =>
+                      updateDay(index, {
+                        weekendAgreementApplies: checked,
+                        workType: checked
+                          ? "weekend_work_agreement"
+                          : day.workType === "weekend_work_agreement"
+                            ? "normal"
+                            : day.workType,
+                      })
+                    }
+                  />
+                  <CheckField
+                    label="Blev vikaren bedt om at arbejde i spisepausen?"
+                    checked={day.wasInstructedToWorkDuringMealBreak}
+                    disabled={locked || absent}
+                    onChange={(checked) =>
+                      updateDay(index, { wasInstructedToWorkDuringMealBreak: checked })
+                    }
+                  />
+                  <CheckField
+                    label="Blev spisepausen udskudt mere end 30 min?"
+                    checked={day.mealBreakPostponedMoreThan30Min}
+                    disabled={locked || absent}
+                    onChange={(checked) =>
+                      updateDay(index, { mealBreakPostponedMoreThan30Min: checked })
+                    }
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl text-sm text-muted-foreground">{message}</div>
         {!locked && (
@@ -477,6 +554,31 @@ function VikarEdit() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function CheckField({
+  label,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className={cn("flex items-center gap-2", disabled && "cursor-not-allowed opacity-60")}>
+      <input
+        type="checkbox"
+        className="h-4 w-4 accent-primary"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 

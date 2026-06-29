@@ -49,6 +49,17 @@ export const WEEKDAYS = [
 ] as const;
 
 export type AbsenceType = "none" | "sick" | "vacation" | "dayoff";
+export type WorkType =
+  | "normal"
+  | "overtime"
+  | "displaced_work_time"
+  | "weekend_work_agreement"
+  | "shift_work";
+export type DayType =
+  | "ordinary_weekday"
+  | "saturday_rest_day"
+  | "sunday_or_public_holiday"
+  | "contractual_day_off";
 
 export const ABSENCE_LABEL: Record<AbsenceType, string> = {
   none: "Arbejdsdag",
@@ -57,15 +68,55 @@ export const ABSENCE_LABEL: Record<AbsenceType, string> = {
   dayoff: "Fridag",
 };
 
+export const WORK_TYPE_LABEL: Record<WorkType, string> = {
+  normal: "Normal arbejdstid",
+  overtime: "Overarbejde",
+  displaced_work_time: "Forskudt arbejdstid",
+  weekend_work_agreement: "Weekendarbejde efter lokalaftale",
+  shift_work: "Skiftehold",
+};
+
+export const DAY_TYPE_LABEL: Record<DayType, string> = {
+  ordinary_weekday: "Almindelig hverdag",
+  saturday_rest_day: "Lørdag / hverdagsfridag",
+  sunday_or_public_holiday: "Søndag eller helligdag",
+  contractual_day_off: "Overenskomstmæssig fridag",
+};
+
 export type DayEntry = {
   start: string;
   end: string;
   pause: number;
+  pauseStart: string;
+  pauseEnd: string;
+  workType: WorkType;
+  dayType: DayType;
+  isArtificialHolidayTest: boolean;
+  localAgreementApplies: boolean;
+  weekendAgreementApplies: boolean;
+  wasInstructedToWorkDuringMealBreak: boolean;
+  mealBreakPostponedMoreThan30Min: boolean;
   delayedMealBreakCompensation: boolean;
   taskType: string;
   comment: string;
   absence: AbsenceType;
   shiftWork: boolean;
+};
+
+export type DayRuleMarker = {
+  dayName: string;
+  date: string;
+  paidHours: number;
+  dayType: DayType;
+  workType: WorkType;
+  crossesMidnight: boolean;
+  dateSegments: string[];
+  ruleAreas: string[];
+  warnings: string[];
+  delayedMealBreakStatus: string;
+  shiftStatus: string;
+  weekendAgreementStatus: string;
+  requiresManualValidation: string[];
 };
 
 export type Timesheet = {
@@ -137,6 +188,8 @@ export type CalculationResult = {
   delayedMealBreakAmount: number;
   localAgreement: number;
   missingRules: string[];
+  dayRuleMarkers: DayRuleMarker[];
+  manualValidationMessages: string[];
 };
 
 const TIMESHEET_KEY = "timesheets-v1";
@@ -145,11 +198,26 @@ const COMPANY_KEY = "timesheet-companies-v1";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
 export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
-export function emptyDay(): DayEntry {
+function defaultDayType(index = 0): DayType {
+  if (index === 5) return "saturday_rest_day";
+  if (index === 6) return "sunday_or_public_holiday";
+  return "ordinary_weekday";
+}
+
+export function emptyDay(index = 0): DayEntry {
   return {
     start: "",
     end: "",
     pause: 0,
+    pauseStart: "",
+    pauseEnd: "",
+    workType: "normal",
+    dayType: defaultDayType(index),
+    isArtificialHolidayTest: false,
+    localAgreementApplies: false,
+    weekendAgreementApplies: false,
+    wasInstructedToWorkDuringMealBreak: false,
+    mealBreakPostponedMoreThan30Min: false,
     delayedMealBreakCompensation: false,
     taskType: "",
     comment: "",
@@ -169,8 +237,26 @@ export function formatDkk(value: number): string {
   })} DKK`;
 }
 
-function normalizeDay(value: Partial<DayEntry> | undefined): DayEntry {
-  return { ...emptyDay(), ...value };
+function normalizeDay(value: Partial<DayEntry> | undefined, index = 0): DayEntry {
+  const base = emptyDay(index);
+  const migratedMealBreak = Boolean(value?.delayedMealBreakCompensation);
+  const workType: WorkType = value?.workType ?? (value?.shiftWork ? "shift_work" : base.workType);
+  const weekendAgreementApplies =
+    value?.weekendAgreementApplies ?? workType === "weekend_work_agreement";
+  return {
+    ...base,
+    ...value,
+    workType,
+    dayType: value?.dayType ?? defaultDayType(index),
+    weekendAgreementApplies,
+    wasInstructedToWorkDuringMealBreak:
+      value?.wasInstructedToWorkDuringMealBreak ?? migratedMealBreak,
+    mealBreakPostponedMoreThan30Min: value?.mealBreakPostponedMoreThan30Min ?? migratedMealBreak,
+    delayedMealBreakCompensation:
+      value?.delayedMealBreakCompensation ??
+      Boolean(value?.wasInstructedToWorkDuringMealBreak && value?.mealBreakPostponedMoreThan30Min),
+    shiftWork: workType === "shift_work",
+  };
 }
 
 export function isIndustriensAgreement(agreementId: string): boolean {
@@ -181,8 +267,12 @@ export function delayedMealBreakDaysForTimesheet(
   t: Pick<Timesheet, "selectedAgreementId" | "days">,
 ): number {
   if (!isIndustriensAgreement(t.selectedAgreementId)) return 0;
-  return t.days.filter((day) => day.absence === "none" && Boolean(day.delayedMealBreakCompensation))
-    .length;
+  return t.days.filter(
+    (day) =>
+      day.absence === "none" &&
+      Boolean(day.wasInstructedToWorkDuringMealBreak) &&
+      Boolean(day.mealBreakPostponedMoreThan30Min),
+  ).length;
 }
 
 export function delayedMealBreakAmountForDays(days: number): number {
@@ -218,7 +308,7 @@ type StoredTimesheet = Omit<
 
 function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
-  const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index]));
+  const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index], index));
   const migratedAgreementId =
     value.selectedAgreementId || getCollectiveAgreementByName(value.overenskomst ?? "")?.id || "";
   const agreementName =
@@ -290,13 +380,55 @@ function minutes(time: string): number | null {
   return hour * 60 + minute;
 }
 
-export function dayHours(day: DayEntry): number {
-  if (day.absence !== "none") return 0;
+function shiftBounds(day: DayEntry): { start: number; end: number } | null {
+  if (day.absence !== "none") return null;
   const start = minutes(day.start);
   const rawEnd = minutes(day.end);
-  if (start === null || rawEnd === null || rawEnd === start) return 0;
-  const end = rawEnd < start ? rawEnd + 24 * 60 : rawEnd;
-  return round(Math.max(0, end - start - (day.pause || 0)) / 60);
+  if (start === null || rawEnd === null || rawEnd === start) return null;
+  return { start, end: rawEnd < start ? rawEnd + 24 * 60 : rawEnd };
+}
+
+function normalizedIntervalWithinShift(
+  shiftStart: number,
+  shiftEnd: number,
+  intervalStart: number,
+  intervalEnd: number,
+): { start: number; end: number } {
+  let start = intervalStart;
+  let end = intervalEnd <= intervalStart ? intervalEnd + 24 * 60 : intervalEnd;
+  while (end <= shiftStart) {
+    start += 24 * 60;
+    end += 24 * 60;
+  }
+  while (start < shiftStart && end <= shiftEnd - 24 * 60) {
+    start += 24 * 60;
+    end += 24 * 60;
+  }
+  return { start, end };
+}
+
+function pauseInterval(day: DayEntry): { start: number; end: number } | null {
+  const bounds = shiftBounds(day);
+  const pauseStart = minutes(day.pauseStart);
+  const pauseEnd = minutes(day.pauseEnd);
+  if (!bounds || pauseStart === null || pauseEnd === null || pauseStart === pauseEnd) return null;
+  const interval = normalizedIntervalWithinShift(bounds.start, bounds.end, pauseStart, pauseEnd);
+  const start = Math.max(bounds.start, interval.start);
+  const end = Math.min(bounds.end, interval.end);
+  if (end <= start) return null;
+  return { start, end };
+}
+
+function pauseMinutesForDay(day: DayEntry): number {
+  const interval = pauseInterval(day);
+  if (interval) return interval.end - interval.start;
+  return Math.max(0, Number(day.pause) || 0);
+}
+
+export function dayHours(day: DayEntry): number {
+  const bounds = shiftBounds(day);
+  if (!bounds) return 0;
+  return round(Math.max(0, bounds.end - bounds.start - pauseMinutesForDay(day)) / 60);
 }
 
 export function totalHours(days: DayEntry[]): number {
@@ -308,29 +440,133 @@ export function overtimeHours(days: DayEntry[], weeklyLimit = 37): number {
 }
 
 function overlapHours(day: DayEntry, from: string, to: string): number {
-  const start = minutes(day.start);
-  const rawEnd = minutes(day.end);
+  const bounds = shiftBounds(day);
   const rangeStart = minutes(from);
   const rangeEnd = minutes(to);
-  if (
-    day.absence !== "none" ||
-    start === null ||
-    rawEnd === null ||
-    rangeStart === null ||
-    rangeEnd === null
-  ) {
+  if (!bounds || rangeStart === null || rangeEnd === null) {
     return 0;
   }
-  const end = rawEnd <= start ? rawEnd + 24 * 60 : rawEnd;
   const adjustedRangeEnd = rangeEnd <= rangeStart ? rangeEnd + 24 * 60 : rangeEnd;
   const intervals = [-24 * 60, 0, 24 * 60].map((offset) => [
     rangeStart + offset,
     adjustedRangeEnd + offset,
   ]);
-  return round(
-    intervals.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(end, b) - Math.max(start, a)), 0) /
-      60,
-  );
+  const pause = pauseInterval(day);
+  const overlap = intervals.reduce((sum, [a, b]) => {
+    const gross = Math.max(0, Math.min(bounds.end, b) - Math.max(bounds.start, a));
+    const pauseOverlap = pause ? Math.max(0, Math.min(pause.end, b) - Math.max(pause.start, a)) : 0;
+    return sum + Math.max(0, gross - pauseOverlap);
+  }, 0);
+  return round(overlap / 60);
+}
+
+function crossesMidnight(day: DayEntry): boolean {
+  const start = minutes(day.start);
+  const end = minutes(day.end);
+  return start !== null && end !== null && end < start;
+}
+
+function effectiveDayType(day: DayEntry, index: number, weekStart: string): DayType {
+  if (day.isArtificialHolidayTest) return "sunday_or_public_holiday";
+  const holidayName = getDanishAgreementHolidayName(addDaysToISODate(weekStart, index));
+  if (holidayName) return "sunday_or_public_holiday";
+  return day.dayType;
+}
+
+function hasPausePlacement(day: DayEntry): boolean {
+  return Boolean(day.pauseStart && day.pauseEnd && pauseInterval(day));
+}
+
+function hasPauseDurationWithoutPlacement(day: DayEntry): boolean {
+  return day.absence === "none" && day.pause > 0 && !hasPausePlacement(day);
+}
+
+function daySegments(day: DayEntry, date: string): string[] {
+  if (!day.start || !day.end) return [];
+  if (!crossesMidnight(day)) return [`${date} ${day.start}–${day.end}`];
+  return [`${date} ${day.start}–24:00`, `${addDaysToISODate(date, 1)} 00:00–${day.end}`];
+}
+
+function explicitShiftWork(day: DayEntry): boolean {
+  return day.workType === "shift_work" || day.shiftWork;
+}
+
+function explicitWeekendAgreement(day: DayEntry): boolean {
+  return day.workType === "weekend_work_agreement" || day.weekendAgreementApplies;
+}
+
+function delayedMealBreakTriggered(day: DayEntry): boolean {
+  return Boolean(day.wasInstructedToWorkDuringMealBreak && day.mealBreakPostponedMoreThan30Min);
+}
+
+function buildDayRuleMarkers(
+  t: Timesheet,
+  canCalculateRatesAutomatically: boolean,
+): DayRuleMarker[] {
+  return t.days.map((day, index) => {
+    const date = addDaysToISODate(t.weekStart, index);
+    const effectiveType = effectiveDayType(day, index, t.weekStart);
+    const ruleAreas: string[] = [DAY_TYPE_LABEL[effectiveType]];
+    const warnings: string[] = [];
+    const requiresManualValidation: string[] = [];
+
+    if (day.workType !== "normal") ruleAreas.push(WORK_TYPE_LABEL[day.workType]);
+    if (crossesMidnight(day)) ruleAreas.push("Vagt over midnat");
+    if (day.isArtificialHolidayTest) ruleAreas.push("Test: behandles som helligdag");
+    if (hasPauseDurationWithoutPlacement(day)) {
+      warnings.push("Pauseplacering mangler. Tillæg kan ikke fordeles præcist.");
+    }
+    if (day.workType === "displaced_work_time" && !canCalculateRatesAutomatically) {
+      requiresManualValidation.push(
+        "Forskudt arbejdstid: Sats kræver manuel validering mod overenskomstkilde.",
+      );
+    }
+    if (day.workType === "overtime" && !canCalculateRatesAutomatically) {
+      requiresManualValidation.push(
+        "Overarbejde: Sats kræver manuel validering mod overenskomstkilde.",
+      );
+    }
+    if (explicitShiftWork(day) && !canCalculateRatesAutomatically) {
+      requiresManualValidation.push(
+        "Skiftehold: Sats kræver manuel validering mod overenskomstkilde.",
+      );
+    }
+    if (explicitWeekendAgreement(day) && !canCalculateRatesAutomatically) {
+      requiresManualValidation.push(
+        "Weekendarbejde efter lokalaftale: Sats kræver manuel validering mod overenskomstkilde.",
+      );
+    }
+
+    return {
+      dayName: WEEKDAYS[index],
+      date,
+      paidHours: dayHours(day),
+      dayType: effectiveType,
+      workType: day.workType,
+      crossesMidnight: crossesMidnight(day),
+      dateSegments: daySegments(day, date),
+      ruleAreas,
+      warnings,
+      delayedMealBreakStatus: delayedMealBreakTriggered(day)
+        ? "Udskudt spisepause mulig"
+        : "Udskudt spisepause ikke udløst",
+      shiftStatus: explicitShiftWork(day)
+        ? "Skiftehold markeret eksplicit"
+        : "Skiftehold fravalgt/ikke relevant",
+      weekendAgreementStatus: explicitWeekendAgreement(day)
+        ? "Weekendarbejde efter lokalaftale markeret eksplicit"
+        : "Weekendarbejde efter lokalaftale fravalgt/ikke relevant",
+      requiresManualValidation,
+    };
+  });
+}
+
+function uniqueMessages(markers: DayRuleMarker[]): string[] {
+  return [
+    ...new Set(
+      markers.flatMap((marker) => [...marker.warnings, ...marker.requiresManualValidation]),
+    ),
+  ];
 }
 
 function storageForKey(key: string): Storage | undefined {
@@ -418,7 +654,7 @@ export function createBlank(): Timesheet {
     localAgreementApplies: false,
     lokalaftale: false,
     weekStart: getMondayISO(),
-    days: Array.from({ length: 7 }, emptyDay),
+    days: Array.from({ length: 7 }, (_, index) => emptyDay(index)),
     notes: "",
     status: "draft",
     createdAt: now,
@@ -452,7 +688,7 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     const date = addDaysToISODate(weekStart, index);
     const isWorkday = index < 5 && (!input.startDate || date >= input.startDate);
     return {
-      ...emptyDay(),
+      ...emptyDay(index),
       start: isWorkday ? input.defaultStart : "",
       end: isWorkday ? input.defaultEnd : "",
       pause: isWorkday ? input.defaultPause : 0,
@@ -489,7 +725,11 @@ export function validate(t: Timesheet): string[] {
   if (!/^\S+@\S+\.\S+$/.test(t.kontaktpersonEmail))
     errors.push("Kontaktpersonens mailadresse mangler eller er ugyldig");
   if (!t.arbejdssted.trim()) errors.push("Arbejdssted mangler");
-  if (!t.selectedAgreementId || !getCollectiveAgreementById(t.selectedAgreementId))
+  if (
+    !t.selectedAgreementId ||
+    t.selectedAgreementId === "all" ||
+    !getCollectiveAgreementById(t.selectedAgreementId)
+  )
     errors.push("Vælg en aktiv overenskomst");
   t.days.forEach((day, index) => {
     if (day.absence === "none" && Boolean(day.start) !== Boolean(day.end))
@@ -497,6 +737,8 @@ export function validate(t: Timesheet): string[] {
     if (day.start && day.end && day.start === day.end)
       errors.push(`${WEEKDAYS[index]}: Start og slut kan ikke være ens`);
     if (day.pause < 0) errors.push(`${WEEKDAYS[index]}: Pause kan ikke være negativ`);
+    if (Boolean(day.pauseStart) !== Boolean(day.pauseEnd))
+      errors.push(`${WEEKDAYS[index]}: Udfyld både pause start og pause slut`);
   });
   return errors;
 }
@@ -627,8 +869,14 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
   const delayedMealBreakAmount = delayedMealBreakAmountForDays(delayedMealBreakDays);
 
-  if (!t.selectedAgreementId) {
+  if (!t.selectedAgreementId || t.selectedAgreementId === "all") {
     const total = totalHours(t.days);
+    const dayRuleMarkers = buildDayRuleMarkers(t, false);
+    const localAgreementHours = round(
+      t.localAgreementApplies
+        ? total
+        : t.days.reduce((sum, day) => sum + (day.localAgreementApplies ? dayHours(day) : 0), 0),
+    );
     return {
       total,
       agreementId: "",
@@ -637,7 +885,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       industryArea: "",
       canCalculateRatesAutomatically: false,
       rateValidationStatus: "missing_pdf",
-      validationNote: "Vælg en overenskomst, før regelgrundlaget kan vurderes.",
+      validationNote: "Vælg en konkret overenskomst for at validere regler og tillæg.",
       normal: total,
       overtime: 0,
       saturday: 0,
@@ -649,8 +897,10 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       shift: 0,
       delayedMealBreakDays,
       delayedMealBreakAmount,
-      localAgreement: t.localAgreementApplies ? total : 0,
+      localAgreement: localAgreementHours,
       missingRules: ["valgt overenskomst"],
+      dayRuleMarkers,
+      manualValidationMessages: uniqueMessages(dayRuleMarkers),
     };
   }
   const summary = calculateTimesheetSummary({
@@ -669,26 +919,71 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const validationReport = getAgreementValidationReport(t.selectedAgreementId);
   const total = totalHours(t.days);
   const missingRules: string[] = [];
-  const saturday = dayHours(t.days[5]);
-  const sunday = dayHours(t.days[6]);
+  const dayRuleMarkers = buildDayRuleMarkers(t, summary.canCalculateRatesAutomatically);
+  const saturday = round(
+    t.days.reduce(
+      (sum, day, index) =>
+        sum +
+        (effectiveDayType(day, index, t.weekStart) === "saturday_rest_day" ? dayHours(day) : 0),
+      0,
+    ),
+  );
+  const sunday = round(
+    t.days.reduce(
+      (sum, day, index) =>
+        sum +
+        (effectiveDayType(day, index, t.weekStart) === "sunday_or_public_holiday"
+          ? dayHours(day)
+          : 0),
+      0,
+    ),
+  );
   const publicHoliday = round(
     t.days.reduce((sum, day, index) => {
       const holidayName = getDanishAgreementHolidayName(addDaysToISODate(t.weekStart, index));
-      return sum + (holidayName && holidayName !== "Søndag" ? dayHours(day) : 0);
+      return (
+        sum +
+        ((holidayName && holidayName !== "Søndag") || day.isArtificialHolidayTest
+          ? dayHours(day)
+          : 0)
+      );
     }, 0),
   );
   const evening = rule?.eveningStart
     ? t.days.reduce(
-        (sum, day) => sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59"),
+        (sum, day) =>
+          sum +
+          (day.workType === "displaced_work_time"
+            ? overlapHours(day, rule.eveningStart, rule.nightStart || "23:59")
+            : 0),
         0,
       )
     : 0;
   const night =
     rule?.nightStart && rule.nightEnd
-      ? t.days.reduce((sum, day) => sum + overlapHours(day, rule.nightStart, rule.nightEnd), 0)
+      ? t.days.reduce(
+          (sum, day) =>
+            sum +
+            (day.workType === "displaced_work_time"
+              ? overlapHours(day, rule.nightStart, rule.nightEnd)
+              : 0),
+          0,
+        )
       : 0;
-  const shift = round(t.days.reduce((sum, day) => sum + (day.shiftWork ? dayHours(day) : 0), 0));
-  const overtime = rule?.normalWeekHours ? Math.max(0, total - rule.normalWeekHours) : 0;
+  const shift = round(
+    t.days.reduce((sum, day) => sum + (explicitShiftWork(day) ? dayHours(day) : 0), 0),
+  );
+  const overtime = round(
+    t.days.reduce((sum, day) => sum + (day.workType === "overtime" ? dayHours(day) : 0), 0),
+  );
+  const weekendAgreement = round(
+    t.days.reduce((sum, day) => sum + (explicitWeekendAgreement(day) ? dayHours(day) : 0), 0),
+  );
+  const localAgreementHours = round(
+    t.localAgreementApplies
+      ? total
+      : t.days.reduce((sum, day) => sum + (day.localAgreementApplies ? dayHours(day) : 0), 0),
+  );
 
   if (!summary.canCalculateRatesAutomatically) {
     const validationBlockers = validationReport
@@ -720,33 +1015,27 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       saturday,
       sunday,
       publicHoliday,
-      weekend: round(saturday + sunday),
+      weekend: weekendAgreement,
       evening: round(evening),
       night: round(night),
       shift,
       delayedMealBreakDays,
       delayedMealBreakAmount,
-      localAgreement: t.localAgreementApplies ? total : 0,
-      missingRules: [...new Set([summary.validationNote, ...validationBlockers])],
+      localAgreement: localAgreementHours,
+      missingRules: [
+        ...new Set([
+          summary.validationNote,
+          ...validationBlockers,
+          ...uniqueMessages(dayRuleMarkers),
+        ]),
+      ],
+      dayRuleMarkers,
+      manualValidationMessages: uniqueMessages(dayRuleMarkers),
     };
   }
 
-  let validatedOvertime = overtime;
+  const validatedOvertime = overtime;
 
-  if (rule?.normalWeekHours) {
-    validatedOvertime = Math.max(validatedOvertime, total - rule.normalWeekHours);
-  } else {
-    missingRules.push("normal ugentlig arbejdstid");
-  }
-  if (rule?.normalDayHours) {
-    const daily = t.days.reduce(
-      (sum, day) => sum + Math.max(0, dayHours(day) - rule.normalDayHours!),
-      0,
-    );
-    validatedOvertime = Math.max(validatedOvertime, daily);
-  } else {
-    missingRules.push("normal daglig arbejdstid");
-  }
   if (!rule?.overtimeRule) missingRules.push("overarbejdsregel");
   if (!rule?.validFrom || !rule?.validTo) missingRules.push("reglernes gyldighedsperiode");
   if (saturday > 0 && !rule?.saturdayRule) missingRules.push("lørdagstillæg");
@@ -754,7 +1043,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   if (publicHoliday > 0 && !rule?.sundayRule) missingRules.push("helligdags-/søndagstillæg");
   if (evening > 0 && !rule?.eveningRule) missingRules.push("aftentillæg");
   if (night > 0 && !rule?.nightRule) missingRules.push("nattillæg");
-  if (t.days.some((day) => day.shiftWork) && !rule?.shiftRule)
+  if (t.days.some((day) => explicitShiftWork(day)) && !rule?.shiftRule)
     missingRules.push("skifteholdstillæg");
   return {
     total,
@@ -772,14 +1061,16 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     saturday,
     sunday,
     publicHoliday,
-    weekend: round(saturday + sunday),
+    weekend: weekendAgreement,
     evening: round(evening),
     night: round(night),
     shift,
     delayedMealBreakDays,
     delayedMealBreakAmount,
-    localAgreement: t.localAgreementApplies ? total : 0,
-    missingRules: [...new Set(missingRules)],
+    localAgreement: localAgreementHours,
+    missingRules: [...new Set([...missingRules, ...uniqueMessages(dayRuleMarkers)])],
+    dayRuleMarkers,
+    manualValidationMessages: uniqueMessages(dayRuleMarkers),
   };
 }
 
@@ -805,12 +1096,13 @@ export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string 
     const delayedMealBreakDetail =
       isIndustriensAgreement(t.selectedAgreementId) &&
       day.absence === "none" &&
-      day.delayedMealBreakCompensation
+      delayedMealBreakTriggered(day)
         ? "Udsat spisepause 30+ min efter besked fra virksomheden"
         : "";
     const details = [
       day.taskType,
-      day.shiftWork ? "Skiftehold" : "",
+      day.workType !== "normal" ? WORK_TYPE_LABEL[day.workType] : "",
+      explicitShiftWork(day) ? "Skiftehold markeret" : "",
       delayedMealBreakDetail,
       day.comment,
     ]

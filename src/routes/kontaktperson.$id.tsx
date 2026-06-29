@@ -113,6 +113,7 @@ function KontaktDetail() {
             <tbody>
               {WEEKDAYS.map((n, i) => {
                 const d = t.days[i];
+                const marker = calc.dayRuleMarkers[i];
                 return (
                   <tr key={n} className="border-t">
                     <td className="px-4 py-2 font-medium">{n}</td>
@@ -120,9 +121,7 @@ function KontaktDetail() {
                     <td className="px-4 py-2 tabular-nums">{d.end || "—"}</td>
                     <td className="px-4 py-2 tabular-nums">{d.pause ? `${d.pause} min` : "—"}</td>
                     {showDelayedMealBreak && (
-                      <td className="px-4 py-2">
-                        {d.absence === "none" && d.delayedMealBreakCompensation ? "Ja" : "Nej"}
-                      </td>
+                      <td className="px-4 py-2">{marker?.delayedMealBreakStatus ?? "Nej"}</td>
                     )}
                     <td className="px-4 py-2 text-muted-foreground">{d.comment || ""}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{dayHours(d).toFixed(2)}</td>
