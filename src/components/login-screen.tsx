@@ -21,7 +21,9 @@ export function LoginScreen() {
     const vikarTimesheetId = pathname.match(/^\/vikar\/([^/]+)$/)?.[1];
     const vikarTimesheet = vikarTimesheetId ? getById(vikarTimesheetId) : undefined;
     const validVikarPassword =
-      role === "vikar" && vikarTimesheet?.workerAccessCode === password && password.length >= 6;
+      role === "vikar" &&
+      vikarTimesheet?.workerAccessCode === password &&
+      /^\d{4,8}$/.test(password);
     const validDemoPassword = password === DEMO_PASSWORD;
 
     if (!validDemoPassword && !validVikarPassword) {

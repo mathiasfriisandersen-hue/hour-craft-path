@@ -18,7 +18,10 @@ export const Route = createFileRoute("/admin/create-worker")({
   component: CreateWorkerPage,
 });
 
-type FormState = Omit<CreateWorkerTimesheetInput, "hourlyWage" | "defaultPause"> & {
+type FormState = Omit<
+  CreateWorkerTimesheetInput,
+  "hourlyWage" | "defaultPause" | "workerAccessCode"
+> & {
   hourlyWage: string;
   defaultPause: string;
 };
@@ -43,8 +46,13 @@ function initialForm(): FormState {
     defaultEnd: "15:30",
     defaultPause: "60",
     startDate: todayISO(),
-    workerAccessCode: "",
   };
+}
+
+function generateOneTimeCode(): string {
+  const values = new Uint32Array(1);
+  window.crypto.getRandomValues(values);
+  return String(values[0] % 1_000_000).padStart(6, "0");
 }
 
 function CreateWorkerPage() {
@@ -91,8 +99,6 @@ function CreateWorkerPage() {
     if (!Number.isFinite(Number(form.defaultPause)) || Number(form.defaultPause) < 0)
       nextErrors.push("Pause skal være et tal på 0 minutter eller mere");
     if (!form.startDate) nextErrors.push("Startdato mangler");
-    if (!/^\d{6}$/.test(form.workerAccessCode))
-      nextErrors.push("Midlertidig login-kode skal være 6 cifre");
     return nextErrors;
   };
 
@@ -110,6 +116,7 @@ function CreateWorkerPage() {
         ...form,
         hourlyWage: Number(form.hourlyWage),
         defaultPause: Number(form.defaultPause),
+        workerAccessCode: generateOneTimeCode(),
       }),
     );
     setCreatedId(timesheet.id);
@@ -174,19 +181,13 @@ function CreateWorkerPage() {
               onChange={(e) => update({ vikarEmail: e.target.value })}
             />
           </Field>
-          <Field label="Midlertidig login-kode *">
-            <Input
-              inputMode="numeric"
-              maxLength={6}
-              value={form.workerAccessCode}
-              onChange={(e) =>
-                update({ workerAccessCode: e.target.value.replace(/\D/g, "").slice(0, 6) })
-              }
-              placeholder="Første 6 cifre i CPR (DDMMÅÅ)"
-            />
+          <Field label="Engangskode">
+            <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
+              Genereres automatisk
+            </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Bruges som første login. Indtast de første 6 cifre i CPR-nummeret som datoformat
-              DDMMÅÅ. Vikaren bliver bedt om at ændre adgangskoden efter login.
+              Systemet laver en 6-cifret engangskode og sender den til vikaren i invitationsmailen.
+              Vikaren bliver bedt om at ændre adgangskoden efter første login.
             </p>
           </Field>
           <Field label="Brugervirksomhed *">

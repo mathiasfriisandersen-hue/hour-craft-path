@@ -41,7 +41,7 @@ function VikarInvitePage() {
   const verifyTemporaryCode = (event: FormEvent) => {
     event.preventDefault();
     if (temporaryCode !== timesheet.workerAccessCode) {
-      setError("Forkert midlertidig adgangskode");
+      setError("Forkert engangskode");
       return;
     }
     setError("");
@@ -74,7 +74,7 @@ function VikarInvitePage() {
       {step === "temporary" ? (
         <form onSubmit={verifyTemporaryCode} className="mt-6 space-y-4">
           <label>
-            <span className="mb-1.5 block text-sm font-medium">Midlertidig adgangskode</span>
+            <span className="mb-1.5 block text-sm font-medium">Engangskode</span>
             <Input
               type="password"
               inputMode="numeric"
@@ -84,7 +84,7 @@ function VikarInvitePage() {
                 setTemporaryCode(e.target.value.replace(/\D/g, "").slice(0, 6));
                 setError("");
               }}
-              placeholder="Første 6 cifre i CPR (DDMMÅÅ)"
+              placeholder="6-cifret engangskode"
             />
           </label>
           {error && <p className="text-sm font-medium text-status-rejected-fg">{error}</p>}
