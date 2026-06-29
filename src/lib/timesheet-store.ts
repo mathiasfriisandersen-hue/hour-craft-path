@@ -6,8 +6,6 @@ import {
 } from "./collectiveAgreements";
 import {
   AGREEMENT_RULE_SOURCE_LABEL,
-  agreementRuleSourceHref,
-  agreementRuleSourceLabel,
   defaultAgreementRules,
   type AgreementRule,
   type AgreementRuleSource,
@@ -249,6 +247,15 @@ export function formatWeekRange(mondayISO: string): string {
   sunday.setDate(sunday.getDate() + 6);
   const fmt = (d: Date) => d.toLocaleDateString("da-DK", { day: "2-digit", month: "short" });
   return `${fmt(monday)} – ${fmt(sunday)}`;
+}
+
+function formatDateLabel(isoDate: string): string {
+  if (!isoDate) return "—";
+  return new Date(`${isoDate}T12:00:00`).toLocaleDateString("da-DK", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 export function weekNumber(mondayISO: string): number {
@@ -710,9 +717,9 @@ export function emailSubject(t: Timesheet): string {
 
 export function emailBody(t: Timesheet): string {
   const calc = calculateTimesheet(t);
-  const rule = getRule(t.selectedAgreementId);
   const dayLines = WEEKDAYS.map((name, index) => {
     const day = t.days[index];
+    const date = addDaysToISODate(t.weekStart, index);
     const registration =
       day.absence !== "none"
         ? ABSENCE_LABEL[day.absence]
@@ -733,60 +740,41 @@ export function emailBody(t: Timesheet): string {
     ]
       .filter(Boolean)
       .join(" · ");
-    return `${name}: ${registration}${details ? ` (${details})` : ""}`;
+    return `${name} ${formatDateLabel(date)}: ${registration}${details ? ` (${details})` : ""}`;
   });
-  const sourceLines =
-    rule?.sources.map(
-      (source) =>
-        `${agreementRuleSourceLabel(source)}: ${source.pdfFileName || source.pdfUrl}, side ${source.page} (${agreementRuleSourceHref(source)})`,
-    ) ?? [];
+
+  const manualAllowanceLines: string[] = [];
+  if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
+    manualAllowanceLines.push(delayedMealBreakSummaryText(calc.delayedMealBreakDays));
+  }
+  if (manualAllowanceLines.length === 0) {
+    manualAllowanceLines.push("Ingen manuelle tillæg registreret.");
+  }
+
   return [
-    "TIMESSEDDEL",
+    "TIMESSEDDEL TIL GODKENDELSE",
     "",
-    `Vikar: ${t.vikar}`,
-    `Vikarens e-mail: ${t.vikarEmail}`,
+    "OPLYSNINGER",
+    `Vikarnavn: ${t.vikar}`,
     `Brugervirksomhed: ${t.brugervirksomhed}`,
     `Kontaktperson: ${t.kontaktperson}`,
-    `Kontaktpersonens e-mail: ${t.kontaktpersonEmail}`,
     `Reference: ${t.referenceNo || "—"}`,
     `Arbejdssted: ${t.arbejdssted}`,
-    `Uge: ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
-    `Valgt overenskomst: ${calc.agreementName || "—"}`,
-    `Kategori: ${calc.agreementCategory || "—"}`,
-    `Brancheområde: ${calc.industryArea || "—"}`,
-    `PDF-kilde: ${calc.pdfUrl || calc.pdfFileName || "PDF mangler"}`,
-    `Valideringsstatus: ${calc.rateValidationStatus}`,
-    `Lokalaftale: ${t.localAgreementApplies ? "Ja" : "Nej"}`,
+    `Uge og dato: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
     "",
     "REGISTRERINGER",
     ...dayLines,
     "",
     "SAMLET TIMETAL",
-    `Samlede timer: ${calc.total.toFixed(2)}`,
-    `Mulige overarbejdstimer: ${calc.overtime.toFixed(2)}`,
-    `Lørdagstimer: ${calc.saturday.toFixed(2)}`,
-    `Søndagstimer: ${calc.sunday.toFixed(2)}`,
-    `Helligdagstimer: ${calc.publicHoliday.toFixed(2)}`,
-    `Aftentimer: ${calc.evening.toFixed(2)}`,
-    `Nattetimer: ${calc.night.toFixed(2)}`,
-    `Skifteholdstimer: ${calc.shift.toFixed(2)}`,
-    ...(isIndustriensAgreement(t.selectedAgreementId)
-      ? ["", "MANUELLE TILLÆG", delayedMealBreakSummaryText(calc.delayedMealBreakDays)]
-      : []),
+    `${calc.total.toFixed(2)} timer`,
+    "",
+    "MANUELLE TILLÆG",
+    ...manualAllowanceLines,
     "",
     "NOTER",
     t.notes || "—",
     "",
-    "VALIDERINGSNOTE FOR TILLÆG",
-    calc.validationNote,
-    calc.canCalculateRatesAutomatically
-      ? "Automatisk satsberegning er aktiveret for denne overenskomst."
-      : "Automatisk satsberegning er ikke aktiveret for denne overenskomst.",
-    "",
-    "KILDER",
-    ...(sourceLines.length ? sourceLines : ["Ingen regel-/tillægskilder er registreret endnu."]),
-    "",
-    "Timesedlen er afsendt til kontrol. Tillæg, satser og eventuelle lokalaftaler skal kontrolleres mod PDF-kilden før løn- eller fakturabehandling.",
+    "Timesedlen er sendt til godkendelse hos kontaktpersonen.",
   ].join("\n");
 }
 
