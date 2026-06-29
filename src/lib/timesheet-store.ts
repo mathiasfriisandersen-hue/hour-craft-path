@@ -89,6 +89,10 @@ export type DayEntry = {
   pause: number;
   pauseStart: string;
   pauseEnd: string;
+  eveningWorkStart: string;
+  eveningWorkEnd: string;
+  nightWorkStart: string;
+  nightWorkEnd: string;
   workType: WorkType;
   dayType: DayType;
   isArtificialHolidayTest: boolean;
@@ -211,6 +215,10 @@ export function emptyDay(index = 0): DayEntry {
     pause: 0,
     pauseStart: "",
     pauseEnd: "",
+    eveningWorkStart: "",
+    eveningWorkEnd: "",
+    nightWorkStart: "",
+    nightWorkEnd: "",
     workType: "normal",
     dayType: defaultDayType(index),
     isArtificialHolidayTest: false,
@@ -965,27 +973,24 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
       );
     }, 0),
   );
-  const evening = rule?.eveningStart
-    ? t.days.reduce(
-        (sum, day) =>
-          sum +
-          (day.workType === "displaced_work_time"
-            ? overlapHours(day, rule.eveningStart, rule.nightStart || "23:59")
-            : 0),
-        0,
-      )
-    : 0;
-  const night =
-    rule?.nightStart && rule.nightEnd
-      ? t.days.reduce(
-          (sum, day) =>
-            sum +
-            (day.workType === "displaced_work_time"
-              ? overlapHours(day, rule.nightStart, rule.nightEnd)
-              : 0),
-          0,
-        )
-      : 0;
+  const evening = t.days.reduce((sum, day) => {
+    if (day.eveningWorkStart && day.eveningWorkEnd) {
+      return sum + overlapHours(day, day.eveningWorkStart, day.eveningWorkEnd);
+    }
+    if (rule?.eveningStart && day.workType === "displaced_work_time") {
+      return sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59");
+    }
+    return sum;
+  }, 0);
+  const night = t.days.reduce((sum, day) => {
+    if (day.nightWorkStart && day.nightWorkEnd) {
+      return sum + overlapHours(day, day.nightWorkStart, day.nightWorkEnd);
+    }
+    if (rule?.nightStart && rule.nightEnd && day.workType === "displaced_work_time") {
+      return sum + overlapHours(day, rule.nightStart, rule.nightEnd);
+    }
+    return sum;
+  }, 0);
   const shift = round(
     t.days.reduce((sum, day) => sum + (explicitShiftWork(day) ? dayHours(day) : 0), 0),
   );

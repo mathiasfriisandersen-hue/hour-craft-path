@@ -72,6 +72,14 @@ function AdminDetail() {
     setT(saved);
   };
 
+  const updateShiftWork = (index: number, checked: boolean) => {
+    const day = t.days[index];
+    updateDay(index, {
+      shiftWork: checked,
+      workType: checked ? "shift_work" : day.workType === "shift_work" ? "normal" : day.workType,
+    });
+  };
+
   const handleMail = async () => {
     setSendingMail(true);
     setMailMessage("Sender mail via mailsystemet…");
@@ -203,7 +211,7 @@ function AdminDetail() {
       <section className="mt-6 overflow-hidden rounded-lg border bg-card">
         <h2 className="p-5 pb-3 font-semibold md:p-6 md:pb-3">Registreringer</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1040px] text-sm">
+          <table className="w-full min-w-[1320px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
                 {[
@@ -214,6 +222,9 @@ function AdminDetail() {
                   "Pause",
                   "Pause start",
                   "Pause slut",
+                  "Aftenarbejde",
+                  "Natarbejde",
+                  "Skiftehold",
                   ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
                   "Opgave",
                   "Dagstype",
@@ -258,6 +269,37 @@ function AdminDetail() {
                         aria-label={`${name} pause slut`}
                         className="h-9 w-32"
                       />
+                    </td>
+                    <td className="px-3 py-3">
+                      <AdminTimeRange
+                        dayName={name}
+                        label="aftenarbejde"
+                        start={day.eveningWorkStart}
+                        end={day.eveningWorkEnd}
+                        onStartChange={(value) => updateDay(index, { eveningWorkStart: value })}
+                        onEndChange={(value) => updateDay(index, { eveningWorkEnd: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <AdminTimeRange
+                        dayName={name}
+                        label="natarbejde"
+                        start={day.nightWorkStart}
+                        end={day.nightWorkEnd}
+                        onStartChange={(value) => updateDay(index, { nightWorkStart: value })}
+                        onEndChange={(value) => updateDay(index, { nightWorkEnd: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                        <input
+                          type="checkbox"
+                          checked={day.shiftWork || day.workType === "shift_work"}
+                          onChange={(e) => updateShiftWork(index, e.target.checked)}
+                          className="h-4 w-4 rounded border-input"
+                        />
+                        Skiftehold
+                      </label>
                     </td>
                     {showDelayedMealBreak && (
                       <td className="px-3 py-3">{marker?.delayedMealBreakStatus ?? "—"}</td>
@@ -409,6 +451,45 @@ function Row({ label, value }: { label: string; value?: string }) {
     </div>
   );
 }
+
+function AdminTimeRange({
+  dayName,
+  label,
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+}: {
+  dayName: string;
+  label: string;
+  start: string;
+  end: string;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="time"
+        step="300"
+        value={start}
+        onChange={(e) => onStartChange(e.target.value)}
+        aria-label={`${dayName} ${label} start`}
+        className="h-9 w-28"
+      />
+      <span className="text-xs text-muted-foreground">–</span>
+      <Input
+        type="time"
+        step="300"
+        value={end}
+        onChange={(e) => onEndChange(e.target.value)}
+        aria-label={`${dayName} ${label} slut`}
+        className="h-9 w-28"
+      />
+    </div>
+  );
+}
+
 function sourcesFor(sources: AgreementRuleSource[] | undefined, field: AgreementRuleSourceKey) {
   return sources?.filter((source) => source.field === field) ?? [];
 }
