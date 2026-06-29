@@ -75,6 +75,21 @@ function assertGuarded(result, label) {
 
 const tests = [
   {
+    id: "week-start-local-date",
+    run() {
+      assertEqual(
+        store.getMondayISO(new Date("2026-06-29T12:00:00")),
+        "2026-06-29",
+        "monday must stay monday",
+      );
+      assertEqual(
+        store.getMondayISO(new Date("2026-06-28T12:00:00")),
+        "2026-06-22",
+        "sunday must resolve to previous monday",
+      );
+    },
+  },
+  {
     id: "weekday-no-allowance",
     run() {
       const result = store.calculateTimesheet(
