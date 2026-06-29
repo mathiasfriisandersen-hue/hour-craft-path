@@ -774,6 +774,9 @@ export function emailBody(t: Timesheet): string {
     "NOTER",
     t.notes || "—",
     "",
+    "GODKENDELSE OG INDSIGELSER",
+    "I henhold til de aftalte forretningsbetingelser anses timesedlen som godkendt, medmindre der modtages skriftlig indsigelse senest tirsdag efter fremsendelsen. Eventuelle indsigelser skal angive, hvilke registreringer der bestrides, og begrundelsen herfor.",
+    "",
     "Timesedlen er sendt til godkendelse hos kontaktpersonen.",
   ].join("\n");
 }
