@@ -901,6 +901,7 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
     t.workerAccessCode || "—",
     "",
     "Efter første login bliver du bedt om at ændre adgangskoden.",
+    "Invitationslinket er gyldigt i 7 dage fra oprettelse.",
     "",
     inviteUrl,
     "",

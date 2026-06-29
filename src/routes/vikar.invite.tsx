@@ -7,10 +7,19 @@ import { useAuth } from "@/lib/auth";
 import { upsert, type Timesheet } from "@/lib/timesheet-store";
 import { parseWorkerInviteFromHash } from "@/lib/worker-invite";
 
+const INVITE_VALIDITY_DAYS = 7;
+const INVITE_VALIDITY_MS = INVITE_VALIDITY_DAYS * 24 * 60 * 60 * 1000;
+
 export const Route = createFileRoute("/vikar/invite")({
   head: () => ({ meta: [{ title: "Vikar — Invitation" }] }),
   component: VikarInvitePage,
 });
+
+function isInviteExpired(timesheet: Timesheet): boolean {
+  const createdAt = Date.parse(timesheet.createdAt);
+  if (!Number.isFinite(createdAt)) return true;
+  return Date.now() - createdAt > INVITE_VALIDITY_MS;
+}
 
 function VikarInvitePage() {
   const navigate = useNavigate();
@@ -37,6 +46,18 @@ function VikarInvitePage() {
   }
 
   const timesheet = payload.timesheet;
+
+  if (isInviteExpired(timesheet)) {
+    return (
+      <InviteShell>
+        <h1 className="text-2xl font-semibold">Invitationslinket er udløbet</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Linket er kun gyldigt i {INVITE_VALIDITY_DAYS} dage fra oprettelse. Kontakt Sub-Z for et
+          nyt invitationslink.
+        </p>
+      </InviteShell>
+    );
+  }
 
   const verifyTemporaryCode = (event: FormEvent) => {
     event.preventDefault();
