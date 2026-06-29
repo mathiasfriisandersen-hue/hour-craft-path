@@ -89,6 +89,10 @@ export type DayEntry = {
   pause: number;
   pauseStart: string;
   pauseEnd: string;
+  pause2Start: string;
+  pause2End: string;
+  dayWorkStart: string;
+  dayWorkEnd: string;
   eveningWorkStart: string;
   eveningWorkEnd: string;
   nightWorkStart: string;
@@ -215,6 +219,10 @@ export function emptyDay(index = 0): DayEntry {
     pause: 0,
     pauseStart: "",
     pauseEnd: "",
+    pause2Start: "",
+    pause2End: "",
+    dayWorkStart: "",
+    dayWorkEnd: "",
     eveningWorkStart: "",
     eveningWorkEnd: "",
     nightWorkStart: "",
@@ -422,10 +430,14 @@ function normalizedIntervalWithinShift(
   return { start, end };
 }
 
-function pauseInterval(day: DayEntry): { start: number; end: number } | null {
+function buildPauseInterval(
+  day: DayEntry,
+  pauseStartValue: string,
+  pauseEndValue: string,
+): { start: number; end: number } | null {
   const bounds = shiftBounds(day);
-  const pauseStart = minutes(day.pauseStart);
-  const pauseEnd = minutes(day.pauseEnd);
+  const pauseStart = minutes(pauseStartValue);
+  const pauseEnd = minutes(pauseEndValue);
   if (!bounds || pauseStart === null || pauseEnd === null || pauseStart === pauseEnd) return null;
   const interval = normalizedIntervalWithinShift(bounds.start, bounds.end, pauseStart, pauseEnd);
   const start = Math.max(bounds.start, interval.start);
@@ -434,9 +446,22 @@ function pauseInterval(day: DayEntry): { start: number; end: number } | null {
   return { start, end };
 }
 
+function pauseIntervals(day: DayEntry): { start: number; end: number }[] {
+  return [
+    buildPauseInterval(day, day.pauseStart, day.pauseEnd),
+    buildPauseInterval(day, day.pause2Start, day.pause2End),
+  ].filter((interval): interval is { start: number; end: number } => Boolean(interval));
+}
+
+function pauseInterval(day: DayEntry): { start: number; end: number } | null {
+  return pauseIntervals(day)[0] ?? null;
+}
+
 function pauseMinutesForDay(day: DayEntry): number {
-  const interval = pauseInterval(day);
-  if (interval) return interval.end - interval.start;
+  const intervals = pauseIntervals(day);
+  if (intervals.length > 0) {
+    return intervals.reduce((sum, interval) => sum + interval.end - interval.start, 0);
+  }
   return Math.max(0, Number(day.pause) || 0);
 }
 
@@ -466,10 +491,14 @@ function overlapHours(day: DayEntry, from: string, to: string): number {
     rangeStart + offset,
     adjustedRangeEnd + offset,
   ]);
-  const pause = pauseInterval(day);
+  const pauses = pauseIntervals(day);
   const overlap = intervals.reduce((sum, [a, b]) => {
     const gross = Math.max(0, Math.min(bounds.end, b) - Math.max(bounds.start, a));
-    const pauseOverlap = pause ? Math.max(0, Math.min(pause.end, b) - Math.max(pause.start, a)) : 0;
+    const pauseOverlap = pauses.reduce(
+      (pauseSum, pause) =>
+        pauseSum + Math.max(0, Math.min(pause.end, b) - Math.max(pause.start, a)),
+      0,
+    );
     return sum + Math.max(0, gross - pauseOverlap);
   }, 0);
   return round(overlap / 60);
@@ -482,7 +511,7 @@ function crossesMidnight(day: DayEntry): boolean {
 }
 
 function hasPausePlacement(day: DayEntry): boolean {
-  return Boolean(day.pauseStart && day.pauseEnd && pauseInterval(day));
+  return pauseIntervals(day).length > 0;
 }
 
 function dateDayOfWeek(isoDate: string): number | undefined {
@@ -702,6 +731,10 @@ export type CreateWorkerTimesheetInput = {
   defaultPause: number;
   defaultPauseStart?: string;
   defaultPauseEnd?: string;
+  defaultPause2Start?: string;
+  defaultPause2End?: string;
+  defaultDayWorkStart?: string;
+  defaultDayWorkEnd?: string;
   defaultEveningWorkStart?: string;
   defaultEveningWorkEnd?: string;
   defaultNightWorkStart?: string;
@@ -718,6 +751,10 @@ export type CreateWorkerDayPlan = {
   pause: number;
   pauseStart: string;
   pauseEnd: string;
+  pause2Start: string;
+  pause2End: string;
+  dayWorkStart: string;
+  dayWorkEnd: string;
   eveningWorkStart: string;
   eveningWorkEnd: string;
   nightWorkStart: string;
@@ -746,6 +783,10 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
         pause: hasWork ? Number(plan.pause) || 0 : 0,
         pauseStart: hasWork ? plan.pauseStart : "",
         pauseEnd: hasWork ? plan.pauseEnd : "",
+        pause2Start: hasWork ? plan.pause2Start : "",
+        pause2End: hasWork ? plan.pause2End : "",
+        dayWorkStart: hasWork ? plan.dayWorkStart : "",
+        dayWorkEnd: hasWork ? plan.dayWorkEnd : "",
         eveningWorkStart: hasWork ? plan.eveningWorkStart : "",
         eveningWorkEnd: hasWork ? plan.eveningWorkEnd : "",
         nightWorkStart: hasWork ? plan.nightWorkStart : "",
@@ -762,6 +803,10 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
       pause: isWorkday ? input.defaultPause : 0,
       pauseStart: isWorkday ? input.defaultPauseStart || "" : "",
       pauseEnd: isWorkday ? input.defaultPauseEnd || "" : "",
+      pause2Start: isWorkday ? input.defaultPause2Start || "" : "",
+      pause2End: isWorkday ? input.defaultPause2End || "" : "",
+      dayWorkStart: isWorkday ? input.defaultDayWorkStart || "" : "",
+      dayWorkEnd: isWorkday ? input.defaultDayWorkEnd || "" : "",
       eveningWorkStart: isWorkday ? input.defaultEveningWorkStart || "" : "",
       eveningWorkEnd: isWorkday ? input.defaultEveningWorkEnd || "" : "",
       nightWorkStart: isWorkday ? input.defaultNightWorkStart || "" : "",
@@ -814,7 +859,15 @@ export function validate(t: Timesheet): string[] {
       errors.push(`${WEEKDAYS[index]}: Start og slut kan ikke være ens`);
     if (day.pause < 0) errors.push(`${WEEKDAYS[index]}: Pause kan ikke være negativ`);
     if (Boolean(day.pauseStart) !== Boolean(day.pauseEnd))
-      errors.push(`${WEEKDAYS[index]}: Udfyld både pause start og pause slut`);
+      errors.push(`${WEEKDAYS[index]}: Udfyld både pause 1 start og pause 1 slut`);
+    if (Boolean(day.pause2Start) !== Boolean(day.pause2End))
+      errors.push(`${WEEKDAYS[index]}: Udfyld både pause 2 start og pause 2 slut`);
+    if (Boolean(day.dayWorkStart) !== Boolean(day.dayWorkEnd))
+      errors.push(`${WEEKDAYS[index]}: Udfyld både dagarbejde start og dagarbejde slut`);
+    if (Boolean(day.eveningWorkStart) !== Boolean(day.eveningWorkEnd))
+      errors.push(`${WEEKDAYS[index]}: Udfyld både aftenarbejde start og aftenarbejde slut`);
+    if (Boolean(day.nightWorkStart) !== Boolean(day.nightWorkEnd))
+      errors.push(`${WEEKDAYS[index]}: Udfyld både natarbejde start og natarbejde slut`);
   });
   return errors;
 }

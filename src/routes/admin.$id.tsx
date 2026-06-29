@@ -211,7 +211,7 @@ function AdminDetail() {
       <section className="mt-6 overflow-hidden rounded-lg border bg-card">
         <h2 className="p-5 pb-3 font-semibold md:p-6 md:pb-3">Registreringer</h2>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1320px] text-sm">
+          <table className="w-full min-w-[1520px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
                 {[
@@ -220,8 +220,9 @@ function AdminDetail() {
                   "Start",
                   "Slut",
                   "Pause",
-                  "Pause start",
-                  "Pause slut",
+                  "Pause 1",
+                  "Pause 2",
+                  "Dagarbejde",
                   "Aftenarbejde",
                   "Natarbejde",
                   "Skiftehold",
@@ -251,23 +252,33 @@ function AdminDetail() {
                     <td className="px-3 py-3 tabular-nums">{day.end || "—"}</td>
                     <td className="px-3 py-3">{day.pause ? `${day.pause} min` : "—"}</td>
                     <td className="px-3 py-3">
-                      <Input
-                        type="time"
-                        step="300"
-                        value={day.pauseStart}
-                        onChange={(e) => updateDay(index, { pauseStart: e.target.value })}
-                        aria-label={`${name} pause start`}
-                        className="h-9 w-32"
+                      <AdminTimeRange
+                        dayName={name}
+                        label="pause 1"
+                        start={day.pauseStart}
+                        end={day.pauseEnd}
+                        onStartChange={(value) => updateDay(index, { pauseStart: value })}
+                        onEndChange={(value) => updateDay(index, { pauseEnd: value })}
                       />
                     </td>
                     <td className="px-3 py-3">
-                      <Input
-                        type="time"
-                        step="300"
-                        value={day.pauseEnd}
-                        onChange={(e) => updateDay(index, { pauseEnd: e.target.value })}
-                        aria-label={`${name} pause slut`}
-                        className="h-9 w-32"
+                      <AdminTimeRange
+                        dayName={name}
+                        label="pause 2"
+                        start={day.pause2Start}
+                        end={day.pause2End}
+                        onStartChange={(value) => updateDay(index, { pause2Start: value })}
+                        onEndChange={(value) => updateDay(index, { pause2End: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-3">
+                      <AdminTimeRange
+                        dayName={name}
+                        label="dagarbejde"
+                        start={day.dayWorkStart}
+                        end={day.dayWorkEnd}
+                        onStartChange={(value) => updateDay(index, { dayWorkStart: value })}
+                        onEndChange={(value) => updateDay(index, { dayWorkEnd: value })}
                       />
                     </td>
                     <td className="px-3 py-3">
