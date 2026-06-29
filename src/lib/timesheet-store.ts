@@ -466,15 +466,24 @@ function crossesMidnight(day: DayEntry): boolean {
   return start !== null && end !== null && end < start;
 }
 
-function effectiveDayType(day: DayEntry, index: number, weekStart: string): DayType {
-  if (day.isArtificialHolidayTest) return "sunday_or_public_holiday";
-  const holidayName = getDanishAgreementHolidayName(addDaysToISODate(weekStart, index));
-  if (holidayName) return "sunday_or_public_holiday";
-  return day.dayType;
-}
-
 function hasPausePlacement(day: DayEntry): boolean {
   return Boolean(day.pauseStart && day.pauseEnd && pauseInterval(day));
+}
+
+function dateDayOfWeek(isoDate: string): number | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return undefined;
+  return new Date(`${isoDate}T12:00:00`).getDay();
+}
+
+function effectiveDayType(day: DayEntry, index: number, weekStart: string): DayType {
+  const date = addDaysToISODate(weekStart, index);
+  if (day.isArtificialHolidayTest) return "sunday_or_public_holiday";
+  const holidayName = getDanishAgreementHolidayName(date);
+  if (holidayName) return "sunday_or_public_holiday";
+  const weekday = dateDayOfWeek(date);
+  if (weekday === 6) return "saturday_rest_day";
+  if (weekday === 0) return "sunday_or_public_holiday";
+  return day.dayType;
 }
 
 function hasPauseDurationWithoutPlacement(day: DayEntry): boolean {

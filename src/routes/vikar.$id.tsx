@@ -4,9 +4,6 @@ import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  ABSENCE_LABEL,
-  DAY_TYPE_LABEL,
-  dayHours,
   delayedMealBreakDaysForTimesheet,
   delayedMealBreakSummaryText,
   formatWeekRange,
@@ -14,17 +11,13 @@ import {
   isIndustriensAgreement,
   mailtoUrl,
   listCompanies,
-  totalHours,
   upsert,
   validate,
   WEEKDAYS,
   weekNumber,
-  type AbsenceType,
-  type DayType,
   type Timesheet,
-  type WorkType,
-  WORK_TYPE_LABEL,
 } from "@/lib/timesheet-store";
+import { addDaysToISODate, getDanishAgreementHolidayName } from "@/lib/danishHolidays";
 import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +63,6 @@ function VikarEdit() {
   const normalizePause = (pause: number) => Math.max(0, Math.round(pause / 5) * 5);
   const delayedMealBreakEnabled = isIndustriensAgreement(t.selectedAgreementId);
   const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
-  const timesheetTableSummaryColSpan = 7;
 
   const selectCompany = (name: string) => {
     const company = companies.find((item) => item.name === name);
@@ -261,63 +253,37 @@ function VikarEdit() {
         <div className="p-5 pb-3 md:p-6 md:pb-3">
           <h2 className="font-semibold">Registrering for ugen</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Vælg fraværstype på dage uden arbejdstimer. Tillægsberegninger vises kun for admin.
+            Udfyld start, slut og pause for de dage, du har arbejdet. Lørdag, søndag og helligdage
+            markeres automatisk ud fra datoen.
           </p>
-          {delayedMealBreakEnabled && (
-            <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">Udsat spisepause:</span> Kan kun
-              markeres i avanceret arbejdstidsvalg, når vikaren både blev bedt om at arbejde i
-              pausen, og spisepausen blev udsat mere end 30 minutter.
-            </div>
-          )}
+          <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis
+            du blev bedt om at arbejde i din spisepause, og pausen blev udsat mere end 30 minutter.
+          </div>
         </div>
         <div className="overflow-x-auto">
-          <table className={cn("w-full text-sm", "min-w-[980px]")}>
+          <table className="w-full min-w-[920px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {["Dag", "Type", "Start", "Slut", "Pause", "Opgavetype", "Kommentar", "Timer"].map(
-                  (head) => (
-                    <th key={head} className="px-3 py-2 font-medium">
-                      {head}
-                    </th>
-                  ),
-                )}
+                {["Dag", "Start", "Slut", "Pause", "Udskudt spisepause"].map((head) => (
+                  <th key={head} className="px-3 py-2 font-medium">
+                    {head}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {WEEKDAYS.map((name, index) => {
                 const day = t.days[index];
                 const absent = day.absence !== "none";
+                const date = addDaysToISODate(t.weekStart, index);
                 return (
                   <tr key={name} className="border-t align-top">
-                    <td className="px-3 py-3 font-medium">{name}</td>
-                    <td className="px-3 py-2">
-                      <select
-                        className="h-8 rounded-md border border-input bg-background px-2"
-                        value={day.absence}
-                        disabled={locked}
-                        onChange={(e) => {
-                          if (e.target.value !== "none") setPauseTouched(index, false);
-                          updateDay(index, {
-                            absence: e.target.value as AbsenceType,
-                            ...(e.target.value !== "none"
-                              ? {
-                                  start: "",
-                                  end: "",
-                                  pause: 0,
-                                  wasInstructedToWorkDuringMealBreak: false,
-                                  mealBreakPostponedMoreThan30Min: false,
-                                }
-                              : {}),
-                          });
-                        }}
-                      >
-                        {Object.entries(ABSENCE_LABEL).map(([value, label]) => (
-                          <option key={value} value={value}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
+                    <td className="px-3 py-3 font-medium">
+                      <div>
+                        {name} {formatShortDate(date)}
+                      </div>
+                      <HolidayBadges isoDate={date} />
                     </td>
                     <td className="px-3 py-2">
                       <Input
@@ -375,41 +341,40 @@ function VikarEdit() {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <Input
-                        className="h-8 w-36"
-                        value={day.taskType}
-                        disabled={locked || absent}
-                        onChange={(e) => updateDay(index, { taskType: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Input
-                        className="h-8 min-w-44"
-                        value={day.comment}
-                        disabled={locked}
-                        onChange={(e) => updateDay(index, { comment: e.target.value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3 text-right font-medium tabular-nums">
-                      {dayHours(day).toFixed(2)}
+                      <label
+                        className={cn(
+                          "inline-flex min-h-8 max-w-xs items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
+                          locked || absent
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:bg-accent",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-primary"
+                          checked={
+                            day.wasInstructedToWorkDuringMealBreak &&
+                            day.mealBreakPostponedMoreThan30Min
+                          }
+                          disabled={locked || absent}
+                          onChange={(e) =>
+                            updateDay(index, {
+                              wasInstructedToWorkDuringMealBreak: e.target.checked,
+                              mealBreakPostponedMoreThan30Min: e.target.checked,
+                              delayedMealBreakCompensation: e.target.checked,
+                            })
+                          }
+                        />
+                        <span>
+                          Jeg blev bedt om at arbejde i min spisepause, og pausen blev udskudt mere
+                          end 30 min.
+                        </span>
+                      </label>
                     </td>
                   </tr>
                 );
               })}
             </tbody>
-            <tfoot>
-              <tr className="border-t bg-muted/30">
-                <td
-                  colSpan={timesheetTableSummaryColSpan}
-                  className="px-3 py-3 text-right font-medium"
-                >
-                  Samlede timer
-                </td>
-                <td className="px-3 py-3 text-right font-semibold tabular-nums">
-                  {totalHours(t.days).toFixed(2)}
-                </td>
-              </tr>
-            </tfoot>
           </table>
         </div>
         {delayedMealBreakEnabled && (
@@ -418,127 +383,6 @@ function VikarEdit() {
           </div>
         )}
       </section>
-
-      <details className="mb-6 rounded-lg border bg-card p-5 md:p-6">
-        <summary className="cursor-pointer font-semibold">Avanceret arbejdstidsvalg</summary>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Bruges til regelvalidering. Forskudt arbejdstid, skiftehold og weekendarbejde efter
-          lokalaftale aktiveres kun, hvis de markeres eksplicit her.
-        </p>
-        <div className="mt-4 grid grid-cols-1 gap-4">
-          {WEEKDAYS.map((name, index) => {
-            const day = t.days[index];
-            const absent = day.absence !== "none";
-            return (
-              <div key={name} className="rounded-md border p-3">
-                <div className="mb-3 font-medium">{name}</div>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <Field label="Pause start">
-                    <Input
-                      type="time"
-                      className="h-8"
-                      step={300}
-                      value={day.pauseStart}
-                      disabled={locked || absent}
-                      onChange={(e) => updateDay(index, { pauseStart: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Pause slut">
-                    <Input
-                      type="time"
-                      className="h-8"
-                      step={300}
-                      value={day.pauseEnd}
-                      disabled={locked || absent}
-                      onChange={(e) => updateDay(index, { pauseEnd: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="Arbejdstype">
-                    <select
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={day.workType}
-                      disabled={locked || absent}
-                      onChange={(e) => {
-                        const workType = e.target.value as WorkType;
-                        updateDay(index, {
-                          workType,
-                          shiftWork: workType === "shift_work",
-                          weekendAgreementApplies: workType === "weekend_work_agreement",
-                        });
-                      }}
-                    >
-                      {Object.entries(WORK_TYPE_LABEL).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field label="Dagstype">
-                    <select
-                      className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
-                      value={day.dayType}
-                      disabled={locked || absent}
-                      onChange={(e) => updateDay(index, { dayType: e.target.value as DayType })}
-                    >
-                      {Object.entries(DAY_TYPE_LABEL).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-                <div className="mt-3 grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-                  <CheckField
-                    label="Behandl som helligdag i test"
-                    checked={day.isArtificialHolidayTest}
-                    disabled={locked || absent}
-                    onChange={(checked) => updateDay(index, { isArtificialHolidayTest: checked })}
-                  />
-                  <CheckField
-                    label="Lokalaftale gælder denne dag"
-                    checked={day.localAgreementApplies}
-                    disabled={locked || absent}
-                    onChange={(checked) => updateDay(index, { localAgreementApplies: checked })}
-                  />
-                  <CheckField
-                    label="Weekendarbejde efter lokalaftale"
-                    checked={day.weekendAgreementApplies}
-                    disabled={locked || absent}
-                    onChange={(checked) =>
-                      updateDay(index, {
-                        weekendAgreementApplies: checked,
-                        workType: checked
-                          ? "weekend_work_agreement"
-                          : day.workType === "weekend_work_agreement"
-                            ? "normal"
-                            : day.workType,
-                      })
-                    }
-                  />
-                  <CheckField
-                    label="Blev vikaren bedt om at arbejde i spisepausen?"
-                    checked={day.wasInstructedToWorkDuringMealBreak}
-                    disabled={locked || absent}
-                    onChange={(checked) =>
-                      updateDay(index, { wasInstructedToWorkDuringMealBreak: checked })
-                    }
-                  />
-                  <CheckField
-                    label="Blev spisepausen udskudt mere end 30 min?"
-                    checked={day.mealBreakPostponedMoreThan30Min}
-                    disabled={locked || absent}
-                    onChange={(checked) =>
-                      updateDay(index, { mealBreakPostponedMoreThan30Min: checked })
-                    }
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </details>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl text-sm text-muted-foreground">{message}</div>
@@ -557,28 +401,34 @@ function VikarEdit() {
   );
 }
 
-function CheckField({
-  label,
-  checked,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-}) {
+function formatShortDate(isoDate: string): string {
+  if (!isoDate) return "";
+  return `${isoDate.slice(8, 10)}/${isoDate.slice(5, 7)}`;
+}
+
+function HolidayBadges({ isoDate }: { isoDate: string }) {
+  const date = isoDate ? new Date(`${isoDate}T12:00:00`) : undefined;
+  const day = date?.getDay();
+  const holidayName = getDanishAgreementHolidayName(isoDate);
+  const badges = [
+    day === 6 ? "Lørdag" : "",
+    day === 0 ? "Søndag" : "",
+    holidayName && holidayName !== "Søndag" ? "Helligdag" : "",
+  ].filter(Boolean);
+  if (!badges.length) return null;
+
   return (
-    <label className={cn("flex items-center gap-2", disabled && "cursor-not-allowed opacity-60")}>
-      <input
-        type="checkbox"
-        className="h-4 w-4 accent-primary"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span>{label}</span>
-    </label>
+    <div className="mt-1 flex flex-wrap gap-1">
+      {badges.map((badge) => (
+        <span
+          key={badge}
+          className="rounded-full border bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"
+          title={holidayName && holidayName !== "Søndag" ? holidayName : undefined}
+        >
+          {badge}
+        </span>
+      ))}
+    </div>
   );
 }
 

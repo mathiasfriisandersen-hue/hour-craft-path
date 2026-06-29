@@ -37,7 +37,7 @@ function easterSundayISO(year: number) {
 
 function movableHolidayNames(year: number) {
   const easter = easterSundayISO(year);
-  return new Map([
+  const holidays = new Map([
     [addDaysToISODate(easter, -3), "Skærtorsdag"],
     [addDaysToISODate(easter, -2), "Langfredag"],
     [easter, "Påskedag"],
@@ -46,6 +46,8 @@ function movableHolidayNames(year: number) {
     [addDaysToISODate(easter, 49), "Pinsedag"],
     [addDaysToISODate(easter, 50), "2. pinsedag"],
   ]);
+  if (year < 2024) holidays.set(addDaysToISODate(easter, 26), "Store bededag");
+  return holidays;
 }
 
 export function getDanishAgreementHolidayName(isoDate: string) {
