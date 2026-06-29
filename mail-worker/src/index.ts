@@ -11,6 +11,7 @@ type TimesheetMailPayload = {
   replyTo?: string;
   subject?: string;
   text?: string;
+  adminText?: string;
 };
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
@@ -85,6 +86,7 @@ async function parsePayload(request: Request): Promise<TimesheetMailPayload | un
 async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   const subject = cleanSubject(payload.subject);
   const text = typeof payload.text === "string" ? payload.text.trim() : "";
+  const adminText = typeof payload.adminText === "string" ? payload.adminText.trim() : text;
 
   if (!env.RESEND_API_KEY) throw new Error("RESEND_API_KEY mangler");
   if (!env.RESEND_FROM_EMAIL) throw new Error("RESEND_FROM_EMAIL mangler");
@@ -93,32 +95,45 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   if (!subject) throw new Error("Emne mangler");
   if (!text) throw new Error("Mailtekst mangler");
   if (text.length > MAX_TEXT_LENGTH) throw new Error("Mailtekst er for lang");
+  if (adminText.length > MAX_TEXT_LENGTH) throw new Error("Intern mailtekst er for lang");
 
-  const to = [...new Set([env.ADMIN_EMAIL, payload.contactEmail])];
-  const response = await fetch(RESEND_EMAILS_URL, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${env.RESEND_API_KEY}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      from: env.RESEND_FROM_EMAIL,
-      to,
-      ...(isEmail(payload.replyTo) ? { reply_to: payload.replyTo } : {}),
-      subject,
-      text,
-      html: `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.45;">${escapeHtml(
-        text,
-      )}</pre>`,
-    }),
-  });
+  const sendEmail = async (to: string, bodyText: string) => {
+    const response = await fetch(RESEND_EMAILS_URL, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        from: env.RESEND_FROM_EMAIL,
+        to,
+        ...(isEmail(payload.replyTo) ? { reply_to: payload.replyTo } : {}),
+        subject,
+        text: bodyText,
+        html: `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.45;">${escapeHtml(
+          bodyText,
+        )}</pre>`,
+      }),
+    });
 
-  const responseText = await response.text();
-  if (!response.ok) {
-    throw new Error(responseText || `Resend svarede med HTTP ${response.status}`);
-  }
+    const responseText = await response.text();
+    if (!response.ok) {
+      throw new Error(responseText || `Resend svarede med HTTP ${response.status}`);
+    }
 
-  return responseText ? JSON.parse(responseText) : {};
+    return responseText ? JSON.parse(responseText) : {};
+  };
+
+  const contactEmailResult = await sendEmail(payload.contactEmail, text);
+  const adminEmailResult =
+    env.ADMIN_EMAIL === payload.contactEmail
+      ? undefined
+      : await sendEmail(env.ADMIN_EMAIL, adminText);
+
+  return {
+    contactEmail: contactEmailResult,
+    ...(adminEmailResult ? { adminEmail: adminEmailResult } : {}),
+  };
 }
 
 export default {

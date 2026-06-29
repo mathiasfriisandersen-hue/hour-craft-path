@@ -137,7 +137,6 @@ export type CalculationResult = {
 const TIMESHEET_KEY = "timesheets-v1";
 const RULE_KEY = "timesheet-rules-v1";
 const COMPANY_KEY = "timesheet-companies-v1";
-const ADMIN_EMAIL = "mathiasfriisandersen@gmail.com";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
 export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
@@ -715,7 +714,11 @@ export function emailSubject(t: Timesheet): string {
   return `Timeseddel – ${t.vikar} – uge ${weekNumber(t.weekStart)} – ${t.brugervirksomhed}`;
 }
 
-export function emailBody(t: Timesheet): string {
+type EmailBodyOptions = {
+  includeApprovalTerms?: boolean;
+};
+
+export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string {
   const calc = calculateTimesheet(t);
   const dayLines = WEEKDAYS.map((name, index) => {
     const day = t.days[index];
@@ -774,16 +777,23 @@ export function emailBody(t: Timesheet): string {
     "NOTER",
     t.notes || "—",
     "",
-    "GODKENDELSE OG INDSIGELSER",
-    "I henhold til de aftalte forretningsbetingelser anses timesedlen som godkendt, medmindre der modtages skriftlig indsigelse senest tirsdag efter fremsendelsen. Eventuelle indsigelser skal angive, hvilke registreringer der bestrides, og begrundelsen herfor.",
-    "",
+    ...(options.includeApprovalTerms
+      ? [
+          "GODKENDELSE OG INDSIGELSER",
+          "I henhold til de aftalte forretningsbetingelser anses timesedlen som godkendt, medmindre der modtages skriftlig indsigelse senest tirsdag efter fremsendelsen. Eventuelle indsigelser skal angive, hvilke registreringer der bestrides, og begrundelsen herfor.",
+          "",
+        ]
+      : []),
     "Timesedlen er sendt til godkendelse hos kontaktpersonen.",
   ].join("\n");
 }
 
+export function contactPersonEmailBody(t: Timesheet): string {
+  return emailBody(t, { includeApprovalTerms: true });
+}
+
 export function mailtoUrl(t: Timesheet): string {
-  const recipients = [ADMIN_EMAIL, t.kontaktpersonEmail].filter(Boolean).join(",");
-  return `mailto:${recipients}?subject=${encodeURIComponent(emailSubject(t))}&body=${encodeURIComponent(emailBody(t))}`;
+  return `mailto:${t.kontaktpersonEmail}?subject=${encodeURIComponent(emailSubject(t))}&body=${encodeURIComponent(contactPersonEmailBody(t))}`;
 }
 
 function csvCell(value: string | number): string {

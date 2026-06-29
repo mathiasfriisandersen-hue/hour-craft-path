@@ -1,4 +1,10 @@
-import { emailBody, emailSubject, mailtoUrl, type Timesheet } from "./timesheet-store";
+import {
+  contactPersonEmailBody,
+  emailBody,
+  emailSubject,
+  mailtoUrl,
+  type Timesheet,
+} from "./timesheet-store";
 
 const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
 let runtimeMailApiUrl: string | undefined;
@@ -49,7 +55,8 @@ export async function sendTimesheetEmail(t: Timesheet): Promise<TimesheetMailRes
       contactEmail: t.kontaktpersonEmail,
       replyTo: t.vikarEmail,
       subject: emailSubject(t),
-      text: emailBody(t),
+      text: contactPersonEmailBody(t),
+      adminText: emailBody(t),
     }),
   });
 
