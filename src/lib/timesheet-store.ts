@@ -700,8 +700,29 @@ export type CreateWorkerTimesheetInput = {
   defaultStart: string;
   defaultEnd: string;
   defaultPause: number;
+  defaultPauseStart?: string;
+  defaultPauseEnd?: string;
+  defaultEveningWorkStart?: string;
+  defaultEveningWorkEnd?: string;
+  defaultNightWorkStart?: string;
+  defaultNightWorkEnd?: string;
+  shiftWorkApplies?: boolean;
+  weekPlan?: CreateWorkerDayPlan[];
   startDate: string;
   workerAccessCode: string;
+};
+
+export type CreateWorkerDayPlan = {
+  start: string;
+  end: string;
+  pause: number;
+  pauseStart: string;
+  pauseEnd: string;
+  eveningWorkStart: string;
+  eveningWorkEnd: string;
+  nightWorkStart: string;
+  nightWorkEnd: string;
+  shiftWork: boolean;
 };
 
 export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Timesheet {
@@ -711,11 +732,42 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDaysToISODate(weekStart, index);
     const isWorkday = index < 5 && (!input.startDate || date >= input.startDate);
+    const plan = input.weekPlan?.[index];
+    if (plan) {
+      const hasWork = Boolean(
+        plan.start && plan.end && (!input.startDate || date >= input.startDate),
+      );
+      const shiftWork = Boolean(plan.shiftWork || input.shiftWorkApplies);
+      const workType: WorkType = shiftWork ? "shift_work" : "normal";
+      return {
+        ...emptyDay(index),
+        start: hasWork ? plan.start : "",
+        end: hasWork ? plan.end : "",
+        pause: hasWork ? Number(plan.pause) || 0 : 0,
+        pauseStart: hasWork ? plan.pauseStart : "",
+        pauseEnd: hasWork ? plan.pauseEnd : "",
+        eveningWorkStart: hasWork ? plan.eveningWorkStart : "",
+        eveningWorkEnd: hasWork ? plan.eveningWorkEnd : "",
+        nightWorkStart: hasWork ? plan.nightWorkStart : "",
+        nightWorkEnd: hasWork ? plan.nightWorkEnd : "",
+        workType,
+        shiftWork,
+      };
+    }
+    const workType: WorkType = input.shiftWorkApplies ? "shift_work" : "normal";
     return {
       ...emptyDay(index),
       start: isWorkday ? input.defaultStart : "",
       end: isWorkday ? input.defaultEnd : "",
       pause: isWorkday ? input.defaultPause : 0,
+      pauseStart: isWorkday ? input.defaultPauseStart || "" : "",
+      pauseEnd: isWorkday ? input.defaultPauseEnd || "" : "",
+      eveningWorkStart: isWorkday ? input.defaultEveningWorkStart || "" : "",
+      eveningWorkEnd: isWorkday ? input.defaultEveningWorkEnd || "" : "",
+      nightWorkStart: isWorkday ? input.defaultNightWorkStart || "" : "",
+      nightWorkEnd: isWorkday ? input.defaultNightWorkEnd || "" : "",
+      workType,
+      shiftWork: Boolean(input.shiftWorkApplies),
     };
   });
 

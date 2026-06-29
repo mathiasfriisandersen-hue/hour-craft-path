@@ -8,6 +8,8 @@ import {
   createTimesheetForWorker,
   listCompanies,
   upsert,
+  WEEKDAYS,
+  type CreateWorkerDayPlan,
   type CreateWorkerTimesheetInput,
 } from "@/lib/timesheet-store";
 import { sendWorkerInviteEmail } from "@/lib/timesheet-mail";
@@ -20,14 +22,41 @@ export const Route = createFileRoute("/admin/create-worker")({
 
 type FormState = Omit<
   CreateWorkerTimesheetInput,
-  "hourlyWage" | "defaultPause" | "workerAccessCode"
+  "hourlyWage" | "defaultPause" | "workerAccessCode" | "weekPlan"
 > & {
   hourlyWage: string;
   defaultPause: string;
+  defaultPauseStart: string;
+  defaultPauseEnd: string;
+  defaultEveningWorkStart: string;
+  defaultEveningWorkEnd: string;
+  defaultNightWorkStart: string;
+  defaultNightWorkEnd: string;
+  shiftWorkApplies: boolean;
+  weekPlan: WorkerDayForm[];
+};
+
+type WorkerDayForm = Omit<CreateWorkerDayPlan, "pause"> & {
+  pause: string;
 };
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+function initialWeekPlan(): WorkerDayForm[] {
+  return WEEKDAYS.map((_, index) => ({
+    start: index < 5 ? "07:00" : "",
+    end: index < 5 ? "15:30" : "",
+    pause: index < 5 ? "60" : "0",
+    pauseStart: "",
+    pauseEnd: "",
+    eveningWorkStart: "",
+    eveningWorkEnd: "",
+    nightWorkStart: "",
+    nightWorkEnd: "",
+    shiftWork: false,
+  }));
 }
 
 function initialForm(): FormState {
@@ -45,6 +74,14 @@ function initialForm(): FormState {
     defaultStart: "07:00",
     defaultEnd: "15:30",
     defaultPause: "60",
+    defaultPauseStart: "",
+    defaultPauseEnd: "",
+    defaultEveningWorkStart: "",
+    defaultEveningWorkEnd: "",
+    defaultNightWorkStart: "",
+    defaultNightWorkEnd: "",
+    shiftWorkApplies: false,
+    weekPlan: initialWeekPlan(),
     startDate: todayISO(),
   };
 }
@@ -66,6 +103,38 @@ function CreateWorkerPage() {
 
   const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }));
 
+  const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
+    setForm((current) => ({
+      ...current,
+      weekPlan: current.weekPlan.map((day, dayIndex) =>
+        dayIndex === index ? { ...day, ...patch } : day,
+      ),
+    }));
+  };
+
+  const syncWeekPlanFromDefaults = (shiftWorkApplies: boolean) => {
+    setForm((current) => ({
+      ...current,
+      shiftWorkApplies,
+      weekPlan: current.weekPlan.map((day, index) => {
+        const hasWork = index < 5;
+        return {
+          ...day,
+          start: hasWork ? current.defaultStart : day.start,
+          end: hasWork ? current.defaultEnd : day.end,
+          pause: hasWork ? current.defaultPause : day.pause,
+          pauseStart: hasWork ? current.defaultPauseStart : day.pauseStart,
+          pauseEnd: hasWork ? current.defaultPauseEnd : day.pauseEnd,
+          eveningWorkStart: hasWork ? current.defaultEveningWorkStart : day.eveningWorkStart,
+          eveningWorkEnd: hasWork ? current.defaultEveningWorkEnd : day.eveningWorkEnd,
+          nightWorkStart: hasWork ? current.defaultNightWorkStart : day.nightWorkStart,
+          nightWorkEnd: hasWork ? current.defaultNightWorkEnd : day.nightWorkEnd,
+          shiftWork: shiftWorkApplies && hasWork,
+        };
+      }),
+    }));
+  };
+
   const selectCompany = (name: string) => {
     const company = companies.find((item) => item.name === name);
     update({
@@ -83,6 +152,9 @@ function CreateWorkerPage() {
 
   const validateForm = () => {
     const nextErrors: string[] = [];
+    const requirePair = (start: string, end: string, label: string) => {
+      if (Boolean(start) !== Boolean(end)) nextErrors.push(`${label}: udfyld både start og slut`);
+    };
     if (!form.vikar.trim()) nextErrors.push("Vikarnavn mangler");
     if (!/^\S+@\S+\.\S+$/.test(form.vikarEmail))
       nextErrors.push("Vikarens mail mangler eller er ugyldig");
@@ -98,6 +170,18 @@ function CreateWorkerPage() {
     if (!form.defaultStart || !form.defaultEnd) nextErrors.push("Arbejdstider skal udfyldes");
     if (!Number.isFinite(Number(form.defaultPause)) || Number(form.defaultPause) < 0)
       nextErrors.push("Pause skal være et tal på 0 minutter eller mere");
+    requirePair(form.defaultPauseStart, form.defaultPauseEnd, "Pauseplacering");
+    requirePair(form.defaultEveningWorkStart, form.defaultEveningWorkEnd, "Aftenarbejde");
+    requirePair(form.defaultNightWorkStart, form.defaultNightWorkEnd, "Natarbejde");
+    if (form.shiftWorkApplies) {
+      form.weekPlan.forEach((day, index) => {
+        if (!Number.isFinite(Number(day.pause)) || Number(day.pause) < 0)
+          nextErrors.push(`${WEEKDAYS[index]}: pause skal være 0 minutter eller mere`);
+        requirePair(day.pauseStart, day.pauseEnd, `${WEEKDAYS[index]} pauseplacering`);
+        requirePair(day.eveningWorkStart, day.eveningWorkEnd, `${WEEKDAYS[index]} aftenarbejde`);
+        requirePair(day.nightWorkStart, day.nightWorkEnd, `${WEEKDAYS[index]} natarbejde`);
+      });
+    }
     if (!form.startDate) nextErrors.push("Startdato mangler");
     return nextErrors;
   };
@@ -116,6 +200,12 @@ function CreateWorkerPage() {
         ...form,
         hourlyWage: Number(form.hourlyWage),
         defaultPause: Number(form.defaultPause),
+        weekPlan: form.shiftWorkApplies
+          ? form.weekPlan.map((day) => ({
+              ...day,
+              pause: Number(day.pause) || 0,
+            }))
+          : undefined,
         workerAccessCode: generateOneTimeCode(),
       }),
     );
@@ -290,6 +380,166 @@ function CreateWorkerPage() {
               />
             </Field>
           </div>
+          <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-3">
+            <TimeRangeField
+              label="Pause start / slut"
+              start={form.defaultPauseStart}
+              end={form.defaultPauseEnd}
+              onStartChange={(value) => update({ defaultPauseStart: value })}
+              onEndChange={(value) => update({ defaultPauseEnd: value })}
+            />
+            <TimeRangeField
+              label="Aftenarbejde"
+              help="Udfyld kun hvis der er aftenarbejde."
+              start={form.defaultEveningWorkStart}
+              end={form.defaultEveningWorkEnd}
+              onStartChange={(value) => update({ defaultEveningWorkStart: value })}
+              onEndChange={(value) => update({ defaultEveningWorkEnd: value })}
+            />
+            <TimeRangeField
+              label="Natarbejde"
+              help="Udfyld kun hvis der er natarbejde."
+              start={form.defaultNightWorkStart}
+              end={form.defaultNightWorkEnd}
+              onStartChange={(value) => update({ defaultNightWorkStart: value })}
+              onEndChange={(value) => update({ defaultNightWorkEnd: value })}
+            />
+          </div>
+          <div className="md:col-span-2">
+            <label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.shiftWorkApplies}
+                onChange={(e) => syncWeekPlanFromDefaults(e.target.checked)}
+                className="h-4 w-4 rounded border-input"
+              />
+              Skiftehold
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Markér kun hvis vikaren arbejder skiftehold. Når feltet er markeret, bruges
+              ugekalenderen nedenfor til de konkrete arbejdstider.
+            </p>
+          </div>
+          {form.shiftWorkApplies && (
+            <section className="md:col-span-2">
+              <div className="mb-3">
+                <h2 className="text-base font-semibold">Ugekalender for skiftehold</h2>
+                <p className="text-xs text-muted-foreground">
+                  Udfyld arbejdstider pr. dag. Aften og nat udfyldes kun på de dage, hvor det er
+                  relevant.
+                </p>
+              </div>
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full min-w-[1180px] text-sm">
+                  <thead className="bg-muted/50 text-left text-muted-foreground">
+                    <tr>
+                      {[
+                        "Dag",
+                        "Start",
+                        "Slut",
+                        "Pause",
+                        "Pause start",
+                        "Pause slut",
+                        "Aftenarbejde",
+                        "Natarbejde",
+                        "Skiftehold",
+                        "Visning",
+                      ].map((head) => (
+                        <th key={head} className="px-3 py-2 font-medium">
+                          {head}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {form.weekPlan.map((day, index) => (
+                      <tr key={WEEKDAYS[index]} className="border-t">
+                        <td className="px-3 py-3 font-medium">{WEEKDAYS[index]}</td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="time"
+                            step={300}
+                            value={day.start}
+                            onChange={(e) => updateWeekDay(index, { start: e.target.value })}
+                            className="h-9 w-28"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="time"
+                            step={300}
+                            value={day.end}
+                            onChange={(e) => updateWeekDay(index, { end: e.target.value })}
+                            className="h-9 w-28"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            min={0}
+                            step={5}
+                            value={day.pause}
+                            onChange={(e) => updateWeekDay(index, { pause: e.target.value })}
+                            className="h-9 w-24"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="time"
+                            step={300}
+                            value={day.pauseStart}
+                            onChange={(e) => updateWeekDay(index, { pauseStart: e.target.value })}
+                            className="h-9 w-28"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="time"
+                            step={300}
+                            value={day.pauseEnd}
+                            onChange={(e) => updateWeekDay(index, { pauseEnd: e.target.value })}
+                            className="h-9 w-28"
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <InlineTimeRange
+                            start={day.eveningWorkStart}
+                            end={day.eveningWorkEnd}
+                            onStartChange={(value) =>
+                              updateWeekDay(index, { eveningWorkStart: value })
+                            }
+                            onEndChange={(value) => updateWeekDay(index, { eveningWorkEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <InlineTimeRange
+                            start={day.nightWorkStart}
+                            end={day.nightWorkEnd}
+                            onStartChange={(value) =>
+                              updateWeekDay(index, { nightWorkStart: value })
+                            }
+                            onEndChange={(value) => updateWeekDay(index, { nightWorkEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={day.shiftWork}
+                            onChange={(e) => updateWeekDay(index, { shiftWork: e.target.checked })}
+                            className="h-4 w-4 rounded border-input"
+                            aria-label={`${WEEKDAYS[index]} skiftehold`}
+                          />
+                        </td>
+                        <td className="px-3 py-3 text-xs font-medium text-muted-foreground">
+                          {workPeriodLabel(day)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
@@ -315,4 +565,73 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       {children}
     </label>
   );
+}
+
+function TimeRangeField({
+  label,
+  help,
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+}: {
+  label: string;
+  help?: string;
+  start: string;
+  end: string;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+}) {
+  return (
+    <Field label={label}>
+      <InlineTimeRange
+        start={start}
+        end={end}
+        onStartChange={onStartChange}
+        onEndChange={onEndChange}
+      />
+      {help && <p className="mt-1 text-xs text-muted-foreground">{help}</p>}
+    </Field>
+  );
+}
+
+function InlineTimeRange({
+  start,
+  end,
+  onStartChange,
+  onEndChange,
+}: {
+  start: string;
+  end: string;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Input
+        type="time"
+        step={300}
+        value={start}
+        onChange={(e) => onStartChange(e.target.value)}
+        className="h-9 min-w-0 flex-1"
+      />
+      <span className="text-xs text-muted-foreground">–</span>
+      <Input
+        type="time"
+        step={300}
+        value={end}
+        onChange={(e) => onEndChange(e.target.value)}
+        className="h-9 min-w-0 flex-1"
+      />
+    </div>
+  );
+}
+
+function workPeriodLabel(day: WorkerDayForm): string {
+  if (!day.start || !day.end) return "Fri / ikke udfyldt";
+  const parts = ["Dag"];
+  if (day.eveningWorkStart && day.eveningWorkEnd) parts.push("Aften");
+  if (day.nightWorkStart && day.nightWorkEnd) parts.push("Nat");
+  if (day.shiftWork) parts.push("Skiftehold");
+  return parts.join(" + ");
 }
