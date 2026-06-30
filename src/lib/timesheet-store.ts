@@ -762,6 +762,19 @@ export type CreateWorkerDayPlan = {
   shiftWork: boolean;
 };
 
+function workWindowFromDayPlan(plan: CreateWorkerDayPlan): { start: string; end: string } | null {
+  const ranges = [
+    [plan.dayWorkStart, plan.dayWorkEnd],
+    [plan.eveningWorkStart, plan.eveningWorkEnd],
+    [plan.nightWorkStart, plan.nightWorkEnd],
+  ].filter(([start, end]) => start && end);
+  if (ranges.length === 0) return null;
+  return {
+    start: ranges[0][0],
+    end: ranges[ranges.length - 1][1],
+  };
+}
+
 export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Timesheet {
   const base = createBlank();
   const agreement = getCollectiveAgreementById(input.selectedAgreementId);
@@ -771,15 +784,14 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     const isWorkday = index < 5 && (!input.startDate || date >= input.startDate);
     const plan = input.weekPlan?.[index];
     if (plan) {
-      const hasWork = Boolean(
-        plan.start && plan.end && (!input.startDate || date >= input.startDate),
-      );
+      const workWindow = workWindowFromDayPlan(plan);
+      const hasWork = Boolean(workWindow && (!input.startDate || date >= input.startDate));
       const shiftWork = Boolean(plan.shiftWork || input.shiftWorkApplies);
       const workType: WorkType = shiftWork ? "shift_work" : "normal";
       return {
         ...emptyDay(index),
-        start: hasWork ? plan.start : "",
-        end: hasWork ? plan.end : "",
+        start: hasWork ? workWindow?.start || "" : "",
+        end: hasWork ? workWindow?.end || "" : "",
         pause: hasWork ? Number(plan.pause) || 0 : 0,
         pauseStart: hasWork ? plan.pauseStart : "",
         pauseEnd: hasWork ? plan.pauseEnd : "",

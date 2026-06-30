@@ -502,21 +502,16 @@ function CreateWorkerPage() {
                 </p>
               </div>
               <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[1420px] text-sm">
+                <table className="w-full min-w-[980px] text-sm">
                   <thead className="bg-muted/50 text-left text-muted-foreground">
                     <tr>
                       {[
                         "Dag",
-                        "Start",
-                        "Slut",
-                        "Pause",
                         "Pause 1",
                         "Pause 2",
                         "Dagarbejde",
                         "Aftenarbejde",
                         "Natarbejde",
-                        "Skiftehold",
-                        "Visning",
                       ].map((head) => (
                         <th key={head} className="px-3 py-2 font-medium">
                           {head}
@@ -528,34 +523,6 @@ function CreateWorkerPage() {
                     {form.weekPlan.map((day, index) => (
                       <tr key={WEEKDAYS[index]} className="border-t">
                         <td className="px-3 py-3 font-medium">{WEEKDAYS[index]}</td>
-                        <td className="px-3 py-3">
-                          <DefaultTimeInput
-                            value={day.start}
-                            defaultValue="07:00"
-                            onDefault={() => updateWeekDay(index, { start: "07:00" })}
-                            onChange={(e) => updateWeekDay(index, { start: e.target.value })}
-                            className="h-9 w-28"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <DefaultTimeInput
-                            value={day.end}
-                            defaultValue="15:00"
-                            onDefault={() => updateWeekDay(index, { end: "15:00" })}
-                            onChange={(e) => updateWeekDay(index, { end: e.target.value })}
-                            className="h-9 w-28"
-                          />
-                        </td>
-                        <td className="px-3 py-3">
-                          <Input
-                            type="number"
-                            min={0}
-                            step={5}
-                            value={day.pause}
-                            onChange={(e) => updateWeekDay(index, { pause: e.target.value })}
-                            className="h-9 w-24"
-                          />
-                        </td>
                         <td className="px-3 py-3">
                           <InlineTimeRange
                             start={day.pauseStart}
@@ -609,18 +576,6 @@ function CreateWorkerPage() {
                             }
                             onEndChange={(value) => updateWeekDay(index, { nightWorkEnd: value })}
                           />
-                        </td>
-                        <td className="px-3 py-3">
-                          <input
-                            type="checkbox"
-                            checked={day.shiftWork}
-                            onChange={(e) => updateWeekDay(index, { shiftWork: e.target.checked })}
-                            className="h-4 w-4 rounded border-input"
-                            aria-label={`${WEEKDAYS[index]} skiftehold`}
-                          />
-                        </td>
-                        <td className="px-3 py-3 text-xs font-medium text-muted-foreground">
-                          {workPeriodLabel(day)}
                         </td>
                       </tr>
                     ))}
@@ -751,14 +706,4 @@ function DefaultTimeInput({
       }}
     />
   );
-}
-
-function workPeriodLabel(day: WorkerDayForm): string {
-  if (!day.start || !day.end) return "Fri / ikke udfyldt";
-  const parts: string[] = [];
-  if (day.dayWorkStart && day.dayWorkEnd) parts.push("Daghold");
-  if (day.eveningWorkStart && day.eveningWorkEnd) parts.push("Aften");
-  if (day.nightWorkStart && day.nightWorkEnd) parts.push("Nat");
-  if (day.shiftWork) parts.push("Skiftehold");
-  return parts.length ? parts.join(" + ") : "Ikke klassificeret";
 }
