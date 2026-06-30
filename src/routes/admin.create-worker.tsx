@@ -48,21 +48,54 @@ function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+function minutes(time: string): number | null {
+  if (!/^\d{2}:\d{2}$/.test(time)) return null;
+  const [hour, minute] = time.split(":").map(Number);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function intervalMinutes(start: string, end: string): number {
+  const startMinutes = minutes(start);
+  const endMinutes = minutes(end);
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return 0;
+  return endMinutes > startMinutes
+    ? endMinutes - startMinutes
+    : endMinutes + 24 * 60 - startMinutes;
+}
+
+function totalPauseMinutes(...ranges: Array<[string, string]>): number {
+  return ranges.reduce((sum, [start, end]) => sum + intervalMinutes(start, end), 0);
+}
+
+function defaultWorkWindow(form: FormState): { start: string; end: string } {
+  if (form.defaultDayWorkStart && form.defaultDayWorkEnd) {
+    return { start: form.defaultDayWorkStart, end: form.defaultDayWorkEnd };
+  }
+  if (form.defaultEveningWorkStart && form.defaultEveningWorkEnd) {
+    return { start: form.defaultEveningWorkStart, end: form.defaultEveningWorkEnd };
+  }
+  if (form.defaultNightWorkStart && form.defaultNightWorkEnd) {
+    return { start: form.defaultNightWorkStart, end: form.defaultNightWorkEnd };
+  }
+  return { start: form.defaultStart, end: form.defaultEnd };
+}
+
 function initialWeekPlan(): WorkerDayForm[] {
   return WEEKDAYS.map((_, index) => ({
     start: index < 5 ? "07:00" : "",
-    end: index < 5 ? "15:30" : "",
+    end: index < 5 ? "15:00" : "",
     pause: index < 5 ? "60" : "0",
-    pauseStart: "",
-    pauseEnd: "",
-    pause2Start: "",
-    pause2End: "",
-    dayWorkStart: "",
-    dayWorkEnd: "",
-    eveningWorkStart: "",
-    eveningWorkEnd: "",
-    nightWorkStart: "",
-    nightWorkEnd: "",
+    pauseStart: index < 5 ? "09:00" : "",
+    pauseEnd: index < 5 ? "09:30" : "",
+    pause2Start: index < 5 ? "12:00" : "",
+    pause2End: index < 5 ? "12:30" : "",
+    dayWorkStart: index < 5 ? "07:00" : "",
+    dayWorkEnd: index < 5 ? "15:00" : "",
+    eveningWorkStart: index < 5 ? "14:00" : "",
+    eveningWorkEnd: index < 5 ? "23:00" : "",
+    nightWorkStart: index < 5 ? "22:00" : "",
+    nightWorkEnd: index < 5 ? "07:00" : "",
     shiftWork: false,
   }));
 }
@@ -80,18 +113,18 @@ function initialForm(): FormState {
     selectedAgreementId: "",
     hourlyWage: "",
     defaultStart: "07:00",
-    defaultEnd: "15:30",
+    defaultEnd: "15:00",
     defaultPause: "60",
-    defaultPauseStart: "",
-    defaultPauseEnd: "",
-    defaultPause2Start: "",
-    defaultPause2End: "",
-    defaultDayWorkStart: "",
-    defaultDayWorkEnd: "",
-    defaultEveningWorkStart: "",
-    defaultEveningWorkEnd: "",
-    defaultNightWorkStart: "",
-    defaultNightWorkEnd: "",
+    defaultPauseStart: "09:00",
+    defaultPauseEnd: "09:30",
+    defaultPause2Start: "12:00",
+    defaultPause2End: "12:30",
+    defaultDayWorkStart: "07:00",
+    defaultDayWorkEnd: "15:00",
+    defaultEveningWorkStart: "14:00",
+    defaultEveningWorkEnd: "23:00",
+    defaultNightWorkStart: "22:00",
+    defaultNightWorkEnd: "07:00",
     shiftWorkApplies: false,
     weekPlan: initialWeekPlan(),
     startDate: todayISO(),
@@ -130,11 +163,16 @@ function CreateWorkerPage() {
       shiftWorkApplies,
       weekPlan: current.weekPlan.map((day, index) => {
         const hasWork = index < 5;
+        const workWindow = defaultWorkWindow(current);
+        const pauseMinutes = totalPauseMinutes(
+          [current.defaultPauseStart, current.defaultPauseEnd],
+          [current.defaultPause2Start, current.defaultPause2End],
+        );
         return {
           ...day,
-          start: hasWork ? current.defaultStart : day.start,
-          end: hasWork ? current.defaultEnd : day.end,
-          pause: hasWork ? current.defaultPause : day.pause,
+          start: hasWork ? workWindow.start : day.start,
+          end: hasWork ? workWindow.end : day.end,
+          pause: hasWork ? String(pauseMinutes || Number(current.defaultPause) || 0) : day.pause,
           pauseStart: hasWork ? current.defaultPauseStart : day.pauseStart,
           pauseEnd: hasWork ? current.defaultPauseEnd : day.pauseEnd,
           pause2Start: hasWork ? current.defaultPause2Start : day.pause2Start,
@@ -215,15 +253,31 @@ function CreateWorkerPage() {
     setSending(true);
     setMessage("Opretter timeseddel og sender invitation til vikaren…");
 
+    const workWindow = defaultWorkWindow(form);
+    const defaultPauseMinutes =
+      totalPauseMinutes(
+        [form.defaultPauseStart, form.defaultPauseEnd],
+        [form.defaultPause2Start, form.defaultPause2End],
+      ) ||
+      Number(form.defaultPause) ||
+      0;
     const timesheet = upsert(
       createTimesheetForWorker({
         ...form,
+        defaultStart: workWindow.start,
+        defaultEnd: workWindow.end,
         hourlyWage: Number(form.hourlyWage),
-        defaultPause: Number(form.defaultPause),
+        defaultPause: defaultPauseMinutes,
         weekPlan: form.shiftWorkApplies
           ? form.weekPlan.map((day) => ({
               ...day,
-              pause: Number(day.pause) || 0,
+              pause:
+                totalPauseMinutes(
+                  [day.pauseStart, day.pauseEnd],
+                  [day.pause2Start, day.pause2End],
+                ) ||
+                Number(day.pause) ||
+                0,
             }))
           : undefined,
         workerAccessCode: generateOneTimeCode(),
@@ -373,33 +427,6 @@ function CreateWorkerPage() {
               onChange={(e) => update({ startDate: e.target.value })}
             />
           </Field>
-          <div className="grid grid-cols-3 gap-3 md:col-span-2">
-            <Field label="Start">
-              <Input
-                type="time"
-                step={300}
-                value={form.defaultStart}
-                onChange={(e) => update({ defaultStart: e.target.value })}
-              />
-            </Field>
-            <Field label="Slut">
-              <Input
-                type="time"
-                step={300}
-                value={form.defaultEnd}
-                onChange={(e) => update({ defaultEnd: e.target.value })}
-              />
-            </Field>
-            <Field label="Pause">
-              <Input
-                type="number"
-                min={0}
-                step={5}
-                value={form.defaultPause}
-                onChange={(e) => update({ defaultPause: e.target.value })}
-              />
-            </Field>
-          </div>
           <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-2 lg:grid-cols-5">
             <TimeRangeField
               label="Pause 1 start / slut"
