@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ComponentProps, type FormEvent, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -83,19 +83,19 @@ function defaultWorkWindow(form: FormState): { start: string; end: string } {
 
 function initialWeekPlan(): WorkerDayForm[] {
   return WEEKDAYS.map((_, index) => ({
-    start: index < 5 ? "07:00" : "",
-    end: index < 5 ? "15:00" : "",
+    start: "",
+    end: "",
     pause: index < 5 ? "60" : "0",
-    pauseStart: index < 5 ? "09:00" : "",
-    pauseEnd: index < 5 ? "09:30" : "",
-    pause2Start: index < 5 ? "12:00" : "",
-    pause2End: index < 5 ? "12:30" : "",
-    dayWorkStart: index < 5 ? "07:00" : "",
-    dayWorkEnd: index < 5 ? "15:00" : "",
-    eveningWorkStart: index < 5 ? "14:00" : "",
-    eveningWorkEnd: index < 5 ? "23:00" : "",
-    nightWorkStart: index < 5 ? "22:00" : "",
-    nightWorkEnd: index < 5 ? "07:00" : "",
+    pauseStart: "",
+    pauseEnd: "",
+    pause2Start: "",
+    pause2End: "",
+    dayWorkStart: "",
+    dayWorkEnd: "",
+    eveningWorkStart: "",
+    eveningWorkEnd: "",
+    nightWorkStart: "",
+    nightWorkEnd: "",
     shiftWork: false,
   }));
 }
@@ -115,16 +115,16 @@ function initialForm(): FormState {
     defaultStart: "07:00",
     defaultEnd: "15:00",
     defaultPause: "60",
-    defaultPauseStart: "09:00",
-    defaultPauseEnd: "09:30",
-    defaultPause2Start: "12:00",
-    defaultPause2End: "12:30",
-    defaultDayWorkStart: "07:00",
-    defaultDayWorkEnd: "15:00",
-    defaultEveningWorkStart: "14:00",
-    defaultEveningWorkEnd: "23:00",
-    defaultNightWorkStart: "22:00",
-    defaultNightWorkEnd: "07:00",
+    defaultPauseStart: "",
+    defaultPauseEnd: "",
+    defaultPause2Start: "",
+    defaultPause2End: "",
+    defaultDayWorkStart: "",
+    defaultDayWorkEnd: "",
+    defaultEveningWorkStart: "",
+    defaultEveningWorkEnd: "",
+    defaultNightWorkStart: "",
+    defaultNightWorkEnd: "",
     shiftWorkApplies: false,
     weekPlan: initialWeekPlan(),
     startDate: todayISO(),
@@ -432,6 +432,8 @@ function CreateWorkerPage() {
               label="Pause 1 start / slut"
               start={form.defaultPauseStart}
               end={form.defaultPauseEnd}
+              defaultStart="09:00"
+              defaultEnd="09:30"
               onStartChange={(value) => update({ defaultPauseStart: value })}
               onEndChange={(value) => update({ defaultPauseEnd: value })}
             />
@@ -439,6 +441,8 @@ function CreateWorkerPage() {
               label="Pause 2 start / slut"
               start={form.defaultPause2Start}
               end={form.defaultPause2End}
+              defaultStart="12:00"
+              defaultEnd="12:30"
               onStartChange={(value) => update({ defaultPause2Start: value })}
               onEndChange={(value) => update({ defaultPause2End: value })}
             />
@@ -447,6 +451,8 @@ function CreateWorkerPage() {
               help="Udfyld kun hvis der er daghold."
               start={form.defaultDayWorkStart}
               end={form.defaultDayWorkEnd}
+              defaultStart="07:00"
+              defaultEnd="15:00"
               onStartChange={(value) => update({ defaultDayWorkStart: value })}
               onEndChange={(value) => update({ defaultDayWorkEnd: value })}
             />
@@ -455,6 +461,8 @@ function CreateWorkerPage() {
               help="Udfyld kun hvis der er aftenarbejde."
               start={form.defaultEveningWorkStart}
               end={form.defaultEveningWorkEnd}
+              defaultStart="14:00"
+              defaultEnd="23:00"
               onStartChange={(value) => update({ defaultEveningWorkStart: value })}
               onEndChange={(value) => update({ defaultEveningWorkEnd: value })}
             />
@@ -463,6 +471,8 @@ function CreateWorkerPage() {
               help="Udfyld kun hvis der er natarbejde."
               start={form.defaultNightWorkStart}
               end={form.defaultNightWorkEnd}
+              defaultStart="22:00"
+              defaultEnd="07:00"
               onStartChange={(value) => update({ defaultNightWorkStart: value })}
               onEndChange={(value) => update({ defaultNightWorkEnd: value })}
             />
@@ -519,19 +529,19 @@ function CreateWorkerPage() {
                       <tr key={WEEKDAYS[index]} className="border-t">
                         <td className="px-3 py-3 font-medium">{WEEKDAYS[index]}</td>
                         <td className="px-3 py-3">
-                          <Input
-                            type="time"
-                            step={300}
+                          <DefaultTimeInput
                             value={day.start}
+                            defaultValue="07:00"
+                            onDefault={() => updateWeekDay(index, { start: "07:00" })}
                             onChange={(e) => updateWeekDay(index, { start: e.target.value })}
                             className="h-9 w-28"
                           />
                         </td>
                         <td className="px-3 py-3">
-                          <Input
-                            type="time"
-                            step={300}
+                          <DefaultTimeInput
                             value={day.end}
+                            defaultValue="15:00"
+                            onDefault={() => updateWeekDay(index, { end: "15:00" })}
                             onChange={(e) => updateWeekDay(index, { end: e.target.value })}
                             className="h-9 w-28"
                           />
@@ -550,6 +560,8 @@ function CreateWorkerPage() {
                           <InlineTimeRange
                             start={day.pauseStart}
                             end={day.pauseEnd}
+                            defaultStart="09:00"
+                            defaultEnd="09:30"
                             onStartChange={(value) => updateWeekDay(index, { pauseStart: value })}
                             onEndChange={(value) => updateWeekDay(index, { pauseEnd: value })}
                           />
@@ -558,6 +570,8 @@ function CreateWorkerPage() {
                           <InlineTimeRange
                             start={day.pause2Start}
                             end={day.pause2End}
+                            defaultStart="12:00"
+                            defaultEnd="12:30"
                             onStartChange={(value) => updateWeekDay(index, { pause2Start: value })}
                             onEndChange={(value) => updateWeekDay(index, { pause2End: value })}
                           />
@@ -566,6 +580,8 @@ function CreateWorkerPage() {
                           <InlineTimeRange
                             start={day.dayWorkStart}
                             end={day.dayWorkEnd}
+                            defaultStart="07:00"
+                            defaultEnd="15:00"
                             onStartChange={(value) => updateWeekDay(index, { dayWorkStart: value })}
                             onEndChange={(value) => updateWeekDay(index, { dayWorkEnd: value })}
                           />
@@ -574,6 +590,8 @@ function CreateWorkerPage() {
                           <InlineTimeRange
                             start={day.eveningWorkStart}
                             end={day.eveningWorkEnd}
+                            defaultStart="14:00"
+                            defaultEnd="23:00"
                             onStartChange={(value) =>
                               updateWeekDay(index, { eveningWorkStart: value })
                             }
@@ -584,6 +602,8 @@ function CreateWorkerPage() {
                           <InlineTimeRange
                             start={day.nightWorkStart}
                             end={day.nightWorkEnd}
+                            defaultStart="22:00"
+                            defaultEnd="07:00"
                             onStartChange={(value) =>
                               updateWeekDay(index, { nightWorkStart: value })
                             }
@@ -641,6 +661,8 @@ function TimeRangeField({
   help,
   start,
   end,
+  defaultStart,
+  defaultEnd,
   onStartChange,
   onEndChange,
 }: {
@@ -648,6 +670,8 @@ function TimeRangeField({
   help?: string;
   start: string;
   end: string;
+  defaultStart?: string;
+  defaultEnd?: string;
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
 }) {
@@ -656,6 +680,8 @@ function TimeRangeField({
       <InlineTimeRange
         start={start}
         end={end}
+        defaultStart={defaultStart}
+        defaultEnd={defaultEnd}
         onStartChange={onStartChange}
         onEndChange={onEndChange}
       />
@@ -667,32 +693,63 @@ function TimeRangeField({
 function InlineTimeRange({
   start,
   end,
+  defaultStart,
+  defaultEnd,
   onStartChange,
   onEndChange,
 }: {
   start: string;
   end: string;
+  defaultStart?: string;
+  defaultEnd?: string;
   onStartChange: (value: string) => void;
   onEndChange: (value: string) => void;
 }) {
   return (
     <div className="flex items-center gap-2">
-      <Input
-        type="time"
-        step={300}
+      <DefaultTimeInput
         value={start}
+        defaultValue={defaultStart}
         onChange={(e) => onStartChange(e.target.value)}
+        onDefault={() => defaultStart && onStartChange(defaultStart)}
         className="h-9 min-w-0 flex-1"
       />
       <span className="text-xs text-muted-foreground">–</span>
-      <Input
-        type="time"
-        step={300}
+      <DefaultTimeInput
         value={end}
+        defaultValue={defaultEnd}
         onChange={(e) => onEndChange(e.target.value)}
+        onDefault={() => defaultEnd && onEndChange(defaultEnd)}
         className="h-9 min-w-0 flex-1"
       />
     </div>
+  );
+}
+
+function DefaultTimeInput({
+  value,
+  defaultValue,
+  onDefault,
+  onFocus,
+  ...props
+}: ComponentProps<typeof Input> & {
+  value: string;
+  defaultValue?: string;
+  onDefault?: () => void;
+}) {
+  return (
+    <Input
+      {...props}
+      type="time"
+      step={300}
+      value={value}
+      onFocus={(event) => {
+        if (!value && defaultValue) {
+          onDefault?.();
+        }
+        onFocus?.(event);
+      }}
+    />
   );
 }
 
