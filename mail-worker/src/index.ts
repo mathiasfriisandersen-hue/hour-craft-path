@@ -11,12 +11,15 @@ type TimesheetMailPayload = {
   replyTo?: string;
   subject?: string;
   text?: string;
+  html?: string;
   adminText?: string;
+  adminHtml?: string;
   sendAdminCopy?: boolean;
 };
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const MAX_TEXT_LENGTH = 60_000;
+const MAX_HTML_LENGTH = 120_000;
 
 function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -87,7 +90,9 @@ async function parsePayload(request: Request): Promise<TimesheetMailPayload | un
 async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   const subject = cleanSubject(payload.subject);
   const text = typeof payload.text === "string" ? payload.text.trim() : "";
+  const html = typeof payload.html === "string" ? payload.html.trim() : "";
   const adminText = typeof payload.adminText === "string" ? payload.adminText.trim() : text;
+  const adminHtml = typeof payload.adminHtml === "string" ? payload.adminHtml.trim() : html;
 
   if (!env.RESEND_API_KEY) throw new Error("RESEND_API_KEY mangler");
   if (!env.RESEND_FROM_EMAIL) throw new Error("RESEND_FROM_EMAIL mangler");
@@ -97,8 +102,10 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   if (!text) throw new Error("Mailtekst mangler");
   if (text.length > MAX_TEXT_LENGTH) throw new Error("Mailtekst er for lang");
   if (adminText.length > MAX_TEXT_LENGTH) throw new Error("Intern mailtekst er for lang");
+  if (html.length > MAX_HTML_LENGTH) throw new Error("HTML-mail er for lang");
+  if (adminHtml.length > MAX_HTML_LENGTH) throw new Error("Intern HTML-mail er for lang");
 
-  const sendEmail = async (to: string, bodyText: string) => {
+  const sendEmail = async (to: string, bodyText: string, bodyHtml?: string) => {
     const response = await fetch(RESEND_EMAILS_URL, {
       method: "POST",
       headers: {
@@ -111,9 +118,11 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
         ...(isEmail(payload.replyTo) ? { reply_to: payload.replyTo } : {}),
         subject,
         text: bodyText,
-        html: `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.45;">${escapeHtml(
-          bodyText,
-        )}</pre>`,
+        html:
+          bodyHtml ||
+          `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.45;">${escapeHtml(
+            bodyText,
+          )}</pre>`,
       }),
     });
 
@@ -125,11 +134,11 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
     return responseText ? JSON.parse(responseText) : {};
   };
 
-  const contactEmailResult = await sendEmail(payload.contactEmail, text);
+  const contactEmailResult = await sendEmail(payload.contactEmail, text, html);
   const adminEmailResult =
     payload.sendAdminCopy === false || env.ADMIN_EMAIL === payload.contactEmail
       ? undefined
-      : await sendEmail(env.ADMIN_EMAIL, adminText);
+      : await sendEmail(env.ADMIN_EMAIL, adminText, adminHtml);
 
   return {
     contactEmail: contactEmailResult,

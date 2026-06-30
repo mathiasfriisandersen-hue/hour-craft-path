@@ -1333,10 +1333,70 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
     "Efter første login bliver du bedt om at ændre adgangskoden.",
     "Invitationslinket er gyldigt i 7 dage fra oprettelse.",
     "",
-    inviteUrl,
+    "Åbn timesedlen via knappen/linket i mailen.",
     "",
     "Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.",
   ].join("\n");
+}
+
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function htmlRow(label: string, value: string): string {
+  return `<tr><td style="padding:6px 12px 6px 0;color:#4b5563;">${htmlEscape(
+    label,
+  )}</td><td style="padding:6px 0;font-weight:600;color:#111827;">${htmlEscape(value || "—")}</td></tr>`;
+}
+
+export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
+  const calc = calculateTimesheet(t);
+  const defaultWorkday = t.days.find((day) => day.start && day.end);
+  const safeName = htmlEscape(t.vikar || "vikar");
+  const safeInviteUrl = htmlEscape(inviteUrl);
+
+  return `<!doctype html>
+<html lang="da">
+  <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+      <p style="margin:0 0 16px;">Hej ${safeName}</p>
+      <p style="margin:0 0 18px;line-height:1.5;">Sub-Z har oprettet en timeseddel til dig. Brug knappen herunder til at åbne timesedlen.</p>
+      <p style="margin:0 0 24px;">
+        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">Åbn timeseddel</a>
+      </p>
+      <p style="margin:0 0 8px;font-weight:700;">Login</p>
+      <p style="margin:0 0 6px;line-height:1.5;">Log ind første gang med denne engangskode:</p>
+      <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
+        t.workerAccessCode || "—",
+      )}</p>
+      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">Efter første login bliver du bedt om at ændre adgangskoden. Invitationslinket er gyldigt i 7 dage fra oprettelse.</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;">
+        <tbody>
+          ${htmlRow("Vikarnavn", t.vikar)}
+          ${htmlRow("Brugervirksomhed", t.brugervirksomhed)}
+          ${htmlRow("Arbejdssted", t.arbejdssted)}
+          ${htmlRow("Kontaktperson", t.kontaktperson)}
+          ${htmlRow("Kontaktperson telefon", t.kontaktpersonPhone || "—")}
+          ${htmlRow("Reference nr.", t.referenceNo || "—")}
+          ${htmlRow("Overenskomst", calc.agreementName || "—")}
+          ${htmlRow("Timeløn", t.hourlyWage ? formatDkk(t.hourlyWage) : "—")}
+          ${htmlRow(
+            "Arbejdstid",
+            `${defaultWorkday?.start || "—"}–${defaultWorkday?.end || "—"}, pause ${
+              defaultWorkday?.pause || 0
+            } min`,
+          )}
+          ${htmlRow("Startdato/uge", `Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`)}
+        </tbody>
+      </table>
+      <p style="margin:22px 0 0;color:#4b5563;line-height:1.5;">Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.</p>
+    </div>
+  </body>
+</html>`;
 }
 
 export function mailtoUrl(t: Timesheet): string {

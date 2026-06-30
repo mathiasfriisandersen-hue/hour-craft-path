@@ -4,6 +4,7 @@ import {
   emailSubject,
   mailtoUrl,
   workerInviteEmailBody,
+  workerInviteEmailHtml,
   workerInviteEmailSubject,
   type Timesheet,
 } from "./timesheet-store";
@@ -77,6 +78,7 @@ export async function sendWorkerInviteEmail(
   const mailApiUrl = await timesheetMailApiUrl();
   const subject = workerInviteEmailSubject(t);
   const text = workerInviteEmailBody(t, inviteUrl);
+  const html = workerInviteEmailHtml(t, inviteUrl);
 
   if (!mailApiUrl) {
     window.location.href = `mailto:${t.vikarEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
@@ -94,6 +96,7 @@ export async function sendWorkerInviteEmail(
       replyTo: t.kontaktpersonEmail,
       subject,
       text,
+      html,
       sendAdminCopy: false,
     }),
   });
