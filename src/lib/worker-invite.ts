@@ -24,6 +24,35 @@ function decodeBase64Url(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
+const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
+let runtimeMailApiUrl: string | undefined;
+let runtimeConfigPromise: Promise<string> | undefined;
+
+async function loadRuntimeMailApiUrl(): Promise<string> {
+  if (runtimeMailApiUrl !== undefined) return runtimeMailApiUrl;
+
+  runtimeConfigPromise ??= fetch(`${import.meta.env.BASE_URL}mail-config.json`, {
+    cache: "no-store",
+  })
+    .then(async (response) => {
+      if (!response.ok) return "";
+      const config = (await response.json()) as { timesheetMailApiUrl?: string };
+      return config.timesheetMailApiUrl?.trim() ?? "";
+    })
+    .catch(() => "");
+
+  runtimeMailApiUrl = await runtimeConfigPromise;
+  return runtimeMailApiUrl;
+}
+
+async function timesheetMailApiUrl(): Promise<string> {
+  return BUILD_TIME_MAIL_API_URL || loadRuntimeMailApiUrl();
+}
+
+function workerApiUrl(path: string, baseUrl: string): string {
+  return new URL(path, baseUrl).toString();
+}
+
 export function buildWorkerInviteUrl(t: Timesheet): string {
   const payload: WorkerInvitePayload = {
     version: 1,
@@ -32,6 +61,53 @@ export function buildWorkerInviteUrl(t: Timesheet): string {
   const encoded = encodeBase64Url(JSON.stringify(payload));
   const basePath = import.meta.env.BASE_URL ?? "/";
   return `${window.location.origin}${basePath}vikar/invite#invite=${encoded}`;
+}
+
+export async function createShortWorkerInviteUrl(t: Timesheet): Promise<string> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  if (!mailApiUrl) throw new Error("Mailsystemet er ikke konfigureret");
+
+  const response = await fetch(workerApiUrl("/create-worker-invite", mailApiUrl), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ timesheet: t }),
+  });
+
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; invite?: { token?: string }; error?: string }
+    | undefined;
+
+  if (!response.ok || !body?.ok || !body.invite?.token) {
+    throw new Error(body?.error || `Invite-server svarede med HTTP ${response.status}`);
+  }
+
+  const basePath = import.meta.env.BASE_URL ?? "/";
+  const inviteUrl = new URL(`${basePath}vikar/invite`, window.location.origin);
+  inviteUrl.searchParams.set("i", body.invite.token);
+  return inviteUrl.toString();
+}
+
+export async function fetchWorkerInviteByToken(
+  token: string,
+): Promise<WorkerInvitePayload | undefined> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  if (!mailApiUrl) return undefined;
+
+  const url = new URL(workerApiUrl("/worker-invite", mailApiUrl));
+  url.searchParams.set("i", token);
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; invite?: WorkerInvitePayload }
+    | undefined;
+
+  if (!response.ok || !body?.ok || body.invite?.version !== 1 || !body.invite.timesheet?.id) {
+    return undefined;
+  }
+
+  return body.invite;
 }
 
 export function parseWorkerInviteFromHash(hash: string): WorkerInvitePayload | undefined {

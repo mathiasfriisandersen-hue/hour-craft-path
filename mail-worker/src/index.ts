@@ -3,6 +3,12 @@ type Env = {
   RESEND_FROM_EMAIL: string;
   ADMIN_EMAIL: string;
   ALLOWED_ORIGIN?: string;
+  WORKER_INVITES: KVNamespace;
+};
+
+type KVNamespace = {
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  get(key: string): Promise<string | null>;
 };
 
 type TimesheetMailPayload = {
@@ -17,9 +23,15 @@ type TimesheetMailPayload = {
   sendAdminCopy?: boolean;
 };
 
+type WorkerInviteCreatePayload = {
+  timesheet?: unknown;
+};
+
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const MAX_TEXT_LENGTH = 60_000;
 const MAX_HTML_LENGTH = 120_000;
+const INVITE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const INVITE_TOKEN_BYTES = 12;
 
 function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -45,7 +57,7 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
 
   return {
     ...(allowedOrigin ? { "access-control-allow-origin": allowedOrigin } : {}),
-    "access-control-allow-methods": "POST, OPTIONS",
+    "access-control-allow-methods": "GET, POST, OPTIONS",
     "access-control-allow-headers": "content-type",
     "access-control-max-age": "86400",
     vary: "Origin",
@@ -85,6 +97,53 @@ async function parsePayload(request: Request): Promise<TimesheetMailPayload | un
   } catch {
     return undefined;
   }
+}
+
+async function parseInviteCreatePayload(
+  request: Request,
+): Promise<WorkerInviteCreatePayload | undefined> {
+  try {
+    return (await request.json()) as WorkerInviteCreatePayload;
+  } catch {
+    return undefined;
+  }
+}
+
+function randomToken(): string {
+  const bytes = new Uint8Array(INVITE_TOKEN_BYTES);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function isValidInviteToken(value: string | null): value is string {
+  return typeof value === "string" && /^[a-f0-9]{24}$/.test(value);
+}
+
+async function createWorkerInvite(payload: WorkerInviteCreatePayload, env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  const timesheet = payload.timesheet;
+  if (!timesheet || typeof timesheet !== "object" || !("id" in timesheet)) {
+    throw new Error("Timeseddel mangler");
+  }
+
+  const token = randomToken();
+  await env.WORKER_INVITES.put(
+    token,
+    JSON.stringify({
+      version: 1,
+      timesheet,
+    }),
+    { expirationTtl: INVITE_TTL_SECONDS },
+  );
+
+  return { token, expiresInSeconds: INVITE_TTL_SECONDS };
+}
+
+async function readWorkerInvite(token: string, env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  const invite = await env.WORKER_INVITES.get(token);
+  if (!invite) throw new Error("Invitationen er udløbet eller findes ikke");
+  return JSON.parse(invite) as unknown;
 }
 
 async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
@@ -155,7 +214,13 @@ export default {
     }
 
     const url = new URL(request.url);
-    if (request.method !== "POST" || url.pathname !== "/send-timesheet") {
+    if (
+      !(
+        (request.method === "POST" && url.pathname === "/send-timesheet") ||
+        (request.method === "POST" && url.pathname === "/create-worker-invite") ||
+        (request.method === "GET" && url.pathname === "/worker-invite")
+      )
+    ) {
       return jsonResponse({ ok: false, error: "Not found" }, 404, headers);
     }
 
@@ -163,12 +228,29 @@ export default {
       return jsonResponse({ ok: false, error: "Origin not allowed" }, 403, headers);
     }
 
-    const payload = await parsePayload(request);
-    if (!payload) {
-      return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, headers);
-    }
-
     try {
+      if (request.method === "POST" && url.pathname === "/create-worker-invite") {
+        const invitePayload = await parseInviteCreatePayload(request);
+        if (!invitePayload) {
+          return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, headers);
+        }
+        const invite = await createWorkerInvite(invitePayload, env);
+        return jsonResponse({ ok: true, invite }, 200, headers);
+      }
+
+      if (request.method === "GET" && url.pathname === "/worker-invite") {
+        const token = url.searchParams.get("i");
+        if (!isValidInviteToken(token)) {
+          return jsonResponse({ ok: false, error: "Invitationstoken er ugyldig" }, 400, headers);
+        }
+        const invite = await readWorkerInvite(token, env);
+        return jsonResponse({ ok: true, invite }, 200, headers);
+      }
+
+      const payload = await parsePayload(request);
+      if (!payload) {
+        return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, headers);
+      }
       const resend = await sendViaResend(payload, env);
       return jsonResponse({ ok: true, resend }, 200, headers);
     } catch (error) {

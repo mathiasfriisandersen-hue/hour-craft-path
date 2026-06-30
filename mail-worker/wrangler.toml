@@ -6,3 +6,7 @@ compatibility_date = "2026-06-28"
 ADMIN_EMAIL = "mathiasfriisandersen@gmail.com"
 ALLOWED_ORIGIN = "https://mathiasfriisandersen.dk"
 RESEND_FROM_EMAIL = "Sub-Z Timesheet <timesheet@send.mathiasfriisandersen.dk>"
+
+[[kv_namespaces]]
+binding = "WORKER_INVITES"
+id = "50e3915ec68c4eae9b6ba1e4c70ecedf"

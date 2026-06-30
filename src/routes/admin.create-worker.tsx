@@ -13,7 +13,7 @@ import {
   type CreateWorkerTimesheetInput,
 } from "@/lib/timesheet-store";
 import { sendWorkerInviteEmail } from "@/lib/timesheet-mail";
-import { buildWorkerInviteUrl } from "@/lib/worker-invite";
+import { createShortWorkerInviteUrl } from "@/lib/worker-invite";
 
 export const Route = createFileRoute("/admin/create-worker")({
   head: () => ({ meta: [{ title: "Admin — Opret vikar" }] }),
@@ -286,7 +286,7 @@ function CreateWorkerPage() {
     setCreatedId(timesheet.id);
 
     try {
-      const inviteUrl = buildWorkerInviteUrl(timesheet);
+      const inviteUrl = await createShortWorkerInviteUrl(timesheet);
       const result = await sendWorkerInviteEmail(timesheet, inviteUrl);
       setMessage(
         result === "api"

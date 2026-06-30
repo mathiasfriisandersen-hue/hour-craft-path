@@ -1,11 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import subzLogo from "@/assets/sub-z-logo.png";
 import { useAuth } from "@/lib/auth";
 import { upsert, type Timesheet } from "@/lib/timesheet-store";
-import { parseWorkerInviteFromHash } from "@/lib/worker-invite";
+import { fetchWorkerInviteByToken, parseWorkerInviteFromHash } from "@/lib/worker-invite";
 
 const INVITE_VALIDITY_DAYS = 7;
 const INVITE_VALIDITY_MS = INVITE_VALIDITY_DAYS * 24 * 60 * 60 * 1000;
@@ -24,15 +24,51 @@ function isInviteExpired(timesheet: Timesheet): boolean {
 function VikarInvitePage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const payload = useMemo(
-    () =>
-      typeof window === "undefined" ? undefined : parseWorkerInviteFromHash(window.location.hash),
-    [],
-  );
+  const [payload, setPayload] = useState<ReturnType<typeof parseWorkerInviteFromHash>>();
+  const [isLoadingInvite, setIsLoadingInvite] = useState(true);
   const [temporaryCode, setTemporaryCode] = useState("");
   const [newCode, setNewCode] = useState("");
   const [step, setStep] = useState<"temporary" | "change">("temporary");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadInvite() {
+      if (typeof window === "undefined") return;
+
+      const legacyPayload = parseWorkerInviteFromHash(window.location.hash);
+      if (legacyPayload) {
+        if (isMounted) {
+          setPayload(legacyPayload);
+          setIsLoadingInvite(false);
+        }
+        return;
+      }
+
+      const token = new URLSearchParams(window.location.search).get("i") ?? "";
+      const tokenPayload = token ? await fetchWorkerInviteByToken(token) : undefined;
+      if (isMounted) {
+        setPayload(tokenPayload);
+        setIsLoadingInvite(false);
+      }
+    }
+
+    void loadInvite();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (isLoadingInvite) {
+    return (
+      <InviteShell>
+        <h1 className="text-2xl font-semibold">Indlæser invitation</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Vent et øjeblik…</p>
+      </InviteShell>
+    );
+  }
 
   if (!payload) {
     return (
