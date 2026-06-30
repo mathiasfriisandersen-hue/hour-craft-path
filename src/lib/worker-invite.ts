@@ -5,15 +5,6 @@ export type WorkerInvitePayload = {
   timesheet: Timesheet;
 };
 
-function encodeBase64Url(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte);
-  });
-  return window.btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
 function decodeBase64Url(value: string): string {
   const padded = value
     .replaceAll("-", "+")
@@ -51,16 +42,6 @@ async function timesheetMailApiUrl(): Promise<string> {
 
 function workerApiUrl(path: string, baseUrl: string): string {
   return new URL(path, baseUrl).toString();
-}
-
-export function buildWorkerInviteUrl(t: Timesheet): string {
-  const payload: WorkerInvitePayload = {
-    version: 1,
-    timesheet: t,
-  };
-  const encoded = encodeBase64Url(JSON.stringify(payload));
-  const basePath = import.meta.env.BASE_URL ?? "/";
-  return `${window.location.origin}${basePath}vikar/invite#invite=${encoded}`;
 }
 
 export async function createShortWorkerInviteUrl(t: Timesheet): Promise<string> {
