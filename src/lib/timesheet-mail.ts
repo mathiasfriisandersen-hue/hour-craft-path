@@ -3,6 +3,8 @@ import {
   emailBody,
   emailSubject,
   mailtoUrl,
+  workerSubmissionReceiptBody,
+  workerSubmissionReceiptSubject,
   workerInviteEmailBody,
   workerInviteEmailHtml,
   workerInviteEmailSubject,
@@ -60,6 +62,9 @@ export async function sendTimesheetEmail(t: Timesheet): Promise<TimesheetMailRes
       subject: emailSubject(t),
       text: contactPersonEmailBody(t),
       adminText: emailBody(t),
+      workerEmail: t.vikarEmail,
+      workerSubject: workerSubmissionReceiptSubject(t),
+      workerText: workerSubmissionReceiptBody(t),
     }),
   });
 

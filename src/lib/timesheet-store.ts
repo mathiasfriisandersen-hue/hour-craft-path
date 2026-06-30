@@ -1296,6 +1296,78 @@ export function contactPersonEmailBody(t: Timesheet): string {
   return emailBody(t, { includeApprovalTerms: true });
 }
 
+export function workerSubmissionReceiptSubject(t: Timesheet): string {
+  return `Timeseddel sendt til godkendelse – uge ${weekNumber(t.weekStart)}`;
+}
+
+export function workerSubmissionReceiptBody(t: Timesheet): string {
+  const calc = calculateTimesheet(t);
+  const manualAllowanceLines: string[] = [];
+  if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
+    manualAllowanceLines.push(delayedMealBreakSummaryText(calc.delayedMealBreakDays));
+  }
+  if (manualAllowanceLines.length === 0) {
+    manualAllowanceLines.push("Ingen manuelle tillæg registreret.");
+  }
+
+  const dayLines = WEEKDAYS.map((name, index) => {
+    const day = t.days[index];
+    const date = addDaysToISODate(t.weekStart, index);
+    if (day.absence !== "none") {
+      return `${name} ${formatDateLabel(date)}: ${ABSENCE_LABEL[day.absence]}`;
+    }
+    if (!day.start || !day.end) {
+      return `${name} ${formatDateLabel(date)}: Ingen registrering`;
+    }
+    return `${name} ${formatDateLabel(date)}: ${day.start}–${day.end}, pause ${
+      day.pause
+    } min. – ${dayHours(day).toFixed(2)} timer`;
+  });
+
+  return [
+    `Hej ${t.vikar || "vikar"}`,
+    "",
+    "Tak for din indsendelse.",
+    "",
+    `Din timeseddel for uge ${weekNumber(t.weekStart)} er nu sendt til godkendelse hos ${
+      t.kontaktperson || "kontaktpersonen"
+    } hos ${t.brugervirksomhed || "brugervirksomheden"}.`,
+    "",
+    "OPLYSNINGER",
+    `Vikar: ${t.vikar || "—"}`,
+    `Brugervirksomhed: ${t.brugervirksomhed || "—"}`,
+    `Kontaktperson: ${t.kontaktperson || "—"}`,
+    `Telefon: ${t.kontaktpersonPhone || "—"}`,
+    `Reference: ${t.referenceNo || "—"}`,
+    `Arbejdssted: ${t.arbejdssted || "—"}`,
+    `Periode: Uge ${weekNumber(t.weekStart)} – ${formatDateLabel(t.weekStart)} til ${formatDateLabel(
+      addDaysToISODate(t.weekStart, 6),
+    )}`,
+    "",
+    "REGISTREREDE TIMER",
+    ...dayLines,
+    "",
+    "SAMLET TIMETAL",
+    `${calc.total.toFixed(2)} timer`,
+    "",
+    "MANUELLE TILLÆG",
+    ...manualAllowanceLines,
+    "",
+    "NOTER FRA VIKAREN",
+    t.notes || "—",
+    "",
+    "STATUS",
+    "Timesedlen er sendt til godkendelse hos kontaktpersonen.",
+    "",
+    "Har du spørgsmål til registreringen, skal du kontakte os hurtigst muligt.",
+    "",
+    "Med venlig hilsen",
+    "Sub-Z",
+    "—",
+    "timesheet@send.mathiasfriisandersen.dk",
+  ].join("\n");
+}
+
 export function workerInviteEmailSubject(t: Timesheet): string {
   return `Timeseddel oprettet – ${t.brugervirksomhed} – uge ${weekNumber(t.weekStart)}`;
 }

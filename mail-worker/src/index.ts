@@ -20,6 +20,10 @@ type TimesheetMailPayload = {
   html?: string;
   adminText?: string;
   adminHtml?: string;
+  workerEmail?: string;
+  workerSubject?: string;
+  workerText?: string;
+  workerHtml?: string;
   sendAdminCopy?: boolean;
 };
 
@@ -152,19 +156,31 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   const html = typeof payload.html === "string" ? payload.html.trim() : "";
   const adminText = typeof payload.adminText === "string" ? payload.adminText.trim() : text;
   const adminHtml = typeof payload.adminHtml === "string" ? payload.adminHtml.trim() : html;
+  const workerSubject = cleanSubject(payload.workerSubject) || subject;
+  const workerText = typeof payload.workerText === "string" ? payload.workerText.trim() : "";
+  const workerHtml = typeof payload.workerHtml === "string" ? payload.workerHtml.trim() : "";
 
   if (!env.RESEND_API_KEY) throw new Error("RESEND_API_KEY mangler");
   if (!env.RESEND_FROM_EMAIL) throw new Error("RESEND_FROM_EMAIL mangler");
   if (!isEmail(env.ADMIN_EMAIL)) throw new Error("ADMIN_EMAIL mangler eller er ugyldig");
   if (!isEmail(payload.contactEmail)) throw new Error("Kontaktpersonens mail er ugyldig");
+  if (payload.workerEmail && !isEmail(payload.workerEmail))
+    throw new Error("Vikarens mail er ugyldig");
   if (!subject) throw new Error("Emne mangler");
   if (!text) throw new Error("Mailtekst mangler");
   if (text.length > MAX_TEXT_LENGTH) throw new Error("Mailtekst er for lang");
   if (adminText.length > MAX_TEXT_LENGTH) throw new Error("Intern mailtekst er for lang");
+  if (workerText.length > MAX_TEXT_LENGTH) throw new Error("Vikarmailtekst er for lang");
   if (html.length > MAX_HTML_LENGTH) throw new Error("HTML-mail er for lang");
   if (adminHtml.length > MAX_HTML_LENGTH) throw new Error("Intern HTML-mail er for lang");
+  if (workerHtml.length > MAX_HTML_LENGTH) throw new Error("Vikar HTML-mail er for lang");
 
-  const sendEmail = async (to: string, bodyText: string, bodyHtml?: string) => {
+  const sendEmail = async (
+    to: string,
+    emailSubject: string,
+    bodyText: string,
+    bodyHtml?: string,
+  ) => {
     const response = await fetch(RESEND_EMAILS_URL, {
       method: "POST",
       headers: {
@@ -175,7 +191,7 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
         from: env.RESEND_FROM_EMAIL,
         to,
         ...(isEmail(payload.replyTo) ? { reply_to: payload.replyTo } : {}),
-        subject,
+        subject: emailSubject,
         text: bodyText,
         html:
           bodyHtml ||
@@ -193,15 +209,20 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
     return responseText ? JSON.parse(responseText) : {};
   };
 
-  const contactEmailResult = await sendEmail(payload.contactEmail, text, html);
+  const contactEmailResult = await sendEmail(payload.contactEmail, subject, text, html);
   const adminEmailResult =
     payload.sendAdminCopy === false || env.ADMIN_EMAIL === payload.contactEmail
       ? undefined
-      : await sendEmail(env.ADMIN_EMAIL, adminText, adminHtml);
+      : await sendEmail(env.ADMIN_EMAIL, subject, adminText, adminHtml);
+  const workerEmailResult =
+    payload.workerEmail && workerText
+      ? await sendEmail(payload.workerEmail, workerSubject, workerText, workerHtml)
+      : undefined;
 
   return {
     contactEmail: contactEmailResult,
     ...(adminEmailResult ? { adminEmail: adminEmailResult } : {}),
+    ...(workerEmailResult ? { workerEmail: workerEmailResult } : {}),
   };
 }
 
