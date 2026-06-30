@@ -81,7 +81,8 @@ export async function sendWorkerInviteEmail(
   const html = workerInviteEmailHtml(t, inviteUrl);
 
   if (!mailApiUrl) {
-    window.location.href = `mailto:${t.vikarEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    const fallbackText = `${text}\n\nLink til timeseddel: ${inviteUrl}`;
+    window.location.href = `mailto:${t.vikarEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(fallbackText)}`;
     return "mailto";
   }
 
