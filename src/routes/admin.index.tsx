@@ -7,7 +7,9 @@ import { useTimesheets } from "@/lib/use-timesheets";
 import {
   calculateTimesheet,
   formatWeekRange,
+  setArchived,
   STATUS_LABEL,
+  timesheetRetentionWarning,
   timesheetsToCsv,
   totalHours,
   weekNumber,
@@ -23,26 +25,31 @@ export const Route = createFileRoute("/admin/")({
 function AdminList() {
   const all = useTimesheets();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<Status | "all">("all");
+  const [status, setStatus] = useState<Status | "all" | "archived">("all");
   const [agreement, setAgreement] = useState("all");
   const [week, setWeek] = useState("");
+  const [archiveMode, setArchiveMode] = useState(false);
 
   const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
+  const visibleSubmitted = useMemo(
+    () => submitted.filter((item) => status === "archived" || !item.archived),
+    [submitted, status],
+  );
 
   const list = useMemo(() => {
     const needle = query.toLocaleLowerCase("da-DK");
-    return submitted.filter((item) => {
+    return visibleSubmitted.filter((item) => {
       const text = `${item.vikar} ${item.brugervirksomhed} ${item.kontaktperson}`.toLocaleLowerCase(
         "da-DK",
       );
       return (
         (!needle || text.includes(needle)) &&
-        (status === "all" || item.status === status) &&
+        (status === "all" || (status === "archived" ? item.archived : item.status === status)) &&
         (agreement === "all" || item.selectedAgreementId === agreement) &&
         (!week || String(weekNumber(item.weekStart)) === week)
       );
     });
-  }, [submitted, query, status, agreement, week]);
+  }, [visibleSubmitted, query, status, agreement, week]);
 
   const exportCsv = () => {
     const blob = new Blob([timesheetsToCsv(list)], { type: "text/csv;charset=utf-8" });
@@ -54,7 +61,9 @@ function AdminList() {
     URL.revokeObjectURL(url);
   };
 
-  const counts = (value: Status) => submitted.filter((item) => item.status === value).length;
+  const counts = (value: Status) =>
+    submitted.filter((item) => !item.archived && item.status === value).length;
+  const archivedCount = submitted.filter((item) => item.archived).length;
 
   return (
     <AppShell allow={["admin"]}>
@@ -65,9 +74,18 @@ function AdminList() {
             Administrér indsendelser, kontrol og regelgrundlag.
           </p>
         </div>
-        <Button variant="outline" onClick={exportCsv} disabled={!list.length}>
-          Eksportér CSV
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={archiveMode ? "default" : "outline"}
+            onClick={() => setArchiveMode((current) => !current)}
+            disabled={!submitted.length}
+          >
+            Arkiver
+          </Button>
+          <Button variant="outline" onClick={exportCsv} disabled={!list.length}>
+            Eksportér CSV
+          </Button>
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -81,6 +99,13 @@ function AdminList() {
             <div className="mt-1 text-sm text-muted-foreground">{STATUS_LABEL[value]}</div>
           </button>
         ))}
+        <button
+          onClick={() => setStatus(status === "archived" ? "all" : "archived")}
+          className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+        >
+          <div className="text-2xl font-semibold tabular-nums">{archivedCount}</div>
+          <div className="mt-1 text-sm text-muted-foreground">Arkiverede</div>
+        </button>
       </div>
 
       <section className="mb-5 rounded-lg border bg-card p-4">
@@ -93,7 +118,7 @@ function AdminList() {
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
             value={status}
-            onChange={(e) => setStatus(e.target.value as Status | "all")}
+            onChange={(e) => setStatus(e.target.value as Status | "all" | "archived")}
           >
             <option value="all">Alle statusser</option>
             {Object.entries(STATUS_LABEL)
@@ -103,6 +128,7 @@ function AdminList() {
                   {label}
                 </option>
               ))}
+            <option value="archived">Arkiverede</option>
           </select>
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -136,20 +162,38 @@ function AdminList() {
           <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {["Vikar", "Virksomhed", "Uge", "Overenskomst", "Timer", "Status", ""].map(
-                  (head, i) => (
-                    <th key={`${head}-${i}`} className="px-4 py-3 font-medium">
-                      {head}
-                    </th>
-                  ),
-                )}
+                {[
+                  archiveMode ? "Arkiver" : "",
+                  "Vikar",
+                  "Virksomhed",
+                  "Uge",
+                  "Overenskomst",
+                  "Timer",
+                  "Status",
+                  "",
+                ].map((head, i) => (
+                  <th key={`${head}-${i}`} className="px-4 py-3 font-medium">
+                    {head}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {list.map((item) => {
                 const calc = calculateTimesheet(item);
+                const retentionWarning = timesheetRetentionWarning(item);
                 return (
                   <tr key={item.id} className="border-t hover:bg-muted/20">
+                    <td className="px-4 py-3">
+                      {archiveMode && (
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.archived)}
+                          onChange={(event) => setArchived(item.id, event.target.checked)}
+                          aria-label={`Arkiver timeseddel for ${item.vikar || "vikar"}`}
+                        />
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
                     <td className="px-4 py-3">
                       <div>{item.brugervirksomhed || "—"}</div>
@@ -172,6 +216,20 @@ function AdminList() {
                     <td className="px-4 py-3 tabular-nums">{totalHours(item.days).toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <StatusBadge status={item.status} />
+                      {item.archived && (
+                        <div className="mt-1 text-xs text-muted-foreground">Arkiveret</div>
+                      )}
+                      {retentionWarning && (
+                        <div
+                          className={
+                            retentionWarning.level === "critical"
+                              ? "mt-1 text-xs text-status-rejected-fg"
+                              : "mt-1 text-xs text-status-sent-fg"
+                          }
+                        >
+                          {retentionWarning.text}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link

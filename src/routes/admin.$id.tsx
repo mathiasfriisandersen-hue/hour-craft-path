@@ -14,6 +14,9 @@ import {
   getRule,
   isIndustriensAgreement,
   mailtoUrl,
+  setArchived,
+  setWorkerInactive,
+  timesheetRetentionWarning,
   upsert,
   WEEKDAYS,
   weekNumber,
@@ -59,12 +62,25 @@ function AdminDetail() {
   const calc = calculateTimesheet(t);
   const rule = getRule(t.selectedAgreementId);
   const showDelayedMealBreak = isIndustriensAgreement(t.selectedAgreementId);
+  const retentionWarning = timesheetRetentionWarning(t);
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
     setT(saved);
     setRejecting(false);
     setComment("");
+  };
+
+  const updateArchived = (archived: boolean) => {
+    const saved = setArchived(t.id, archived);
+    if (saved) setT(saved);
+  };
+
+  const updateWorkerInactive = (workerInactive: boolean) => {
+    const updated = setWorkerInactive(t.vikar, workerInactive);
+    const current = updated.find((item) => item.id === t.id);
+    if (current) setT(current);
+    else setT({ ...t, workerInactive });
   };
 
   const updateDay = (index: number, patch: Partial<Timesheet["days"][number]>) => {
@@ -154,10 +170,41 @@ function AdminDetail() {
         Systemet beregner kun samlet timetal, indtil overenskomstens PDF-kilde og satser er manuelt
         valideret i regelgrundlaget.
       </InfoBanner>
+      {retentionWarning && (
+        <div
+          className={
+            retentionWarning.level === "critical"
+              ? "mt-4 rounded-md border border-status-rejected-fg/30 bg-status-rejected/20 px-4 py-3 text-sm text-status-rejected-fg"
+              : "mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-4 py-3 text-sm text-status-sent-fg"
+          }
+        >
+          {retentionWarning.text}
+        </div>
+      )}
 
       <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <section className="rounded-lg border bg-card p-5 md:p-6">
-          <h2 className="mb-4 font-semibold">Oplysninger</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold">Oplysninger</h2>
+            <div className="flex flex-wrap gap-4 text-sm">
+              <label className="inline-flex items-center gap-2">
+                <span>Arkiver</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(t.archived)}
+                  onChange={(event) => updateArchived(event.target.checked)}
+                />
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <span>Gør inaktiv</span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(t.workerInactive)}
+                  onChange={(event) => updateWorkerInactive(event.target.checked)}
+                />
+              </label>
+            </div>
+          </div>
           <dl className="space-y-1 text-sm">
             <Row label="Vikar" value={t.vikar} />
             <Row label="Vikarens e-mail" value={t.vikarEmail} />

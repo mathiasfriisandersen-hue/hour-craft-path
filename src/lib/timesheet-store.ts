@@ -181,6 +181,8 @@ export type Timesheet = {
   days: DayEntry[];
   notes: string;
   status: Status;
+  archived?: boolean;
+  workerInactive?: boolean;
   rejectionComment?: string;
   createdAt: string;
   updatedAt: string;
@@ -383,6 +385,8 @@ type StoredTimesheet = Omit<
   hourlyWage?: number;
   workerAccessCode?: string;
   workerMustChangeAccessCode?: boolean;
+  archived?: boolean;
+  workerInactive?: boolean;
   notes?: string;
 };
 
@@ -475,6 +479,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     lokalaftale: localAgreementApplies,
     notes: value.notes ?? "",
     status: value.status === "reviewed" ? "approved" : (value.status as Status),
+    archived: value.archived ?? false,
+    workerInactive: value.workerInactive ?? false,
     days,
     createdAt: value.createdAt ?? now,
     updatedAt: value.updatedAt ?? now,
@@ -873,6 +879,25 @@ export function upsert(t: Timesheet): Timesheet {
   return updated;
 }
 
+export function setArchived(id: string, archived: boolean): Timesheet | undefined {
+  const item = getById(id);
+  if (!item) return undefined;
+  return upsert({ ...item, archived });
+}
+
+export function setWorkerInactive(workerKey: string, workerInactive: boolean): Timesheet[] {
+  const key = personLookupKey(workerKey);
+  if (!key) return [];
+  const list = readTimesheets();
+  const updated = list.map((item) =>
+    knownWorkerKey(item) === key
+      ? normalizeTimesheet({ ...item, workerInactive, updatedAt: new Date().toISOString() })
+      : item,
+  );
+  writeTimesheets(updated);
+  return updated.filter((item) => knownWorkerKey(item) === key);
+}
+
 export function remove(id: string): void {
   writeTimesheets(readTimesheets().filter((item) => item.id !== id));
 }
@@ -915,6 +940,8 @@ export function createBlank(): Timesheet {
     days: Array.from({ length: 7 }, (_, index) => emptyDay(index)),
     notes: "",
     status: "draft",
+    archived: false,
+    workerInactive: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -1371,6 +1398,7 @@ export type KnownWorker = {
   phone: string;
   tradeSkills: TradeSkill[];
   competencies: string;
+  inactive: boolean;
 };
 
 export type KnownContact = {
@@ -1394,6 +1422,7 @@ export function listKnownWorkers(): KnownWorker[] {
     const key = knownWorkerKey(timesheet);
     if (!key) continue;
     const existing = byName.get(key);
+    const inactive = existing?.inactive || timesheet.workerInactive || false;
     const tradeSkills = [
       ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
     ];
@@ -1411,13 +1440,42 @@ export function listKnownWorkers(): KnownWorker[] {
       phone: timesheet.vikarPhone || existing?.phone || "",
       tradeSkills,
       competencies,
+      inactive,
     });
   }
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+  return [...byName.values()]
+    .filter((worker) => !worker.inactive)
+    .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
 export function workerReferenceKeys(worker: KnownWorker): string[] {
   return [...new Set([worker.key].filter(Boolean))];
+}
+
+export function timesheetRetentionWarning(
+  t: Timesheet,
+): { level: "warning" | "critical"; text: string } | null {
+  const created = new Date(t.createdAt);
+  if (Number.isNaN(created.getTime())) return null;
+  const now = new Date();
+  const fiveMonths = new Date(created);
+  fiveMonths.setMonth(fiveMonths.getMonth() + 5);
+  const sixMonths = new Date(created);
+  sixMonths.setMonth(sixMonths.getMonth() + 6);
+
+  if (now >= sixMonths) {
+    return {
+      level: "critical",
+      text: "Timesedlen har været oprettet i 6 måneder. Gennemgå om den fortsat skal opbevares, eller om den skal slettes i henhold til virksomhedens slettepolitik og gældende databeskyttelsesregler.",
+    };
+  }
+  if (now >= fiveMonths) {
+    return {
+      level: "warning",
+      text: "Timesedlen nærmer sig 6 måneders opbevaring. Gennemgå om den fortsat skal opbevares, eller om den skal slettes efter virksomhedens slettepolitik.",
+    };
+  }
+  return null;
 }
 
 export function listKnownContacts(): KnownContact[] {
