@@ -7,9 +7,11 @@ import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import {
   createTimesheetForWorker,
   listCompanies,
+  listKnownContacts,
   listKnownWorkers,
   TRADE_SKILLS,
   upsert,
+  workerReferenceKeys,
   WEEKDAYS,
   type CompanyProject,
   type CreateWorkerDayPlan,
@@ -159,6 +161,7 @@ function CreateWorkerPage() {
   const navigate = useNavigate();
   const companies = listCompanies();
   const knownWorkers = listKnownWorkers();
+  const knownContacts = listKnownContacts();
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -188,7 +191,7 @@ function CreateWorkerPage() {
             companies,
             selectedCompany?.id ?? "",
             selectedProjectForAvailability,
-            worker.email,
+            worker,
           ),
       )
     : tradeMatchedWorkers;
@@ -299,8 +302,8 @@ function CreateWorkerPage() {
     });
   };
 
-  const applyWorker = (email: string) => {
-    const worker = knownWorkers.find((item) => item.email === email);
+  const applyWorker = (key: string) => {
+    const worker = knownWorkers.find((item) => item.key === key);
     if (!worker) return;
     update({
       vikar: worker.name,
@@ -308,6 +311,36 @@ function CreateWorkerPage() {
       vikarPhone: worker.phone,
       tradeSkills: worker.tradeSkills,
       competencies: worker.competencies || form.competencies,
+    });
+  };
+
+  const applyContactName = (name: string) => {
+    const contact = knownContacts.find(
+      (item) => item.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
+    update({
+      kontaktperson: name,
+      ...(contact
+        ? {
+            kontaktpersonPhone: contact.phone || form.kontaktpersonPhone,
+            kontaktpersonEmail: contact.email || form.kontaktpersonEmail,
+          }
+        : {}),
+    });
+  };
+
+  const applyContactEmail = (email: string) => {
+    const contact = knownContacts.find(
+      (item) => item.email.trim().toLowerCase() === email.trim().toLowerCase(),
+    );
+    update({
+      kontaktpersonEmail: email,
+      ...(contact
+        ? {
+            kontaktperson: contact.name || form.kontaktperson,
+            kontaktpersonPhone: contact.phone || form.kontaktpersonPhone,
+          }
+        : {}),
     });
   };
 
@@ -545,9 +578,15 @@ function CreateWorkerPage() {
           </Field>
           <Field label="Kontaktperson *">
             <Input
+              list="admin-create-contact-list"
               value={form.kontaktperson}
-              onChange={(e) => update({ kontaktperson: e.target.value })}
+              onChange={(e) => applyContactName(e.target.value)}
             />
+            <datalist id="admin-create-contact-list">
+              {knownContacts.map((contact) => (
+                <option key={contact.key} value={contact.name || contact.email} />
+              ))}
+            </datalist>
           </Field>
           <Field label="Kontaktperson telefonnummer *">
             <Input
@@ -558,9 +597,17 @@ function CreateWorkerPage() {
           <Field label="Kontaktpersonens mail *">
             <Input
               type="email"
+              list="admin-create-contact-email-list"
               value={form.kontaktpersonEmail}
-              onChange={(e) => update({ kontaktpersonEmail: e.target.value })}
+              onChange={(e) => applyContactEmail(e.target.value)}
             />
+            <datalist id="admin-create-contact-email-list">
+              {knownContacts
+                .filter((contact) => contact.email)
+                .map((contact) => (
+                  <option key={contact.key} value={contact.email} />
+                ))}
+            </datalist>
           </Field>
           <Field label="Evt. reference nr.">
             <Input
@@ -616,7 +663,7 @@ function CreateWorkerPage() {
             >
               <option value="">Vælg ledig tidligere vikar…</option>
               {projectWorkerOptions.map((worker) => (
-                <option key={worker.email} value={worker.email}>
+                <option key={worker.key} value={worker.key}>
                   {worker.name} — {worker.email}
                 </option>
               ))}
@@ -978,14 +1025,15 @@ function workerProjectConflict(
   companies: ReturnType<typeof listCompanies>,
   currentCompanyId: string,
   currentProject: CompanyProject,
-  workerEmail: string,
+  worker: ReturnType<typeof listKnownWorkers>[number],
 ): boolean {
   if (!currentProject.startDate || !currentProject.endDate) return false;
-  const email = workerEmail.toLowerCase();
+  const references = workerReferenceKeys(worker);
   return companies.some((company) =>
     company.projects.some((project) => {
       if (company.id === currentCompanyId && project.id === currentProject.id) return false;
-      if (!project.workerEmails.some((item) => item.toLowerCase() === email)) return false;
+      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase())))
+        return false;
       return projectDatesOverlap(currentProject, project);
     }),
   );

@@ -1365,6 +1365,7 @@ export async function syncRemoteAppState(): Promise<void> {
 }
 
 export type KnownWorker = {
+  key: string;
   name: string;
   email: string;
   phone: string;
@@ -1372,12 +1373,27 @@ export type KnownWorker = {
   competencies: string;
 };
 
+export type KnownContact = {
+  key: string;
+  name: string;
+  email: string;
+  phone: string;
+};
+
+function personLookupKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function knownWorkerKey(timesheet: Timesheet): string {
+  return personLookupKey(timesheet.vikar) || personLookupKey(timesheet.vikarEmail);
+}
+
 export function listKnownWorkers(): KnownWorker[] {
-  const byEmail = new Map<string, KnownWorker>();
+  const byName = new Map<string, KnownWorker>();
   for (const timesheet of readTimesheets()) {
-    const email = timesheet.vikarEmail.trim().toLowerCase();
-    if (!email) continue;
-    const existing = byEmail.get(email);
+    const key = knownWorkerKey(timesheet);
+    if (!key) continue;
+    const existing = byName.get(key);
     const tradeSkills = [
       ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
     ];
@@ -1388,15 +1404,59 @@ export function listKnownWorkers(): KnownWorker[] {
           .filter(Boolean),
       ),
     ].join("; ");
-    byEmail.set(email, {
-      name: timesheet.vikar || existing?.name || email,
-      email: timesheet.vikarEmail,
+    byName.set(key, {
+      key,
+      name: timesheet.vikar || existing?.name || timesheet.vikarEmail,
+      email: timesheet.vikarEmail || existing?.email || "",
       phone: timesheet.vikarPhone || existing?.phone || "",
       tradeSkills,
       competencies,
     });
   }
-  return [...byEmail.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+}
+
+export function workerReferenceKeys(worker: KnownWorker): string[] {
+  return [...new Set([worker.key, personLookupKey(worker.email)].filter(Boolean))];
+}
+
+export function listKnownContacts(): KnownContact[] {
+  const contacts: KnownContact[] = [];
+  const addContact = (name: string, email: string, phone: string) => {
+    const normalizedName = personLookupKey(name);
+    const normalizedEmail = personLookupKey(email);
+    if (!normalizedName && !normalizedEmail) return;
+    const existing = contacts.find(
+      (contact) =>
+        (normalizedName && personLookupKey(contact.name) === normalizedName) ||
+        (normalizedEmail && personLookupKey(contact.email) === normalizedEmail),
+    );
+    if (existing) {
+      existing.name = existing.name || name;
+      existing.email = existing.email || email;
+      existing.phone = existing.phone || phone;
+      existing.key = personLookupKey(existing.name) || personLookupKey(existing.email);
+      return;
+    }
+    contacts.push({
+      key: normalizedName || normalizedEmail,
+      name,
+      email,
+      phone,
+    });
+  };
+
+  for (const company of listCompanies()) {
+    addContact(company.contactName, company.contactEmail, company.contactPhone);
+    for (const project of company.projects) {
+      addContact(project.contactName, project.contactEmail, project.contactPhone);
+    }
+  }
+  for (const timesheet of readTimesheets()) {
+    addContact(timesheet.kontaktperson, timesheet.kontaktpersonEmail, timesheet.kontaktpersonPhone);
+  }
+
+  return contacts.sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
 export function calculateTimesheet(t: Timesheet): CalculationResult {

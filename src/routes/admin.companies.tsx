@@ -11,6 +11,7 @@ import {
   removeCompany,
   saveCompany,
   TRADE_SKILLS,
+  workerReferenceKeys,
   type Company,
   type CompanyProject,
   type TradeSkill,
@@ -239,8 +240,10 @@ function ProjectsSection({
     setProjectMailMessage("Sender projektbekræftelse…");
     try {
       const workers = project.workerEmails
-        .map((email) =>
-          knownWorkers.find((worker) => worker.email.toLowerCase() === email.toLowerCase()),
+        .map((reference) =>
+          knownWorkers.find((worker) =>
+            workerReferenceKeys(worker).includes(reference.toLowerCase()),
+          ),
         )
         .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker));
 
@@ -441,24 +444,29 @@ function ProjectsSection({
                             companies,
                             company.id,
                             project,
-                            worker.email,
+                            worker,
                           );
                           const disabled = Boolean(conflict);
+                          const workerReferences = workerReferenceKeys(worker);
+                          const isAttached = project.workerEmails.some((reference) =>
+                            workerReferences.includes(reference.toLowerCase()),
+                          );
                           return (
                             <label
-                              key={worker.email}
+                              key={worker.key}
                               className="flex items-start gap-2 text-sm"
                               title={conflict ? `Vikaren er allerede tilknyttet ${conflict}` : ""}
                             >
                               <input
                                 type="checkbox"
-                                checked={project.workerEmails.includes(worker.email)}
-                                disabled={disabled && !project.workerEmails.includes(worker.email)}
+                                checked={isAttached}
+                                disabled={disabled && !isAttached}
                                 onChange={(e) => {
                                   const workerEmails = e.target.checked
-                                    ? [...new Set([...project.workerEmails, worker.email])]
+                                    ? [...new Set([...project.workerEmails, worker.key])]
                                     : project.workerEmails.filter(
-                                        (email) => email !== worker.email,
+                                        (reference) =>
+                                          !workerReferences.includes(reference.toLowerCase()),
                                       );
                                   updateProject(index, { workerEmails });
                                 }}
@@ -528,14 +536,14 @@ function workerProjectConflict(
   companies: Company[],
   currentCompanyId: string,
   currentProject: CompanyProject,
-  workerEmail: string,
+  worker: ReturnType<typeof listKnownWorkers>[number],
 ): string {
   if (!currentProject.startDate || !currentProject.endDate) return "";
-  const email = workerEmail.toLowerCase();
+  const references = workerReferenceKeys(worker);
   for (const company of companies) {
     for (const project of company.projects) {
       if (company.id === currentCompanyId && project.id === currentProject.id) continue;
-      if (!project.workerEmails.some((item) => item.toLowerCase() === email)) continue;
+      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase()))) continue;
       if (projectDatesOverlap(currentProject, project)) {
         return `${company.name} / ${project.name || "unavngivet projekt"} (${formatDate(project.startDate)} – ${formatDate(project.endDate)})`;
       }
