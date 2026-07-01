@@ -29,6 +29,7 @@ function AdminList() {
   const [agreement, setAgreement] = useState("all");
   const [week, setWeek] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
+  const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
 
   const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
   const visibleSubmitted = useMemo(
@@ -65,6 +66,25 @@ function AdminList() {
     submitted.filter((item) => !item.archived && item.status === value).length;
   const archivedCount = submitted.filter((item) => item.archived).length;
 
+  const toggleArchiveMode = () => {
+    setArchiveMode((current) => {
+      if (current) setSelectedArchiveIds([]);
+      return !current;
+    });
+  };
+
+  const toggleArchiveSelection = (id: string, checked: boolean) => {
+    setSelectedArchiveIds((current) =>
+      checked ? [...new Set([...current, id])] : current.filter((item) => item !== id),
+    );
+  };
+
+  const archiveSelected = () => {
+    selectedArchiveIds.forEach((id) => setArchived(id, true));
+    setSelectedArchiveIds([]);
+    setArchiveMode(false);
+  };
+
   return (
     <AppShell allow={["admin"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
@@ -77,11 +97,18 @@ function AdminList() {
         <div className="flex flex-wrap gap-2">
           <Button
             variant={archiveMode ? "default" : "outline"}
-            onClick={() => setArchiveMode((current) => !current)}
+            onClick={archiveMode && selectedArchiveIds.length ? archiveSelected : toggleArchiveMode}
             disabled={!submitted.length}
           >
-            Arkiver
+            {archiveMode && selectedArchiveIds.length
+              ? `Arkivér valgte (${selectedArchiveIds.length})`
+              : "Arkiver"}
           </Button>
+          {archiveMode && (
+            <Button type="button" variant="outline" onClick={toggleArchiveMode}>
+              Annullér
+            </Button>
+          )}
           <Button variant="outline" onClick={exportCsv} disabled={!list.length}>
             Eksportér CSV
           </Button>
@@ -188,9 +215,12 @@ function AdminList() {
                       {archiveMode && (
                         <input
                           type="checkbox"
-                          checked={Boolean(item.archived)}
-                          onChange={(event) => setArchived(item.id, event.target.checked)}
-                          aria-label={`Arkiver timeseddel for ${item.vikar || "vikar"}`}
+                          checked={selectedArchiveIds.includes(item.id)}
+                          disabled={Boolean(item.archived)}
+                          onChange={(event) =>
+                            toggleArchiveSelection(item.id, event.target.checked)
+                          }
+                          aria-label={`Vælg timeseddel for ${item.vikar || "vikar"} til arkiv`}
                         />
                       )}
                     </td>
