@@ -122,6 +122,7 @@ function initialForm(): FormState {
     companyId: "",
     projectId: "",
     projectName: "",
+    projectEndDate: "",
     arbejdssted: "",
     kontaktperson: "",
     kontaktpersonPhone: "",
@@ -168,18 +169,25 @@ function CreateWorkerPage() {
   const selectedCompany = companies.find((item) => item.id === form.companyId);
   const companyProjects = selectedCompany?.projects ?? [];
   const selectedProject = companyProjects.find((project) => project.id === form.projectId);
+  const selectedProjectForAvailability = selectedProject
+    ? {
+        ...selectedProject,
+        startDate: form.startDate || selectedProject.startDate,
+        endDate: form.projectEndDate || selectedProject.endDate,
+      }
+    : undefined;
   const tradeMatchedWorkers = selectedProject?.tradeSkills.length
     ? knownWorkers.filter((worker) =>
         worker.tradeSkills.some((skill) => selectedProject.tradeSkills.includes(skill)),
       )
     : knownWorkers;
-  const projectWorkerOptions = selectedProject
+  const projectWorkerOptions = selectedProjectForAvailability
     ? tradeMatchedWorkers.filter(
         (worker) =>
           !workerProjectConflict(
             companies,
             selectedCompany?.id ?? "",
-            selectedProject,
+            selectedProjectForAvailability,
             worker.email,
           ),
       )
@@ -227,12 +235,15 @@ function CreateWorkerPage() {
   };
 
   const selectCompany = (name: string) => {
-    const company = companies.find((item) => item.name === name);
+    const company = companies.find(
+      (item) => item.name.trim().toLowerCase() === name.trim().toLowerCase(),
+    );
     update({
       brugervirksomhed: name,
       companyId: company?.id ?? "",
       projectId: "",
       projectName: "",
+      projectEndDate: "",
       ...(company
         ? {
             arbejdssted: company.address,
@@ -248,7 +259,7 @@ function CreateWorkerPage() {
   const selectProject = (projectId: string) => {
     const project = companyProjects.find((item) => item.id === projectId);
     if (!project) {
-      update({ projectId: "", projectName: "" });
+      update({ projectId: "", projectName: "", projectEndDate: "" });
       return;
     }
     const pauseMinutes = totalPauseMinutes(
@@ -258,6 +269,7 @@ function CreateWorkerPage() {
     update({
       projectId: project.id,
       projectName: project.name,
+      projectEndDate: project.endDate || form.projectEndDate,
       kontaktperson: project.contactName || selectedCompany?.contactName || form.kontaktperson,
       kontaktpersonPhone:
         project.contactPhone || selectedCompany?.contactPhone || form.kontaktpersonPhone,
@@ -339,6 +351,12 @@ function CreateWorkerPage() {
     requirePair(form.defaultDayWorkStart, form.defaultDayWorkEnd, "Dagarbejde");
     requirePair(form.defaultEveningWorkStart, form.defaultEveningWorkEnd, "Aftenarbejde");
     requirePair(form.defaultNightWorkStart, form.defaultNightWorkEnd, "Natarbejde");
+    if (form.projectId && !form.projectEndDate) {
+      nextErrors.push("Projektafslutning mangler for det valgte projekt");
+    }
+    if (form.projectEndDate && form.startDate && form.projectEndDate < form.startDate) {
+      nextErrors.push("Projektafslutning må ikke være før startdato");
+    }
     if (form.shiftWorkApplies) {
       form.weekPlan.forEach((day, index) => {
         if (!Number.isFinite(Number(day.pause)) || Number(day.pause) < 0)
@@ -461,23 +479,6 @@ function CreateWorkerPage() {
               onChange={(e) => update({ vikarPhone: e.target.value })}
             />
           </Field>
-          <Field label="Tidligere vikar">
-            <select
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value=""
-              onChange={(e) => applyWorker(e.target.value)}
-            >
-              <option value="">Vælg tidligere vikar…</option>
-              {projectWorkerOptions.map((worker) => (
-                <option key={worker.email} value={worker.email}>
-                  {worker.name} — {worker.email}
-                </option>
-              ))}
-            </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Listen filtreres efter projektets fag, når der er valgt projektfag.
-            </p>
-          </Field>
           <div>
             <TradeSkillPicker
               label="Vikarens fag *"
@@ -596,6 +597,34 @@ function CreateWorkerPage() {
               value={form.startDate}
               onChange={(e) => update({ startDate: e.target.value })}
             />
+          </Field>
+          <Field label="Projektafslutning">
+            <Input
+              type="date"
+              value={form.projectEndDate ?? ""}
+              onChange={(e) => update({ projectEndDate: e.target.value })}
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Bruges til at kontrollere, om en tidligere vikar er ledig i projektperioden.
+            </p>
+          </Field>
+          <Field label="Ledig / tidligere vikar">
+            <select
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value=""
+              onChange={(e) => applyWorker(e.target.value)}
+            >
+              <option value="">Vælg ledig tidligere vikar…</option>
+              {projectWorkerOptions.map((worker) => (
+                <option key={worker.email} value={worker.email}>
+                  {worker.name} — {worker.email}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Listen filtreres efter projektets fag og valgte periode, når projekt og
+              projektafslutning er valgt.
+            </p>
           </Field>
           <div className="md:col-span-2">
             <span className="mb-1.5 block text-sm font-medium">Arbejdstidstype</span>

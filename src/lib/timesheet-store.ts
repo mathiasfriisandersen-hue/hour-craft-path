@@ -163,6 +163,7 @@ export type Timesheet = {
   companyId?: string;
   projectId?: string;
   projectName?: string;
+  projectEndDate?: string;
   kontaktperson: string;
   kontaktpersonPhone: string;
   kontaktpersonEmail: string;
@@ -377,6 +378,7 @@ type StoredTimesheet = Omit<
   companyId?: string;
   projectId?: string;
   projectName?: string;
+  projectEndDate?: string;
   kontaktpersonPhone?: string;
   hourlyWage?: number;
   workerAccessCode?: string;
@@ -461,6 +463,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     companyId: value.companyId ?? "",
     projectId: value.projectId ?? "",
     projectName: value.projectName ?? "",
+    projectEndDate: value.projectEndDate ?? "",
     kontaktpersonPhone: value.kontaktpersonPhone ?? "",
     referenceNo: value.referenceNo ?? "",
     hourlyWage: Number(value.hourlyWage) || 0,
@@ -895,6 +898,7 @@ export function createBlank(): Timesheet {
     companyId: "",
     projectId: "",
     projectName: "",
+    projectEndDate: "",
     kontaktperson: "",
     kontaktpersonPhone: "",
     kontaktpersonEmail: "",
@@ -926,6 +930,7 @@ export type CreateWorkerTimesheetInput = {
   companyId?: string;
   projectId?: string;
   projectName?: string;
+  projectEndDate?: string;
   arbejdssted: string;
   kontaktperson: string;
   kontaktpersonPhone: string;
@@ -1046,6 +1051,7 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     companyId: input.companyId ?? "",
     projectId: input.projectId ?? "",
     projectName: input.projectName ?? "",
+    projectEndDate: input.projectEndDate ?? "",
     arbejdssted: input.arbejdssted.trim(),
     kontaktperson: input.kontaktperson.trim(),
     kontaktpersonPhone: input.kontaktpersonPhone.trim(),
