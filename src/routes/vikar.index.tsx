@@ -28,6 +28,7 @@ function VikarList() {
             <tr>
               <th className="px-4 py-3 font-medium">Uge</th>
               <th className="px-4 py-3 font-medium">Periode</th>
+              <th className="px-4 py-3 font-medium">Vikar</th>
               <th className="px-4 py-3 font-medium">Brugervirksomhed</th>
               <th className="px-4 py-3 font-medium">Timer</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -37,7 +38,7 @@ function VikarList() {
           <tbody>
             {list.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                   Ingen timesedler endnu. Brug linket i invitationsmailen fra Sub-Z.
                 </td>
               </tr>
@@ -49,6 +50,9 @@ function VikarList() {
                 </td>
                 <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
                   {formatWeekRange(t.weekStart)}
+                </td>
+                <td className="px-4 py-3">
+                  {t.vikar || <em className="text-muted-foreground">—</em>}
                 </td>
                 <td className="px-4 py-3">
                   {t.brugervirksomhed || <em className="text-muted-foreground">—</em>}
