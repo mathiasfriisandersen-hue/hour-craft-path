@@ -1387,6 +1387,10 @@ type EmailBodyOptions = {
   includeApprovalTerms?: boolean;
 };
 
+type MailTextOptions = {
+  footerMessage?: string;
+};
+
 export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string {
   const calc = calculateTimesheet(t);
   const dayLines = WEEKDAYS.map((name, index) => {
@@ -1459,7 +1463,7 @@ export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string 
   ].join("\n");
 }
 
-export function contactPersonEmailBody(t: Timesheet): string {
+export function contactPersonEmailBody(t: Timesheet, options: MailTextOptions = {}): string {
   const calc = calculateTimesheet(t);
   const dayLines = WEEKDAYS.map((name, index) => {
     const day = t.days[index];
@@ -1537,6 +1541,7 @@ export function contactPersonEmailBody(t: Timesheet): string {
     "",
     "Hvis der ikke modtages godkendelse eller skriftlig indsigelse inden fristen, anses timesedlen som godkendt i henhold til de aftalte forretningsbetingelser.",
     "",
+    ...(options.footerMessage ? [options.footerMessage, ""] : []),
     "Med venlig hilsen",
     "Sub-Z",
     "40601253",
@@ -1548,7 +1553,7 @@ export function workerSubmissionReceiptSubject(t: Timesheet): string {
   return `Timeseddel sendt til godkendelse – uge ${weekNumber(t.weekStart)}`;
 }
 
-export function workerSubmissionReceiptBody(t: Timesheet): string {
+export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptions = {}): string {
   const calc = calculateTimesheet(t);
   const manualAllowanceLines: string[] = [];
   if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
@@ -1607,6 +1612,7 @@ export function workerSubmissionReceiptBody(t: Timesheet): string {
     "STATUS",
     "Timesedlen er sendt til godkendelse hos kontaktpersonen.",
     "",
+    ...(options.footerMessage ? [options.footerMessage, ""] : []),
     "Har du spørgsmål til registreringen, skal du kontakte os hurtigst muligt.",
     "",
     "Med venlig hilsen",

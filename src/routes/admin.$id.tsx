@@ -42,6 +42,7 @@ function AdminDetail() {
   const [comment, setComment] = useState("");
   const [mailMessage, setMailMessage] = useState("");
   const [sendingMail, setSendingMail] = useState(false);
+  const [editingTimesheet, setEditingTimesheet] = useState(false);
 
   useEffect(() => {
     const found = getById(id);
@@ -68,8 +69,7 @@ function AdminDetail() {
 
   const updateDay = (index: number, patch: Partial<Timesheet["days"][number]>) => {
     const days = t.days.map((day, dayIndex) => (dayIndex === index ? { ...day, ...patch } : day));
-    const saved = upsert({ ...t, days });
-    setT(saved);
+    setT({ ...t, days });
   };
 
   const updateShiftWork = (index: number, checked: boolean) => {
@@ -93,6 +93,44 @@ function AdminDetail() {
     } catch {
       setMailMessage("Mailsystemet kunne ikke sende lige nu. Mailkladde åbnes som fallback.");
       window.location.href = mailtoUrl(t);
+    } finally {
+      setSendingMail(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    const fresh = getById(t.id);
+    if (fresh) setT(fresh);
+    setEditingTimesheet(false);
+  };
+
+  const saveEditAndNotify = async () => {
+    const wasRejected = t.status === "rejected";
+    const saved = upsert({
+      ...t,
+      status: wasRejected ? "sent" : t.status,
+      rejectionComment: wasRejected ? t.rejectionComment : t.rejectionComment,
+    });
+    setT(saved);
+    setEditingTimesheet(false);
+    setSendingMail(true);
+    setMailMessage("Gemmer redigering og sender opdateret timeseddel…");
+    try {
+      const result = await sendTimesheetEmail(saved, {
+        contactFooterMessage: wasRejected
+          ? "efter aftale er timeseddel redigeret"
+          : "timeseddel er redigeret",
+        workerFooterMessage: wasRejected
+          ? "pga. din timeseddel blev afvist er den redigeret kontakt os hvis du er uenig i afgørelsen"
+          : "timeseddel er redigeret",
+      });
+      setMailMessage(
+        result === "api"
+          ? "Redigering gemt, og opdateret timeseddel er sendt."
+          : "Redigering gemt. Mailsystemet er ikke konfigureret endnu. Mailkladde åbnes som fallback.",
+      );
+    } catch {
+      setMailMessage("Redigering gemt, men mailsystemet kunne ikke sende lige nu.");
     } finally {
       setSendingMail(false);
     }
@@ -209,31 +247,62 @@ function AdminDetail() {
       </div>
 
       <section className="mt-6 overflow-hidden rounded-lg border bg-card">
-        <h2 className="p-5 pb-3 font-semibold md:p-6 md:pb-3">Registreringer</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5 pb-3 md:p-6 md:pb-3">
+          <h2 className="font-semibold">Registreringer</h2>
+          {editingTimesheet ? (
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={cancelEdit} disabled={sendingMail}>
+                Annullér redigering
+              </Button>
+              <Button size="sm" onClick={saveEditAndNotify} disabled={sendingMail}>
+                {sendingMail ? "Sender…" : "Gem redigering og send mail"}
+              </Button>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={() => setEditingTimesheet(true)}>
+              Rediger timeseddel
+            </Button>
+          )}
+        </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1520px] text-sm">
+          <table
+            className={`w-full text-sm ${editingTimesheet ? "min-w-[1520px]" : "min-w-[760px]"}`}
+          >
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {[
-                  "Dag",
-                  "Type",
-                  "Start",
-                  "Slut",
-                  "Pause",
-                  "Pause 1",
-                  "Pause 2",
-                  "Dagarbejde",
-                  "Aftenarbejde",
-                  "Natarbejde",
-                  "Skiftehold",
-                  ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
-                  "Opgave",
-                  "Dagstype",
-                  "Arbejdstype",
-                  "Validering",
-                  "Kommentar",
-                  "Timer",
-                ].map((head) => (
+                {(editingTimesheet
+                  ? [
+                      "Dag",
+                      "Type",
+                      "Start",
+                      "Slut",
+                      "Pause",
+                      "Pause 1",
+                      "Pause 2",
+                      "Dagarbejde",
+                      "Aftenarbejde",
+                      "Natarbejde",
+                      "Skiftehold",
+                      ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
+                      "Opgave",
+                      "Dagstype",
+                      "Arbejdstype",
+                      "Validering",
+                      "Kommentar",
+                      "Timer",
+                    ]
+                  : [
+                      "Dag",
+                      "Type",
+                      "Start",
+                      "Slut",
+                      "Pause",
+                      ...(showDelayedMealBreak ? ["Udsat spisepause"] : []),
+                      "Opgave",
+                      "Kommentar",
+                      "Timer",
+                    ]
+                ).map((head) => (
                   <th key={head} className="px-3 py-2 font-medium">
                     {head}
                   </th>
@@ -251,94 +320,106 @@ function AdminDetail() {
                     <td className="px-3 py-3 tabular-nums">{day.start || "—"}</td>
                     <td className="px-3 py-3 tabular-nums">{day.end || "—"}</td>
                     <td className="px-3 py-3">{day.pause ? `${day.pause} min` : "—"}</td>
-                    <td className="px-3 py-3">
-                      <AdminTimeRange
-                        dayName={name}
-                        label="pause 1"
-                        start={day.pauseStart}
-                        end={day.pauseEnd}
-                        onStartChange={(value) => updateDay(index, { pauseStart: value })}
-                        onEndChange={(value) => updateDay(index, { pauseEnd: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <AdminTimeRange
-                        dayName={name}
-                        label="pause 2"
-                        start={day.pause2Start}
-                        end={day.pause2End}
-                        onStartChange={(value) => updateDay(index, { pause2Start: value })}
-                        onEndChange={(value) => updateDay(index, { pause2End: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <AdminTimeRange
-                        dayName={name}
-                        label="dagarbejde"
-                        start={day.dayWorkStart}
-                        end={day.dayWorkEnd}
-                        onStartChange={(value) => updateDay(index, { dayWorkStart: value })}
-                        onEndChange={(value) => updateDay(index, { dayWorkEnd: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <AdminTimeRange
-                        dayName={name}
-                        label="aftenarbejde"
-                        start={day.eveningWorkStart}
-                        end={day.eveningWorkEnd}
-                        onStartChange={(value) => updateDay(index, { eveningWorkStart: value })}
-                        onEndChange={(value) => updateDay(index, { eveningWorkEnd: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <AdminTimeRange
-                        dayName={name}
-                        label="natarbejde"
-                        start={day.nightWorkStart}
-                        end={day.nightWorkEnd}
-                        onStartChange={(value) => updateDay(index, { nightWorkStart: value })}
-                        onEndChange={(value) => updateDay(index, { nightWorkEnd: value })}
-                      />
-                    </td>
-                    <td className="px-3 py-3">
-                      <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                        <input
-                          type="checkbox"
-                          checked={day.shiftWork || day.workType === "shift_work"}
-                          onChange={(e) => updateShiftWork(index, e.target.checked)}
-                          className="h-4 w-4 rounded border-input"
-                        />
-                        Skiftehold
-                      </label>
-                    </td>
+                    {editingTimesheet && (
+                      <>
+                        <td className="px-3 py-3">
+                          <AdminTimeRange
+                            dayName={name}
+                            label="pause 1"
+                            start={day.pauseStart}
+                            end={day.pauseEnd}
+                            onStartChange={(value) => updateDay(index, { pauseStart: value })}
+                            onEndChange={(value) => updateDay(index, { pauseEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <AdminTimeRange
+                            dayName={name}
+                            label="pause 2"
+                            start={day.pause2Start}
+                            end={day.pause2End}
+                            onStartChange={(value) => updateDay(index, { pause2Start: value })}
+                            onEndChange={(value) => updateDay(index, { pause2End: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <AdminTimeRange
+                            dayName={name}
+                            label="dagarbejde"
+                            start={day.dayWorkStart}
+                            end={day.dayWorkEnd}
+                            onStartChange={(value) => updateDay(index, { dayWorkStart: value })}
+                            onEndChange={(value) => updateDay(index, { dayWorkEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <AdminTimeRange
+                            dayName={name}
+                            label="aftenarbejde"
+                            start={day.eveningWorkStart}
+                            end={day.eveningWorkEnd}
+                            onStartChange={(value) => updateDay(index, { eveningWorkStart: value })}
+                            onEndChange={(value) => updateDay(index, { eveningWorkEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <AdminTimeRange
+                            dayName={name}
+                            label="natarbejde"
+                            start={day.nightWorkStart}
+                            end={day.nightWorkEnd}
+                            onStartChange={(value) => updateDay(index, { nightWorkStart: value })}
+                            onEndChange={(value) => updateDay(index, { nightWorkEnd: value })}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={day.shiftWork || day.workType === "shift_work"}
+                              onChange={(e) => updateShiftWork(index, e.target.checked)}
+                              className="h-4 w-4 rounded border-input"
+                            />
+                            Skiftehold
+                          </label>
+                        </td>
+                      </>
+                    )}
                     {showDelayedMealBreak && (
                       <td className="px-3 py-3">{marker?.delayedMealBreakStatus ?? "—"}</td>
                     )}
                     <td className="px-3 py-3">{day.taskType || "—"}</td>
-                    <td className="px-3 py-3">{marker ? DAY_TYPE_LABEL[marker.dayType] : "—"}</td>
-                    <td className="px-3 py-3">{marker ? WORK_TYPE_LABEL[marker.workType] : "—"}</td>
-                    <td className="max-w-72 px-3 py-3 text-xs text-muted-foreground">
-                      {marker ? (
-                        <div className="space-y-1">
-                          <div>{marker.crossesMidnight ? "Vagt over midnat" : "Samme dag"}</div>
-                          <div>{marker.shiftStatus}</div>
-                          <div>{marker.weekendAgreementStatus}</div>
-                          {marker.warnings.map((warning) => (
-                            <div key={warning} className="text-status-sent-fg">
-                              {warning}
+                    {editingTimesheet && (
+                      <>
+                        <td className="px-3 py-3">
+                          {marker ? DAY_TYPE_LABEL[marker.dayType] : "—"}
+                        </td>
+                        <td className="px-3 py-3">
+                          {marker ? WORK_TYPE_LABEL[marker.workType] : "—"}
+                        </td>
+                        <td className="max-w-72 px-3 py-3 text-xs text-muted-foreground">
+                          {marker ? (
+                            <div className="space-y-1">
+                              <div>{marker.crossesMidnight ? "Vagt over midnat" : "Samme dag"}</div>
+                              <div>{marker.shiftStatus}</div>
+                              <div>{marker.weekendAgreementStatus}</div>
+                              {marker.warnings.map((warning) => (
+                                <div key={warning} className="text-status-sent-fg">
+                                  {warning}
+                                </div>
+                              ))}
+                              {marker.requiresManualValidation.map((item) => (
+                                <div key={item} className="text-status-sent-fg">
+                                  {item}
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                          {marker.requiresManualValidation.map((item) => (
-                            <div key={item} className="text-status-sent-fg">
-                              {item}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </>
+                    )}
                     <td className="max-w-64 px-3 py-3 text-muted-foreground">
                       {day.comment || "—"}
                     </td>

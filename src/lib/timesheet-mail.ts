@@ -42,7 +42,15 @@ async function timesheetMailApiUrl(): Promise<string> {
 
 export type TimesheetMailResult = "api" | "mailto";
 
-export async function sendTimesheetEmail(t: Timesheet): Promise<TimesheetMailResult> {
+type SendTimesheetEmailOptions = {
+  contactFooterMessage?: string;
+  workerFooterMessage?: string;
+};
+
+export async function sendTimesheetEmail(
+  t: Timesheet,
+  options: SendTimesheetEmailOptions = {},
+): Promise<TimesheetMailResult> {
   const mailApiUrl = await timesheetMailApiUrl();
 
   if (!mailApiUrl) {
@@ -60,11 +68,13 @@ export async function sendTimesheetEmail(t: Timesheet): Promise<TimesheetMailRes
       contactEmail: t.kontaktpersonEmail,
       replyTo: t.vikarEmail,
       subject: emailSubject(t),
-      text: contactPersonEmailBody(t),
+      text: contactPersonEmailBody(t, { footerMessage: options.contactFooterMessage }),
       adminText: emailBody(t),
       workerEmail: t.vikarEmail,
       workerSubject: workerSubmissionReceiptSubject(t),
-      workerText: workerSubmissionReceiptBody(t),
+      workerText: workerSubmissionReceiptBody(t, {
+        footerMessage: options.workerFooterMessage,
+      }),
     }),
   });
 
