@@ -17,6 +17,7 @@ import {
   weekNumber,
   type Timesheet,
 } from "@/lib/timesheet-store";
+import { getCollectiveAgreementById } from "@/lib/collectiveAgreements";
 import { addDaysToISODate, getDanishAgreementHolidayName } from "@/lib/danishHolidays";
 import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,9 @@ function VikarEdit() {
       pause: totalPauseMinutes([day.pauseStart, day.pauseEnd], [day.pause2Start, day.pause2End]),
     });
   };
-  const delayedMealBreakEnabled = isIndustriensAgreement(t.selectedAgreementId);
+  const selectedAgreement = getCollectiveAgreementById(t.selectedAgreementId);
+  const showDelayedMealBreak =
+    !t.localAgreementApplies && isIndustriensAgreement(t.selectedAgreementId);
   const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
 
   const selectCompany = (name: string) => {
@@ -274,22 +277,28 @@ function VikarEdit() {
             bekræfter du, at oplysningerne er korrekte efter din bedste viden. Bevidst afgivelse af
             urigtige oplysninger kan efter omstændighederne få ansættelsesmæssige konsekvenser.
           </p>
-          <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis
-            du blev bedt om at arbejde i din spisepause, og pausen blev udsat mere end 30 minutter.
-          </div>
+          <RegistrationRuleNotice
+            agreementName={selectedAgreement?.name ?? t.overenskomst ?? ""}
+            localAgreementApplies={t.localAgreementApplies}
+            showDelayedMealBreak={showDelayedMealBreak}
+          />
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1080px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {["Dag", "Start", "Slut", "Pause 1", "Pause 2", "Udskudt spisepause"].map(
-                  (head) => (
-                    <th key={head} className="px-3 py-2 font-medium">
-                      {head}
-                    </th>
-                  ),
-                )}
+                {[
+                  "Dag",
+                  "Start",
+                  "Slut",
+                  "Pause 1",
+                  "Pause 2",
+                  ...(showDelayedMealBreak ? ["Udskudt spisepause"] : []),
+                ].map((head) => (
+                  <th key={head} className="px-3 py-2 font-medium">
+                    {head}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -355,44 +364,46 @@ function VikarEdit() {
                         onEndChange={(value) => updateDayPauseRange(index, { pause2End: value })}
                       />
                     </td>
-                    <td className="px-3 py-2">
-                      <label
-                        className={cn(
-                          "inline-flex min-h-8 max-w-xs items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
-                          locked || absent
-                            ? "cursor-not-allowed opacity-60"
-                            : "cursor-pointer hover:bg-accent",
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 shrink-0 accent-primary"
-                          checked={
-                            day.wasInstructedToWorkDuringMealBreak &&
-                            day.mealBreakPostponedMoreThan30Min
-                          }
-                          disabled={locked || absent}
-                          onChange={(e) =>
-                            updateDay(index, {
-                              wasInstructedToWorkDuringMealBreak: e.target.checked,
-                              mealBreakPostponedMoreThan30Min: e.target.checked,
-                              delayedMealBreakCompensation: e.target.checked,
-                            })
-                          }
-                        />
-                        <span>
-                          Jeg blev bedt om at arbejde i min spisepause, og pausen blev udskudt mere
-                          end 30 min.
-                        </span>
-                      </label>
-                    </td>
+                    {showDelayedMealBreak && (
+                      <td className="px-3 py-2">
+                        <label
+                          className={cn(
+                            "inline-flex min-h-8 max-w-xs items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
+                            locked || absent
+                              ? "cursor-not-allowed opacity-60"
+                              : "cursor-pointer hover:bg-accent",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 shrink-0 accent-primary"
+                            checked={
+                              day.wasInstructedToWorkDuringMealBreak &&
+                              day.mealBreakPostponedMoreThan30Min
+                            }
+                            disabled={locked || absent}
+                            onChange={(e) =>
+                              updateDay(index, {
+                                wasInstructedToWorkDuringMealBreak: e.target.checked,
+                                mealBreakPostponedMoreThan30Min: e.target.checked,
+                                delayedMealBreakCompensation: e.target.checked,
+                              })
+                            }
+                          />
+                          <span>
+                            Jeg blev bedt om at arbejde i min spisepause, og pausen blev udskudt
+                            mere end 30 min.
+                          </span>
+                        </label>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
-        {delayedMealBreakEnabled && (
+        {showDelayedMealBreak && (
           <div className="border-t bg-muted/20 px-5 py-3 text-sm md:px-6">
             {delayedMealBreakSummaryText(delayedMealBreakDays)}
           </div>
@@ -413,6 +424,45 @@ function VikarEdit() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function RegistrationRuleNotice({
+  agreementName,
+  localAgreementApplies,
+  showDelayedMealBreak,
+}: {
+  agreementName: string;
+  localAgreementApplies: boolean;
+  showDelayedMealBreak: boolean;
+}) {
+  if (localAgreementApplies) {
+    return (
+      <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Lokalaftale:</span> Tillæg og
+        arbejdstidsforhold beregnes på baggrund af den lokalaftale, der er gældende hos
+        brugervirksomheden. Kun tillæg, der fremgår af den gældende lokalaftale og er relevante for
+        registreringen, indgår i beregningen.
+      </div>
+    );
+  }
+
+  if (showDelayedMealBreak) {
+    return (
+      <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+        <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis du
+        blev bedt om at arbejde i din spisepause, og pausen blev udsat mere end 30 minutter.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
+      <span className="font-medium text-foreground">Overenskomst:</span> Tillæg og
+      arbejdstidsforhold beregnes på baggrund af den overenskomst, der er gældende hos
+      brugervirksomheden{agreementName ? `: ${agreementName}` : ""}. Kun tillæg, der fremgår af den
+      gældende overenskomst og er relevante for registreringen, indgår i beregningen.
+    </div>
   );
 }
 
