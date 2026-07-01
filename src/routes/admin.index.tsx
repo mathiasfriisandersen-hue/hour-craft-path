@@ -27,9 +27,11 @@ function AdminList() {
   const [agreement, setAgreement] = useState("all");
   const [week, setWeek] = useState("");
 
+  const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
+
   const list = useMemo(() => {
     const needle = query.toLocaleLowerCase("da-DK");
-    return all.filter((item) => {
+    return submitted.filter((item) => {
       const text = `${item.vikar} ${item.brugervirksomhed} ${item.kontaktperson}`.toLocaleLowerCase(
         "da-DK",
       );
@@ -40,7 +42,7 @@ function AdminList() {
         (!week || String(weekNumber(item.weekStart)) === week)
       );
     });
-  }, [all, query, status, agreement, week]);
+  }, [submitted, query, status, agreement, week]);
 
   const exportCsv = () => {
     const blob = new Blob([timesheetsToCsv(list)], { type: "text/csv;charset=utf-8" });
@@ -52,7 +54,7 @@ function AdminList() {
     URL.revokeObjectURL(url);
   };
 
-  const counts = (value: Status) => all.filter((item) => item.status === value).length;
+  const counts = (value: Status) => submitted.filter((item) => item.status === value).length;
 
   return (
     <AppShell allow={["admin"]}>
@@ -69,7 +71,7 @@ function AdminList() {
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {(["draft", "sent", "approved", "rejected"] as Status[]).map((value) => (
+        {(["sent", "approved", "rejected"] as Status[]).map((value) => (
           <button
             key={value}
             onClick={() => setStatus(status === value ? "all" : value)}
@@ -94,11 +96,13 @@ function AdminList() {
             onChange={(e) => setStatus(e.target.value as Status | "all")}
           >
             <option value="all">Alle statusser</option>
-            {Object.entries(STATUS_LABEL).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
+            {Object.entries(STATUS_LABEL)
+              .filter(([value]) => value !== "draft")
+              .map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
           </select>
           <select
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
