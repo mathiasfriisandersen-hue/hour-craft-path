@@ -1363,7 +1363,7 @@ export function workerSubmissionReceiptBody(t: Timesheet): string {
     "",
     "Med venlig hilsen",
     "Sub-Z",
-    "—",
+    "40601253",
     "timesheet@send.mathiasfriisandersen.dk",
   ].join("\n");
 }
