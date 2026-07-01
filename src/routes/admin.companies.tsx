@@ -474,7 +474,7 @@ function ProjectsSection({
                               <span>
                                 <span className="font-medium">{worker.name}</span>
                                 <span className="block text-xs text-muted-foreground">
-                                  {worker.email} · {worker.tradeSkills.join(", ") || "Ingen fag"}
+                                  {worker.tradeSkills.join(", ") || "Ingen fag"}
                                 </span>
                                 {worker.competencies && (
                                   <span className="block text-xs text-muted-foreground">

@@ -664,7 +664,7 @@ function CreateWorkerPage() {
               <option value="">Vælg ledig tidligere vikar…</option>
               {projectWorkerOptions.map((worker) => (
                 <option key={worker.key} value={worker.key}>
-                  {worker.name} — {worker.email}
+                  {worker.name}
                 </option>
               ))}
             </select>

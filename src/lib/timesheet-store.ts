@@ -1417,7 +1417,7 @@ export function listKnownWorkers(): KnownWorker[] {
 }
 
 export function workerReferenceKeys(worker: KnownWorker): string[] {
-  return [...new Set([worker.key, personLookupKey(worker.email)].filter(Boolean))];
+  return [...new Set([worker.key].filter(Boolean))];
 }
 
 export function listKnownContacts(): KnownContact[] {
