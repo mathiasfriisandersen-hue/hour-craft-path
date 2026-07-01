@@ -7,10 +7,15 @@ import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import {
   createTimesheetForWorker,
   listCompanies,
+  listKnownWorkers,
+  TRADE_SKILLS,
   upsert,
   WEEKDAYS,
+  type CompanyProject,
   type CreateWorkerDayPlan,
   type CreateWorkerTimesheetInput,
+  type TradeSkill,
+  type WorkPeriod,
 } from "@/lib/timesheet-store";
 import { sendWorkerInviteEmail } from "@/lib/timesheet-mail";
 import { createShortWorkerInviteUrl } from "@/lib/worker-invite";
@@ -43,6 +48,12 @@ type FormState = Omit<
 type WorkerDayForm = Omit<CreateWorkerDayPlan, "pause"> & {
   pause: string;
 };
+
+function workPeriodTimes(workPeriod: WorkPeriod): { start: string; end: string } {
+  if (workPeriod === "evening") return { start: "14:00", end: "23:00" };
+  if (workPeriod === "night") return { start: "22:00", end: "07:00" };
+  return { start: "07:00", end: "15:00" };
+}
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -104,7 +115,11 @@ function initialForm(): FormState {
   return {
     vikar: "",
     vikarEmail: "",
+    tradeSkills: [],
     brugervirksomhed: "",
+    companyId: "",
+    projectId: "",
+    projectName: "",
     arbejdssted: "",
     kontaktperson: "",
     kontaktpersonPhone: "",
@@ -140,6 +155,7 @@ function generateOneTimeCode(): string {
 function CreateWorkerPage() {
   const navigate = useNavigate();
   const companies = listCompanies();
+  const knownWorkers = listKnownWorkers();
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
@@ -147,6 +163,14 @@ function CreateWorkerPage() {
   const [sending, setSending] = useState(false);
 
   const update = (patch: Partial<FormState>) => setForm((current) => ({ ...current, ...patch }));
+  const selectedCompany = companies.find((item) => item.id === form.companyId);
+  const companyProjects = selectedCompany?.projects ?? [];
+  const selectedProject = companyProjects.find((project) => project.id === form.projectId);
+  const projectWorkerOptions = selectedProject?.tradeSkills.length
+    ? knownWorkers.filter((worker) =>
+        worker.tradeSkills.some((skill) => selectedProject.tradeSkills.includes(skill)),
+      )
+    : knownWorkers;
 
   const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
     setForm((current) => ({
@@ -193,14 +217,83 @@ function CreateWorkerPage() {
     const company = companies.find((item) => item.name === name);
     update({
       brugervirksomhed: name,
+      companyId: company?.id ?? "",
+      projectId: "",
+      projectName: "",
       ...(company
         ? {
             arbejdssted: company.address,
             kontaktperson: company.contactName,
             kontaktpersonPhone: company.contactPhone,
             kontaktpersonEmail: company.contactEmail,
+            selectedAgreementId: company.selectedAgreementId || form.selectedAgreementId,
           }
         : {}),
+    });
+  };
+
+  const selectProject = (projectId: string) => {
+    const project = companyProjects.find((item) => item.id === projectId);
+    if (!project) {
+      update({ projectId: "", projectName: "" });
+      return;
+    }
+    const pauseMinutes = totalPauseMinutes(
+      [project.pauseStart, project.pauseEnd],
+      [project.pause2Start, project.pause2End],
+    );
+    update({
+      projectId: project.id,
+      projectName: project.name,
+      kontaktperson: project.contactName || selectedCompany?.contactName || form.kontaktperson,
+      kontaktpersonPhone:
+        project.contactPhone || selectedCompany?.contactPhone || form.kontaktpersonPhone,
+      kontaktpersonEmail:
+        project.contactEmail || selectedCompany?.contactEmail || form.kontaktpersonEmail,
+      referenceNo: project.referenceNo || form.referenceNo,
+      selectedAgreementId:
+        project.selectedAgreementId ||
+        selectedCompany?.selectedAgreementId ||
+        form.selectedAgreementId,
+      startDate: project.startDate || form.startDate,
+      defaultStart: project.defaultStart || form.defaultStart,
+      defaultEnd: project.defaultEnd || form.defaultEnd,
+      defaultPause: pauseMinutes ? String(pauseMinutes) : form.defaultPause,
+      defaultPauseStart: project.pauseStart || form.defaultPauseStart,
+      defaultPauseEnd: project.pauseEnd || form.defaultPauseEnd,
+      defaultPause2Start: project.pause2Start || form.defaultPause2Start,
+      defaultPause2End: project.pause2End || form.defaultPause2End,
+      defaultDayWorkStart: project.workPeriod === "day" ? project.defaultStart : "",
+      defaultDayWorkEnd: project.workPeriod === "day" ? project.defaultEnd : "",
+      defaultEveningWorkStart: project.workPeriod === "evening" ? project.defaultStart : "",
+      defaultEveningWorkEnd: project.workPeriod === "evening" ? project.defaultEnd : "",
+      defaultNightWorkStart: project.workPeriod === "night" ? project.defaultStart : "",
+      defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
+      tradeSkills: project.tradeSkills.length ? project.tradeSkills : form.tradeSkills,
+    });
+  };
+
+  const applyWorker = (email: string) => {
+    const worker = knownWorkers.find((item) => item.email === email);
+    if (!worker) return;
+    update({
+      vikar: worker.name,
+      vikarEmail: worker.email,
+      tradeSkills: worker.tradeSkills,
+    });
+  };
+
+  const applyWorkPeriod = (workPeriod: WorkPeriod) => {
+    const times = workPeriodTimes(workPeriod);
+    update({
+      defaultStart: times.start,
+      defaultEnd: times.end,
+      defaultDayWorkStart: workPeriod === "day" ? times.start : "",
+      defaultDayWorkEnd: workPeriod === "day" ? times.end : "",
+      defaultEveningWorkStart: workPeriod === "evening" ? times.start : "",
+      defaultEveningWorkEnd: workPeriod === "evening" ? times.end : "",
+      defaultNightWorkStart: workPeriod === "night" ? times.start : "",
+      defaultNightWorkEnd: workPeriod === "night" ? times.end : "",
     });
   };
 
@@ -212,6 +305,7 @@ function CreateWorkerPage() {
     if (!form.vikar.trim()) nextErrors.push("Vikarnavn mangler");
     if (!/^\S+@\S+\.\S+$/.test(form.vikarEmail))
       nextErrors.push("Vikarens mail mangler eller er ugyldig");
+    if (!form.tradeSkills?.length) nextErrors.push("Vælg mindst ét fag for vikaren");
     if (!form.brugervirksomhed.trim()) nextErrors.push("Brugervirksomhed mangler");
     if (!form.arbejdssted.trim()) nextErrors.push("Brugervirksomhed adresse/arbejdssted mangler");
     if (!form.kontaktperson.trim()) nextErrors.push("Kontaktperson mangler");
@@ -345,6 +439,30 @@ function CreateWorkerPage() {
               onChange={(e) => update({ vikarEmail: e.target.value })}
             />
           </Field>
+          <Field label="Tidligere vikar">
+            <select
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value=""
+              onChange={(e) => applyWorker(e.target.value)}
+            >
+              <option value="">Vælg tidligere vikar…</option>
+              {projectWorkerOptions.map((worker) => (
+                <option key={worker.email} value={worker.email}>
+                  {worker.name} — {worker.email}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Listen filtreres efter projektets fag, når der er valgt projektfag.
+            </p>
+          </Field>
+          <div>
+            <TradeSkillPicker
+              label="Vikarens fag *"
+              selected={form.tradeSkills ?? []}
+              onChange={(tradeSkills) => update({ tradeSkills })}
+            />
+          </div>
           <Field label="Engangskode">
             <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
               Genereres automatisk
@@ -366,6 +484,28 @@ function CreateWorkerPage() {
               ))}
             </datalist>
           </Field>
+          {companyProjects.length > 0 && (
+            <Field label="Projekt / afdeling">
+              <select
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                value={form.projectId || ""}
+                onChange={(e) => selectProject(e.target.value)}
+              >
+                <option value="">Ingen projekt valgt</option>
+                {companyProjects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name || "Unavngivet projekt"}
+                  </option>
+                ))}
+              </select>
+              {selectedProject && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Projektdata bruges som standard. Projektets overenskomst overstyrer virksomhedens
+                  standard, hvis den er valgt.
+                </p>
+              )}
+            </Field>
+          )}
           <Field label="Brugervirksomhed adresse / arbejdssted *">
             <Input
               value={form.arbejdssted}
@@ -427,6 +567,35 @@ function CreateWorkerPage() {
               onChange={(e) => update({ startDate: e.target.value })}
             />
           </Field>
+          <div className="md:col-span-2">
+            <span className="mb-1.5 block text-sm font-medium">Arbejdstidstype</span>
+            <div className="flex flex-wrap gap-3">
+              {(
+                [
+                  ["day", "Dag"],
+                  ["evening", "Aften"],
+                  ["night", "Nat"],
+                ] as Array<[WorkPeriod, string]>
+              ).map(([value, label]) => {
+                const times = workPeriodTimes(value);
+                const checked = form.defaultStart === times.start && form.defaultEnd === times.end;
+                return (
+                  <label key={value} className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="radio"
+                      name="admin-create-work-period"
+                      checked={checked}
+                      onChange={() => applyWorkPeriod(value)}
+                    />
+                    {label}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Valget forudfylder arbejdstiden. Tiderne kan stadig rettes manuelt bagefter.
+            </p>
+          </div>
           <div className="grid grid-cols-1 gap-3 md:col-span-2 md:grid-cols-2 lg:grid-cols-5">
             <TimeRangeField
               label="Pause 1 start / slut"
@@ -677,6 +846,39 @@ function InlineTimeRange({
         onDefault={() => defaultEnd && onEndChange(defaultEnd)}
         className="h-9 min-w-0 flex-1"
       />
+    </div>
+  );
+}
+
+function TradeSkillPicker({
+  label,
+  selected,
+  onChange,
+}: {
+  label: string;
+  selected: TradeSkill[];
+  onChange: (value: TradeSkill[]) => void;
+}) {
+  const toggle = (skill: TradeSkill, checked: boolean) => {
+    onChange(
+      checked ? [...new Set([...selected, skill])] : selected.filter((item) => item !== skill),
+    );
+  };
+  return (
+    <div>
+      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      <div className="grid max-h-44 gap-2 overflow-y-auto rounded-md border p-3 md:grid-cols-2">
+        {TRADE_SKILLS.map((skill) => (
+          <label key={skill} className="inline-flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={selected.includes(skill)}
+              onChange={(e) => toggle(skill, e.target.checked)}
+            />
+            {skill}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

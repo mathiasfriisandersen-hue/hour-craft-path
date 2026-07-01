@@ -48,6 +48,31 @@ export const WEEKDAYS = [
   "Søndag",
 ] as const;
 
+export const TRADE_SKILLS = [
+  "Industri / produktion",
+  "Montage",
+  "Smed / metal",
+  "Svejser",
+  "CNC / maskinarbejde",
+  "Træ / møbel",
+  "Tømrer / snedker",
+  "Byggeri / håndværk",
+  "Anlæg",
+  "Jord / beton",
+  "Murer",
+  "Murerarbejdsmand",
+  "Isolering",
+  "Maler",
+  "Elektriker",
+  "El-installation",
+  "VVS",
+  "Blikkenslager",
+  "Ufaglært / specialarbejder",
+] as const;
+
+export type TradeSkill = (typeof TRADE_SKILLS)[number];
+export type WorkPeriod = "day" | "evening" | "night";
+
 export type AbsenceType = "none" | "sick" | "vacation" | "dayoff";
 export type WorkType =
   | "normal"
@@ -131,7 +156,11 @@ export type Timesheet = {
   id: string;
   vikar: string;
   vikarEmail: string;
+  tradeSkills?: TradeSkill[];
   brugervirksomhed: string;
+  companyId?: string;
+  projectId?: string;
+  projectName?: string;
   kontaktperson: string;
   kontaktpersonPhone: string;
   kontaktpersonEmail: string;
@@ -161,7 +190,29 @@ export type Company = {
   contactPhone: string;
   contactEmail: string;
   address: string;
+  selectedAgreementId?: string;
   localAgreements: LocalAgreement[];
+  projects: CompanyProject[];
+};
+
+export type CompanyProject = {
+  id: string;
+  name: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  referenceNo: string;
+  startDate: string;
+  selectedAgreementId: string;
+  tradeSkills: TradeSkill[];
+  workerEmails: string[];
+  workPeriod: WorkPeriod;
+  defaultStart: string;
+  defaultEnd: string;
+  pauseStart: string;
+  pauseEnd: string;
+  pause2Start: string;
+  pause2End: string;
 };
 
 export type LocalAgreement = {
@@ -315,12 +366,74 @@ type StoredTimesheet = Omit<
   overenskomst?: string;
   lokalaftale?: boolean;
   vikarEmail?: string;
+  tradeSkills?: TradeSkill[];
+  companyId?: string;
+  projectId?: string;
+  projectName?: string;
   kontaktpersonPhone?: string;
   hourlyWage?: number;
   workerAccessCode?: string;
   workerMustChangeAccessCode?: boolean;
   notes?: string;
 };
+
+type StoredCompany = Omit<Company, "projects"> & {
+  selectedAgreementId?: string;
+  projects?: CompanyProject[];
+};
+
+function normalizeTradeSkills(value: unknown): TradeSkill[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((skill): skill is TradeSkill =>
+    (TRADE_SKILLS as readonly string[]).includes(String(skill)),
+  );
+}
+
+function normalizeWorkPeriod(value: unknown): WorkPeriod {
+  return value === "evening" || value === "night" ? value : "day";
+}
+
+function defaultTimesForWorkPeriod(workPeriod: WorkPeriod): { start: string; end: string } {
+  if (workPeriod === "evening") return { start: "14:00", end: "23:00" };
+  if (workPeriod === "night") return { start: "22:00", end: "07:00" };
+  return { start: "07:00", end: "15:00" };
+}
+
+function normalizeProject(project: Partial<CompanyProject>): CompanyProject {
+  const workPeriod = normalizeWorkPeriod(project.workPeriod);
+  const defaults = defaultTimesForWorkPeriod(workPeriod);
+  return {
+    id: project.id || crypto.randomUUID(),
+    name: project.name ?? "",
+    contactName: project.contactName ?? "",
+    contactPhone: project.contactPhone ?? "",
+    contactEmail: project.contactEmail ?? "",
+    referenceNo: project.referenceNo ?? "",
+    startDate: project.startDate ?? "",
+    selectedAgreementId: project.selectedAgreementId ?? "",
+    tradeSkills: normalizeTradeSkills(project.tradeSkills),
+    workerEmails: Array.isArray(project.workerEmails)
+      ? [...new Set(project.workerEmails.filter(Boolean))]
+      : [],
+    workPeriod,
+    defaultStart: project.defaultStart || defaults.start,
+    defaultEnd: project.defaultEnd || defaults.end,
+    pauseStart: project.pauseStart ?? "",
+    pauseEnd: project.pauseEnd ?? "",
+    pause2Start: project.pause2Start ?? "",
+    pause2End: project.pause2End ?? "",
+  };
+}
+
+function normalizeCompany(company: StoredCompany): Company {
+  return {
+    ...company,
+    contactPhone: company.contactPhone ?? "",
+    selectedAgreementId: company.selectedAgreementId ?? "",
+    localAgreements: company.localAgreements ?? [],
+    projects: (company.projects ?? []).map(normalizeProject),
+  };
+}
 
 function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
@@ -333,6 +446,10 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   return {
     ...value,
     vikarEmail: value.vikarEmail ?? "",
+    tradeSkills: normalizeTradeSkills(value.tradeSkills),
+    companyId: value.companyId ?? "",
+    projectId: value.projectId ?? "",
+    projectName: value.projectName ?? "",
     kontaktpersonPhone: value.kontaktpersonPhone ?? "",
     referenceNo: value.referenceNo ?? "",
     hourlyWage: Number(value.hourlyWage) || 0,
@@ -693,7 +810,11 @@ export function createBlank(): Timesheet {
     id: crypto.randomUUID(),
     vikar: "",
     vikarEmail: "",
+    tradeSkills: [],
     brugervirksomhed: "",
+    companyId: "",
+    projectId: "",
+    projectName: "",
     kontaktperson: "",
     kontaktpersonPhone: "",
     kontaktpersonEmail: "",
@@ -718,7 +839,11 @@ export function createBlank(): Timesheet {
 export type CreateWorkerTimesheetInput = {
   vikar: string;
   vikarEmail: string;
+  tradeSkills?: TradeSkill[];
   brugervirksomhed: string;
+  companyId?: string;
+  projectId?: string;
+  projectName?: string;
   arbejdssted: string;
   kontaktperson: string;
   kontaktpersonPhone: string;
@@ -832,7 +957,11 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     ...base,
     vikar: input.vikar.trim(),
     vikarEmail: input.vikarEmail.trim(),
+    tradeSkills: normalizeTradeSkills(input.tradeSkills),
     brugervirksomhed: input.brugervirksomhed.trim(),
+    companyId: input.companyId ?? "",
+    projectId: input.projectId ?? "",
+    projectName: input.projectName ?? "",
     arbejdssted: input.arbejdssted.trim(),
     kontaktperson: input.kontaktperson.trim(),
     kontaktpersonPhone: input.kontaktpersonPhone.trim(),
@@ -983,17 +1112,15 @@ export function getRule(agreementId: string): AgreementRule | undefined {
 }
 
 export function listCompanies(): Company[] {
-  return safeParse<Company[]>(COMPANY_KEY, []).map((company) => ({
-    ...company,
-    contactPhone: company.contactPhone ?? "",
-  }));
+  return safeParse<StoredCompany[]>(COMPANY_KEY, []).map(normalizeCompany);
 }
 
 export function saveCompany(company: Company): void {
   const list = listCompanies();
-  const index = list.findIndex((item) => item.id === company.id);
-  if (index >= 0) list[index] = company;
-  else list.push(company);
+  const updated = normalizeCompany(company);
+  const index = list.findIndex((item) => item.id === updated.id);
+  if (index >= 0) list[index] = updated;
+  else list.push(updated);
   setStorageItem(COMPANY_KEY, JSON.stringify(list));
   emit();
 }
@@ -1004,6 +1131,30 @@ export function removeCompany(id: string): void {
     JSON.stringify(listCompanies().filter((company) => company.id !== id)),
   );
   emit();
+}
+
+export type KnownWorker = {
+  name: string;
+  email: string;
+  tradeSkills: TradeSkill[];
+};
+
+export function listKnownWorkers(): KnownWorker[] {
+  const byEmail = new Map<string, KnownWorker>();
+  for (const timesheet of readTimesheets()) {
+    const email = timesheet.vikarEmail.trim().toLowerCase();
+    if (!email) continue;
+    const existing = byEmail.get(email);
+    const tradeSkills = [
+      ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
+    ];
+    byEmail.set(email, {
+      name: timesheet.vikar || existing?.name || email,
+      email: timesheet.vikarEmail,
+      tradeSkills,
+    });
+  }
+  return [...byEmail.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
 export function calculateTimesheet(t: Timesheet): CalculationResult {
