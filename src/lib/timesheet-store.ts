@@ -254,6 +254,7 @@ export type CalculationResult = {
 const TIMESHEET_KEY = "timesheets-v1";
 const RULE_KEY = "timesheet-rules-v1";
 const COMPANY_KEY = "timesheet-companies-v1";
+const APP_STATE_META_KEY = "timesheet-app-state-updated-at-v1";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
 export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
@@ -776,12 +777,61 @@ function emit(): void {
   window.dispatchEvent(new Event("timesheets-changed"));
 }
 
+function localUpdatedAt(): string {
+  const stored = storageForKey(APP_STATE_META_KEY)?.getItem(APP_STATE_META_KEY) ?? "";
+  if (stored) return stored;
+  const timesheetUpdatedAt = readTimesheets()
+    .map((item) => item.updatedAt)
+    .sort()
+    .at(-1);
+  if (timesheetUpdatedAt) return timesheetUpdatedAt;
+  return listCompanies().length > 0 ? new Date().toISOString() : "";
+}
+
+function markLocalUpdated(updatedAt = new Date().toISOString()): void {
+  setStorageItem(APP_STATE_META_KEY, updatedAt);
+}
+
+function workerApiUrl(path: string, baseUrl: string): string {
+  return new URL(path, baseUrl).toString();
+}
+
+const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
+let runtimeMailApiUrl: string | undefined;
+let runtimeConfigPromise: Promise<string> | undefined;
+
+async function loadRuntimeMailApiUrl(): Promise<string> {
+  if (runtimeMailApiUrl !== undefined) return runtimeMailApiUrl;
+
+  runtimeConfigPromise ??= fetch(`${import.meta.env.BASE_URL}mail-config.json`, {
+    cache: "no-store",
+  })
+    .then(async (response) => {
+      if (!response.ok) return "";
+      const config = (await response.json()) as { timesheetMailApiUrl?: string };
+      return config.timesheetMailApiUrl?.trim() ?? "";
+    })
+    .catch(() => "");
+
+  runtimeMailApiUrl = await runtimeConfigPromise;
+  return runtimeMailApiUrl;
+}
+
+async function appStateApiUrl(): Promise<string> {
+  const mailApiUrl = BUILD_TIME_MAIL_API_URL || (await loadRuntimeMailApiUrl());
+  return mailApiUrl ? workerApiUrl("/app-state", mailApiUrl) : "";
+}
+
 function readTimesheets(): Timesheet[] {
   return safeParse<Timesheet[]>(TIMESHEET_KEY, []).map(normalizeTimesheet);
 }
 
-function writeTimesheets(list: Timesheet[]): void {
+function writeTimesheets(list: Timesheet[], options: { syncRemote?: boolean } = {}): void {
   setStorageItem(TIMESHEET_KEY, JSON.stringify(list));
+  if (options.syncRemote !== false) {
+    markLocalUpdated();
+    queueRemoteAppStatePersist();
+  }
   emit();
 }
 
@@ -817,6 +867,8 @@ export function remove(id: string): void {
 export function clearAll(): void {
   if (typeof window === "undefined") return;
   removeStorageItem(TIMESHEET_KEY);
+  markLocalUpdated();
+  queueRemoteAppStatePersist();
   emit();
 }
 
@@ -1138,6 +1190,8 @@ export function saveCompany(company: Company): void {
   if (index >= 0) list[index] = updated;
   else list.push(updated);
   setStorageItem(COMPANY_KEY, JSON.stringify(list));
+  markLocalUpdated();
+  queueRemoteAppStatePersist();
   emit();
 }
 
@@ -1146,7 +1200,146 @@ export function removeCompany(id: string): void {
     COMPANY_KEY,
     JSON.stringify(listCompanies().filter((company) => company.id !== id)),
   );
+  markLocalUpdated();
+  queueRemoteAppStatePersist();
   emit();
+}
+
+type RemoteAppState = {
+  version?: number;
+  updatedAt?: string;
+  timesheets?: StoredTimesheet[];
+  companies?: StoredCompany[];
+};
+
+type NormalizedAppState = {
+  version: 1;
+  updatedAt: string;
+  timesheets: Timesheet[];
+  companies: Company[];
+};
+
+let remotePersistTimer: number | undefined;
+let remoteSyncPromise: Promise<void> | undefined;
+
+function currentAppState(): NormalizedAppState {
+  return {
+    version: 1,
+    updatedAt: localUpdatedAt(),
+    timesheets: readTimesheets(),
+    companies: listCompanies(),
+  };
+}
+
+function mergeTimesheets(local: Timesheet[], remote: Timesheet[]): Timesheet[] {
+  const byId = new Map<string, Timesheet>();
+  for (const item of remote) byId.set(item.id, item);
+  for (const item of local) {
+    const existing = byId.get(item.id);
+    if (!existing || item.updatedAt >= existing.updatedAt) {
+      byId.set(item.id, item);
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolean): Company[] {
+  const byId = new Map<string, Company>();
+  for (const item of preferLocal ? remote : local) byId.set(item.id, item);
+  for (const item of preferLocal ? local : remote) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+}
+
+function applyAppState(state: RemoteAppState, updatedAt: string): void {
+  const timesheets = Array.isArray(state.timesheets)
+    ? state.timesheets.map((item) => normalizeTimesheet(item))
+    : [];
+  const companies = Array.isArray(state.companies)
+    ? state.companies.map((item) => normalizeCompany(item))
+    : [];
+
+  writeTimesheets(timesheets, { syncRemote: false });
+  setStorageItem(COMPANY_KEY, JSON.stringify(companies));
+  markLocalUpdated(updatedAt);
+  emit();
+}
+
+async function persistRemoteAppState(): Promise<void> {
+  const url = await appStateApiUrl();
+  if (!url) return;
+
+  const state = currentAppState();
+  if (!state.updatedAt) return;
+
+  await fetch(url, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(state),
+  }).catch(() => undefined);
+}
+
+function queueRemoteAppStatePersist(): void {
+  if (typeof window === "undefined") return;
+  if (remotePersistTimer) window.clearTimeout(remotePersistTimer);
+  remotePersistTimer = window.setTimeout(() => {
+    void persistRemoteAppState();
+  }, 400);
+}
+
+export async function syncRemoteAppState(): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (remoteSyncPromise) return remoteSyncPromise;
+
+  remoteSyncPromise = (async () => {
+    const url = await appStateApiUrl();
+    if (!url) return;
+
+    const response = await fetch(url, { cache: "no-store" }).catch(() => undefined);
+    if (!response?.ok) return;
+    const body = (await response.json().catch(() => undefined)) as
+      | { ok?: boolean; state?: RemoteAppState }
+      | undefined;
+    if (!body?.ok || !body.state) return;
+
+    const remoteUpdatedAt = body.state.updatedAt ?? "";
+    const localState = currentAppState();
+    const preferLocal = !remoteUpdatedAt || localState.updatedAt >= remoteUpdatedAt;
+    const remoteTimesheets = Array.isArray(body.state.timesheets)
+      ? body.state.timesheets.map((item) => normalizeTimesheet(item))
+      : [];
+    const remoteCompanies = Array.isArray(body.state.companies)
+      ? body.state.companies.map((item) => normalizeCompany(item))
+      : [];
+    const mergedTimesheets = mergeTimesheets(localState.timesheets, remoteTimesheets);
+    const mergedCompanies = mergeCompanies(localState.companies, remoteCompanies, preferLocal);
+    const mergedUpdatedAt =
+      [localState.updatedAt, remoteUpdatedAt].filter(Boolean).sort().at(-1) ||
+      new Date().toISOString();
+
+    applyAppState(
+      {
+        version: 1,
+        updatedAt: mergedUpdatedAt,
+        timesheets: mergedTimesheets,
+        companies: mergedCompanies,
+      },
+      mergedUpdatedAt,
+    );
+
+    if (
+      localState.updatedAt !== remoteUpdatedAt ||
+      mergedTimesheets.length !== remoteTimesheets.length ||
+      mergedCompanies.length !== remoteCompanies.length
+    ) {
+      await persistRemoteAppState();
+    }
+  })().finally(() => {
+    remoteSyncPromise = undefined;
+  });
+
+  return remoteSyncPromise;
 }
 
 export type KnownWorker = {

@@ -31,11 +31,20 @@ type WorkerInviteCreatePayload = {
   timesheet?: unknown;
 };
 
+type AppStatePayload = {
+  version?: number;
+  updatedAt?: string;
+  timesheets?: unknown[];
+  companies?: unknown[];
+};
+
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const MAX_TEXT_LENGTH = 60_000;
 const MAX_HTML_LENGTH = 120_000;
+const MAX_APP_STATE_LENGTH = 900_000;
 const INVITE_TTL_SECONDS = 7 * 24 * 60 * 60;
 const INVITE_TOKEN_BYTES = 12;
+const APP_STATE_KEY = "app-state-v1";
 
 function jsonResponse(body: unknown, status: number, headers: HeadersInit = {}) {
   return new Response(JSON.stringify(body), {
@@ -113,6 +122,14 @@ async function parseInviteCreatePayload(
   }
 }
 
+async function parseAppStatePayload(request: Request): Promise<AppStatePayload | undefined> {
+  try {
+    return (await request.json()) as AppStatePayload;
+  } catch {
+    return undefined;
+  }
+}
+
 function randomToken(): string {
   const bytes = new Uint8Array(INVITE_TOKEN_BYTES);
   crypto.getRandomValues(bytes);
@@ -148,6 +165,34 @@ async function readWorkerInvite(token: string, env: Env) {
   const invite = await env.WORKER_INVITES.get(token);
   if (!invite) throw new Error("Invitationen er udløbet eller findes ikke");
   return JSON.parse(invite) as unknown;
+}
+
+async function readAppState(env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  const stored = await env.WORKER_INVITES.get(APP_STATE_KEY);
+  if (!stored) {
+    return { version: 1, updatedAt: "", timesheets: [], companies: [] };
+  }
+  return JSON.parse(stored) as unknown;
+}
+
+async function writeAppState(payload: AppStatePayload, env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  if (!Array.isArray(payload.timesheets)) throw new Error("Timesedler mangler");
+  if (!Array.isArray(payload.companies)) throw new Error("Virksomheder mangler");
+
+  const state = {
+    version: 1,
+    updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString(),
+    timesheets: payload.timesheets,
+    companies: payload.companies,
+  };
+  const serialized = JSON.stringify(state);
+  if (serialized.length > MAX_APP_STATE_LENGTH) {
+    throw new Error("App-data er for stor til at blive gemt");
+  }
+  await env.WORKER_INVITES.put(APP_STATE_KEY, serialized);
+  return state;
 }
 
 async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
@@ -239,7 +284,9 @@ export default {
       !(
         (request.method === "POST" && url.pathname === "/send-timesheet") ||
         (request.method === "POST" && url.pathname === "/create-worker-invite") ||
-        (request.method === "GET" && url.pathname === "/worker-invite")
+        (request.method === "GET" && url.pathname === "/worker-invite") ||
+        (request.method === "GET" && url.pathname === "/app-state") ||
+        (request.method === "POST" && url.pathname === "/app-state")
       )
     ) {
       return jsonResponse({ ok: false, error: "Not found" }, 404, headers);
@@ -257,6 +304,20 @@ export default {
         }
         const invite = await createWorkerInvite(invitePayload, env);
         return jsonResponse({ ok: true, invite }, 200, headers);
+      }
+
+      if (request.method === "GET" && url.pathname === "/app-state") {
+        const state = await readAppState(env);
+        return jsonResponse({ ok: true, state }, 200, headers);
+      }
+
+      if (request.method === "POST" && url.pathname === "/app-state") {
+        const appStatePayload = await parseAppStatePayload(request);
+        if (!appStatePayload) {
+          return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, headers);
+        }
+        const state = await writeAppState(appStatePayload, env);
+        return jsonResponse({ ok: true, state }, 200, headers);
       }
 
       if (request.method === "GET" && url.pathname === "/worker-invite") {

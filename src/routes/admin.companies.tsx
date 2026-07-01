@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +69,10 @@ function CompaniesPage() {
   const knownWorkers = listKnownWorkers();
   const refresh = () => setCompanies(listCompanies());
   const update = (patch: Partial<Company>) => editing && setEditing({ ...editing, ...patch });
+  useEffect(() => {
+    window.addEventListener("timesheets-changed", refresh);
+    return () => window.removeEventListener("timesheets-changed", refresh);
+  }, []);
   const save = () => {
     if (!editing?.name.trim()) return;
     saveCompany(editing);

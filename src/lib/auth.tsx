@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { syncRemoteAppState } from "@/lib/timesheet-store";
 
 export type Role = "vikar" | "kontaktperson" | "admin";
 
@@ -31,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Role | null;
       if (stored === "vikar" || stored === "kontaktperson" || stored === "admin") {
@@ -39,7 +41,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    setReady(true);
+    syncRemoteAppState()
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = (r: Role) => {
@@ -48,7 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       /* ignore */
     }
-    setRole(r);
+    syncRemoteAppState()
+      .catch(() => undefined)
+      .finally(() => setRole(r));
   };
 
   const logout = () => {
