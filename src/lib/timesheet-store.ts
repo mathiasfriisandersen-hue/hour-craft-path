@@ -1213,7 +1213,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
 }
 
 export function emailSubject(t: Timesheet): string {
-  return `Timeseddel – ${t.vikar} – uge ${weekNumber(t.weekStart)} – ${t.brugervirksomhed}`;
+  return `Timeseddel til godkendelse – uge ${weekNumber(t.weekStart)}`;
 }
 
 type EmailBodyOptions = {
@@ -1293,7 +1293,88 @@ export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string 
 }
 
 export function contactPersonEmailBody(t: Timesheet): string {
-  return emailBody(t, { includeApprovalTerms: true });
+  const calc = calculateTimesheet(t);
+  const dayLines = WEEKDAYS.map((name, index) => {
+    const day = t.days[index];
+    const date = addDaysToISODate(t.weekStart, index);
+    const registration =
+      day.absence !== "none"
+        ? ABSENCE_LABEL[day.absence]
+        : day.start && day.end
+          ? `${day.start}–${day.end}, pause ${day.pause} min, ${dayHours(day).toFixed(2)} t`
+          : "Ingen registrering";
+    const delayedMealBreakDetail =
+      isIndustriensAgreement(t.selectedAgreementId) &&
+      day.absence === "none" &&
+      delayedMealBreakTriggered(day)
+        ? "Udsat spisepause 30+ min efter besked fra virksomheden"
+        : "";
+    const details = [
+      day.taskType,
+      day.workType !== "normal" ? WORK_TYPE_LABEL[day.workType] : "",
+      explicitShiftWork(day) ? "Skiftehold markeret" : "",
+      delayedMealBreakDetail,
+      day.comment,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `${name} ${formatDateLabel(date)}: ${registration}${details ? ` (${details})` : ""}`;
+  });
+
+  const manualAllowanceLines: string[] = [];
+  if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
+    manualAllowanceLines.push(delayedMealBreakSummaryText(calc.delayedMealBreakDays));
+  }
+  if (manualAllowanceLines.length === 0) {
+    manualAllowanceLines.push("Ingen manuelle tillæg registreret.");
+  }
+
+  return [
+    `Hej ${t.kontaktperson || "kontaktperson"}`,
+    "",
+    `Du modtager hermed timeseddel for ${t.vikar || "vikaren"} hos ${
+      t.brugervirksomhed || "brugervirksomheden"
+    } for uge ${weekNumber(t.weekStart)}.`,
+    "",
+    "Vil du venligst gennemgå registreringerne og godkende timesedlen senest tirsdag efter fremsendelsen.",
+    "",
+    "Hvis der er fejl eller indsigelser, skal de sendes skriftligt inden samme frist med angivelse af, hvilke registreringer der bestrides, og hvorfor.",
+    "",
+    "TIMESSEDDEL TIL GODKENDELSE",
+    "",
+    "OPLYSNINGER",
+    `Vikar: ${t.vikar || "—"}`,
+    `Brugervirksomhed: ${t.brugervirksomhed || "—"}`,
+    `Kontaktperson: ${t.kontaktperson || "—"}`,
+    `Kontaktperson telefon: ${t.kontaktpersonPhone || "—"}`,
+    `Reference: ${t.referenceNo || "—"}`,
+    `Arbejdssted: ${t.arbejdssted || "—"}`,
+    `Uge og dato: Uge ${weekNumber(t.weekStart)} (${formatDateLabel(t.weekStart)} – ${formatDateLabel(
+      addDaysToISODate(t.weekStart, 6),
+    )})`,
+    "",
+    "REGISTRERINGER",
+    ...dayLines,
+    "",
+    "SAMLET TIMETAL",
+    `${calc.total.toFixed(2)} timer`,
+    "",
+    "MANUELLE TILLÆG",
+    ...manualAllowanceLines,
+    "",
+    "NOTER",
+    t.notes || "—",
+    "",
+    "GODKENDELSE OG INDSIGELSER",
+    "Timesedlen skal godkendes eller bestrides skriftligt senest tirsdag efter fremsendelsen.",
+    "",
+    "Hvis der ikke modtages godkendelse eller skriftlig indsigelse inden fristen, anses timesedlen som godkendt i henhold til de aftalte forretningsbetingelser.",
+    "",
+    "Med venlig hilsen",
+    "Sub-Z",
+    "40601253",
+    "timesheet@send.mathiasfriisandersen.dk",
+  ].join("\n");
 }
 
 export function workerSubmissionReceiptSubject(t: Timesheet): string {
