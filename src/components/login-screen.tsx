@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
-import { getById } from "@/lib/timesheet-store";
+import { findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
@@ -23,15 +23,26 @@ export function LoginScreen() {
     const validVikarPassword =
       role === "vikar" &&
       vikarTimesheet?.workerAccessCode === password &&
+      vikarTimesheet.workerMustChangeAccessCode === false &&
       /^\d{4,8}$/.test(password);
+    const matchedVikarTimesheet =
+      role === "vikar" && !validVikarPassword ? findByWorkerAccessCode(password) : undefined;
     const validDemoPassword = password === DEMO_PASSWORD;
 
-    if (!validDemoPassword && !validVikarPassword) {
+    if (!validDemoPassword && !validVikarPassword && !matchedVikarTimesheet) {
       setError("Forkert adgangskode");
       return;
     }
     setError(null);
     login(role);
+    if (validVikarPassword && vikarTimesheet) {
+      navigate({ to: "/vikar/$id", params: { id: vikarTimesheet.id }, replace: true });
+      return;
+    }
+    if (matchedVikarTimesheet) {
+      navigate({ to: "/vikar/$id", params: { id: matchedVikarTimesheet.id }, replace: true });
+      return;
+    }
     navigate({ to: ROLE_HOME[role], replace: true });
   };
 

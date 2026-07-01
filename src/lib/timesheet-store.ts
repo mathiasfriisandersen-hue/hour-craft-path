@@ -793,6 +793,13 @@ export function getById(id: string): Timesheet | undefined {
   return readTimesheets().find((item) => item.id === id);
 }
 
+export function findByWorkerAccessCode(code: string): Timesheet | undefined {
+  if (!/^\d{4,8}$/.test(code)) return undefined;
+  return readTimesheets().find(
+    (item) => item.workerAccessCode === code && item.workerMustChangeAccessCode === false,
+  );
+}
+
 export function upsert(t: Timesheet): Timesheet {
   const list = readTimesheets();
   const updated = normalizeTimesheet({ ...t, updatedAt: new Date().toISOString() });
