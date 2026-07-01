@@ -741,14 +741,20 @@ function uniqueMessages(markers: DayRuleMarker[]): string[] {
 
 function storageForKey(key: string): Storage | undefined {
   if (typeof window === "undefined") return undefined;
-  return key === RULE_KEY ? window.localStorage : window.sessionStorage;
+  return window.localStorage;
 }
 
 function safeParse<T>(key: string, fallback: T): T {
   const storage = storageForKey(key);
   if (!storage) return fallback;
   try {
-    const raw = storage.getItem(key);
+    let raw = storage.getItem(key);
+    if (!raw && typeof window !== "undefined") {
+      raw = window.sessionStorage.getItem(key);
+      if (raw) {
+        storage.setItem(key, raw);
+      }
+    }
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -761,6 +767,9 @@ function setStorageItem(key: string, value: string): void {
 
 function removeStorageItem(key: string): void {
   storageForKey(key)?.removeItem(key);
+  if (typeof window !== "undefined") {
+    window.sessionStorage.removeItem(key);
+  }
 }
 
 function emit(): void {
