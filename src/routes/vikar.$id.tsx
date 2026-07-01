@@ -21,6 +21,11 @@ import { addDaysToISODate, getDanishAgreementHolidayName } from "@/lib/danishHol
 import { sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { cn } from "@/lib/utils";
 
+const DEFAULT_PAUSE_1_START = "09:00";
+const DEFAULT_PAUSE_1_END = "09:30";
+const DEFAULT_PAUSE_2_START = "12:00";
+const DEFAULT_PAUSE_2_END = "12:30";
+
 export const Route = createFileRoute("/vikar/$id")({
   head: () => ({ meta: [{ title: "Vikar — Timeseddel" }] }),
   component: VikarEdit,
@@ -33,13 +38,12 @@ function VikarEdit() {
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [sendingMail, setSendingMail] = useState(false);
-  const [touchedPauseRows, setTouchedPauseRows] = useState<Record<number, boolean>>({});
   const companies = listCompanies();
 
   useEffect(() => {
     const found = getById(id);
     if (!found) navigate({ to: "/vikar" });
-    else setT(found);
+    else setT(withDefaultPausePlacement(found));
   }, [id, navigate]);
 
   if (!t)
@@ -55,12 +59,19 @@ function VikarEdit() {
     const days = t.days.map((day, i) => (i === index ? { ...day, ...patch } : day));
     setT({ ...t, days });
   };
-  const setPauseTouched = (index: number, touched: boolean) => {
-    setTouchedPauseRows((current) => ({ ...current, [index]: touched }));
+  const updateDayPauseRange = (
+    index: number,
+    patch: Pick<
+      Partial<Timesheet["days"][number]>,
+      "pauseStart" | "pauseEnd" | "pause2Start" | "pause2End"
+    >,
+  ) => {
+    const day = { ...t.days[index], ...patch };
+    updateDay(index, {
+      ...patch,
+      pause: totalPauseMinutes([day.pauseStart, day.pauseEnd], [day.pause2Start, day.pause2End]),
+    });
   };
-  const pauseHasDisplayValue = (index: number, pause: number) =>
-    Boolean(touchedPauseRows[index]) || pause > 0;
-  const normalizePause = (pause: number) => Math.max(0, Math.round(pause / 5) * 5);
   const delayedMealBreakEnabled = isIndustriensAgreement(t.selectedAgreementId);
   const delayedMealBreakDays = delayedMealBreakDaysForTimesheet(t);
 
@@ -269,14 +280,16 @@ function VikarEdit() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
-                {["Dag", "Start", "Slut", "Pause", "Udskudt spisepause"].map((head) => (
-                  <th key={head} className="px-3 py-2 font-medium">
-                    {head}
-                  </th>
-                ))}
+                {["Dag", "Start", "Slut", "Pause 1", "Pause 2", "Udskudt spisepause"].map(
+                  (head) => (
+                    <th key={head} className="px-3 py-2 font-medium">
+                      {head}
+                    </th>
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -319,32 +332,27 @@ function VikarEdit() {
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        step={5}
-                        className="h-8 w-20"
-                        value={pauseHasDisplayValue(index, day.pause) ? day.pause : ""}
+                      <TimeRangeInputs
+                        start={day.pauseStart}
+                        end={day.pauseEnd}
                         disabled={locked || absent}
-                        onFocus={() => {
-                          if (!pauseHasDisplayValue(index, day.pause)) {
-                            setPauseTouched(index, true);
-                            updateDay(index, { pause: 30 });
-                          }
-                        }}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          const pause = Number(value);
-                          setPauseTouched(index, value !== "");
-                          updateDay(index, {
-                            pause: value === "" || !Number.isFinite(pause) ? 0 : Math.max(0, pause),
-                          });
-                        }}
-                        onBlur={() => {
-                          if (pauseHasDisplayValue(index, day.pause)) {
-                            updateDay(index, { pause: normalizePause(day.pause) });
-                          }
-                        }}
+                        defaultStart={DEFAULT_PAUSE_1_START}
+                        defaultEnd={DEFAULT_PAUSE_1_END}
+                        onStartChange={(value) => updateDayPauseRange(index, { pauseStart: value })}
+                        onEndChange={(value) => updateDayPauseRange(index, { pauseEnd: value })}
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <TimeRangeInputs
+                        start={day.pause2Start}
+                        end={day.pause2End}
+                        disabled={locked || absent}
+                        defaultStart={DEFAULT_PAUSE_2_START}
+                        defaultEnd={DEFAULT_PAUSE_2_END}
+                        onStartChange={(value) =>
+                          updateDayPauseRange(index, { pause2Start: value })
+                        }
+                        onEndChange={(value) => updateDayPauseRange(index, { pause2End: value })}
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -408,6 +416,47 @@ function VikarEdit() {
   );
 }
 
+function withDefaultPausePlacement(timesheet: Timesheet): Timesheet {
+  return {
+    ...timesheet,
+    days: timesheet.days.map((day) => {
+      const hasWork = day.absence === "none" && Boolean(day.start && day.end);
+      const hasPausePlacement = Boolean(
+        day.pauseStart || day.pauseEnd || day.pause2Start || day.pause2End,
+      );
+      if (!hasWork || hasPausePlacement || day.pause <= 0) return day;
+      return {
+        ...day,
+        pauseStart: DEFAULT_PAUSE_1_START,
+        pauseEnd: DEFAULT_PAUSE_1_END,
+        pause2Start: day.pause >= 60 ? DEFAULT_PAUSE_2_START : "",
+        pause2End: day.pause >= 60 ? DEFAULT_PAUSE_2_END : "",
+        pause: day.pause >= 60 ? 60 : 30,
+      };
+    }),
+  };
+}
+
+function minutes(time: string): number | null {
+  if (!/^\d{2}:\d{2}$/.test(time)) return null;
+  const [hour, minute] = time.split(":").map(Number);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function intervalMinutes(start: string, end: string): number {
+  const startMinutes = minutes(start);
+  const endMinutes = minutes(end);
+  if (startMinutes === null || endMinutes === null || startMinutes === endMinutes) return 0;
+  return endMinutes > startMinutes
+    ? endMinutes - startMinutes
+    : endMinutes + 24 * 60 - startMinutes;
+}
+
+function totalPauseMinutes(...ranges: Array<[string, string]>): number {
+  return ranges.reduce((sum, [start, end]) => sum + intervalMinutes(start, end), 0);
+}
+
 function formatShortDate(isoDate: string): string {
   if (!isoDate) return "";
   return `${isoDate.slice(8, 10)}/${isoDate.slice(5, 7)}`;
@@ -441,6 +490,52 @@ function HolidayBadges({ isoDate }: { isoDate: string }) {
 
 function Notice({ children }: { children: React.ReactNode }) {
   return <div className="mb-6 rounded-md border bg-muted/40 px-4 py-3 text-sm">{children}</div>;
+}
+
+function TimeRangeInputs({
+  start,
+  end,
+  disabled,
+  defaultStart,
+  defaultEnd,
+  onStartChange,
+  onEndChange,
+}: {
+  start: string;
+  end: string;
+  disabled: boolean;
+  defaultStart: string;
+  defaultEnd: string;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        type="time"
+        className="h-8 w-24"
+        step={300}
+        value={start}
+        disabled={disabled}
+        onFocus={() => {
+          if (!start) onStartChange(defaultStart);
+        }}
+        onChange={(e) => onStartChange(e.target.value)}
+      />
+      <span className="text-muted-foreground">–</span>
+      <Input
+        type="time"
+        className="h-8 w-24"
+        step={300}
+        value={end}
+        disabled={disabled}
+        onFocus={() => {
+          if (!end) onEndChange(defaultEnd);
+        }}
+        onChange={(e) => onEndChange(e.target.value)}
+      />
+    </div>
+  );
 }
 
 function Field({
