@@ -256,6 +256,13 @@ function VikarEdit() {
             Udfyld start, slut og pause for de dage, du har arbejdet. Lørdag, søndag og helligdage
             markeres automatisk ud fra datoen.
           </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Arbejdstiderne er forudfyldt på baggrund af de oplysninger, vi har modtaget fra den
+            virksomhed, du arbejder hos. Hvis du har arbejdet mere eller mindre end angivet, skal du
+            rette registreringen i skemaet nedenfor, før du sender timesedlen. Ved indsendelse
+            bekræfter du, at oplysningerne er korrekte efter din bedste viden. Bevidst afgivelse af
+            urigtige oplysninger kan efter omstændighederne få ansættelsesmæssige konsekvenser.
+          </p>
           <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Udsat spisepause:</span> Markér kun hvis
             du blev bedt om at arbejde i din spisepause, og pausen blev udsat mere end 30 minutter.
