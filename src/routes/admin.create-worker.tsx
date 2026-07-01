@@ -115,7 +115,9 @@ function initialForm(): FormState {
   return {
     vikar: "",
     vikarEmail: "",
+    vikarPhone: "",
     tradeSkills: [],
+    competencies: "",
     brugervirksomhed: "",
     companyId: "",
     projectId: "",
@@ -166,11 +168,22 @@ function CreateWorkerPage() {
   const selectedCompany = companies.find((item) => item.id === form.companyId);
   const companyProjects = selectedCompany?.projects ?? [];
   const selectedProject = companyProjects.find((project) => project.id === form.projectId);
-  const projectWorkerOptions = selectedProject?.tradeSkills.length
+  const tradeMatchedWorkers = selectedProject?.tradeSkills.length
     ? knownWorkers.filter((worker) =>
         worker.tradeSkills.some((skill) => selectedProject.tradeSkills.includes(skill)),
       )
     : knownWorkers;
+  const projectWorkerOptions = selectedProject
+    ? tradeMatchedWorkers.filter(
+        (worker) =>
+          !workerProjectConflict(
+            companies,
+            selectedCompany?.id ?? "",
+            selectedProject,
+            worker.email,
+          ),
+      )
+    : tradeMatchedWorkers;
 
   const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
     setForm((current) => ({
@@ -270,6 +283,7 @@ function CreateWorkerPage() {
       defaultNightWorkStart: project.workPeriod === "night" ? project.defaultStart : "",
       defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
       tradeSkills: project.tradeSkills.length ? project.tradeSkills : form.tradeSkills,
+      competencies: project.competencies || form.competencies,
     });
   };
 
@@ -279,7 +293,9 @@ function CreateWorkerPage() {
     update({
       vikar: worker.name,
       vikarEmail: worker.email,
+      vikarPhone: worker.phone,
       tradeSkills: worker.tradeSkills,
+      competencies: worker.competencies || form.competencies,
     });
   };
 
@@ -439,6 +455,12 @@ function CreateWorkerPage() {
               onChange={(e) => update({ vikarEmail: e.target.value })}
             />
           </Field>
+          <Field label="Vikarens telefon">
+            <Input
+              value={form.vikarPhone ?? ""}
+              onChange={(e) => update({ vikarPhone: e.target.value })}
+            />
+          </Field>
           <Field label="Tidligere vikar">
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -463,6 +485,14 @@ function CreateWorkerPage() {
               onChange={(tradeSkills) => update({ tradeSkills })}
             />
           </div>
+          <Field label="Kompetencer">
+            <textarea
+              className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={form.competencies ?? ""}
+              onChange={(e) => update({ competencies: e.target.value })}
+              placeholder="Beskriv hvad medarbejderen konkret skal kunne inden for sit fag."
+            />
+          </Field>
           <Field label="Engangskode">
             <div className="flex h-9 items-center rounded-md border border-input bg-muted px-3 text-sm text-muted-foreground">
               Genereres automatisk
@@ -907,5 +937,27 @@ function DefaultTimeInput({
         onFocus?.(event);
       }}
     />
+  );
+}
+
+function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
+  if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
+  return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
+function workerProjectConflict(
+  companies: ReturnType<typeof listCompanies>,
+  currentCompanyId: string,
+  currentProject: CompanyProject,
+  workerEmail: string,
+): boolean {
+  if (!currentProject.startDate || !currentProject.endDate) return false;
+  const email = workerEmail.toLowerCase();
+  return companies.some((company) =>
+    company.projects.some((project) => {
+      if (company.id === currentCompanyId && project.id === currentProject.id) return false;
+      if (!project.workerEmails.some((item) => item.toLowerCase() === email)) return false;
+      return projectDatesOverlap(currentProject, project);
+    }),
   );
 }

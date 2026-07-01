@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { sendProjectConfirmationEmail } from "@/lib/timesheet-mail";
 import {
   listCompanies,
   listKnownWorkers,
@@ -30,8 +31,10 @@ function blankProject(): CompanyProject {
     contactEmail: "",
     referenceNo: "",
     startDate: "",
+    endDate: "",
     selectedAgreementId: "",
     tradeSkills: [],
+    competencies: "",
     workerEmails: [],
     workPeriod: "day",
     defaultStart: "07:00",
@@ -188,6 +191,7 @@ function CompaniesPage() {
 
             <ProjectsSection
               company={editing}
+              companies={companies}
               knownWorkers={knownWorkers}
               setCompany={setEditing}
             />
@@ -211,13 +215,17 @@ function CompaniesPage() {
 
 function ProjectsSection({
   company,
+  companies,
   knownWorkers,
   setCompany,
 }: {
   company: Company;
+  companies: Company[];
   knownWorkers: ReturnType<typeof listKnownWorkers>;
   setCompany: (value: Company) => void;
 }) {
+  const [projectMailMessage, setProjectMailMessage] = useState("");
+  const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
   const updateProject = (index: number, patch: Partial<CompanyProject>) => {
     setCompany({
       ...company,
@@ -225,6 +233,30 @@ function ProjectsSection({
         i === index ? { ...project, ...patch } : project,
       ),
     });
+  };
+  const sendProjectMail = async (project: CompanyProject) => {
+    setSendingProjectId(project.id);
+    setProjectMailMessage("Sender projektbekræftelse…");
+    try {
+      const workers = project.workerEmails
+        .map((email) =>
+          knownWorkers.find((worker) => worker.email.toLowerCase() === email.toLowerCase()),
+        )
+        .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker));
+
+      if (workers.length === 0) {
+        await sendProjectConfirmationEmail({ company, project });
+      } else {
+        for (const worker of workers) {
+          await sendProjectConfirmationEmail({ company, project, worker });
+        }
+      }
+      setProjectMailMessage("Projektbekræftelse sendt.");
+    } catch {
+      setProjectMailMessage("Projektbekræftelsen kunne ikke sendes automatisk.");
+    } finally {
+      setSendingProjectId(null);
+    }
   };
 
   return (
@@ -248,6 +280,9 @@ function ProjectsSection({
       </div>
 
       <div className="mt-3 space-y-4">
+        {projectMailMessage && (
+          <div className="text-sm text-muted-foreground">{projectMailMessage}</div>
+        )}
         {company.projects.length === 0 && (
           <div className="rounded-md border px-3 py-4 text-sm text-muted-foreground">
             Ingen projekter oprettet.
@@ -280,6 +315,13 @@ function ProjectsSection({
                     type="date"
                     value={project.startDate}
                     onChange={(e) => updateProject(index, { startDate: e.target.value })}
+                  />
+                </Field>
+                <Field label="Projektets afslutning">
+                  <Input
+                    type="date"
+                    value={project.endDate}
+                    onChange={(e) => updateProject(index, { endDate: e.target.value })}
                   />
                 </Field>
                 <Field label="Kontaktperson">
@@ -372,6 +414,16 @@ function ProjectsSection({
                   />
                 </div>
                 <div className="md:col-span-2">
+                  <Field label="Kompetencer">
+                    <textarea
+                      className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={project.competencies}
+                      onChange={(e) => updateProject(index, { competencies: e.target.value })}
+                      placeholder="Beskriv hvad medarbejderen konkret skal kunne inden for projektets fagområde."
+                    />
+                  </Field>
+                </div>
+                <div className="md:col-span-2">
                   <span className="mb-1.5 block text-sm font-medium">Tilknyttede vikarer</span>
                   <div className="rounded-md border p-3">
                     <p className="mb-2 text-xs text-muted-foreground">
@@ -384,48 +436,118 @@ function ProjectsSection({
                       </div>
                     ) : (
                       <div className="grid gap-2 md:grid-cols-2">
-                        {matchingWorkers.map((worker) => (
-                          <label key={worker.email} className="flex items-start gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={project.workerEmails.includes(worker.email)}
-                              onChange={(e) => {
-                                const workerEmails = e.target.checked
-                                  ? [...new Set([...project.workerEmails, worker.email])]
-                                  : project.workerEmails.filter((email) => email !== worker.email);
-                                updateProject(index, { workerEmails });
-                              }}
-                            />
-                            <span>
-                              <span className="font-medium">{worker.name}</span>
-                              <span className="block text-xs text-muted-foreground">
-                                {worker.email} · {worker.tradeSkills.join(", ") || "Ingen fag"}
+                        {matchingWorkers.map((worker) => {
+                          const conflict = workerProjectConflict(
+                            companies,
+                            company.id,
+                            project,
+                            worker.email,
+                          );
+                          const disabled = Boolean(conflict);
+                          return (
+                            <label
+                              key={worker.email}
+                              className="flex items-start gap-2 text-sm"
+                              title={conflict ? `Vikaren er allerede tilknyttet ${conflict}` : ""}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={project.workerEmails.includes(worker.email)}
+                                disabled={disabled && !project.workerEmails.includes(worker.email)}
+                                onChange={(e) => {
+                                  const workerEmails = e.target.checked
+                                    ? [...new Set([...project.workerEmails, worker.email])]
+                                    : project.workerEmails.filter(
+                                        (email) => email !== worker.email,
+                                      );
+                                  updateProject(index, { workerEmails });
+                                }}
+                              />
+                              <span>
+                                <span className="font-medium">{worker.name}</span>
+                                <span className="block text-xs text-muted-foreground">
+                                  {worker.email} · {worker.tradeSkills.join(", ") || "Ingen fag"}
+                                </span>
+                                {worker.competencies && (
+                                  <span className="block text-xs text-muted-foreground">
+                                    Kompetencer: {worker.competencies}
+                                  </span>
+                                )}
+                                {conflict && (
+                                  <span className="block text-xs text-status-rejected-fg">
+                                    Optaget på {conflict} i projektperioden.
+                                  </span>
+                                )}
                               </span>
-                            </span>
-                          </label>
-                        ))}
+                            </label>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-              <button
-                className="mt-3 text-xs font-medium text-status-rejected-fg"
-                onClick={() =>
-                  setCompany({
-                    ...company,
-                    projects: company.projects.filter((_, i) => i !== index),
-                  })
-                }
-              >
-                Slet projekt
-              </button>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => sendProjectMail(project)}
+                  disabled={
+                    sendingProjectId === project.id ||
+                    !(project.contactEmail || company.contactEmail)
+                  }
+                >
+                  {sendingProjectId === project.id ? "Sender…" : "Send projektmail"}
+                </Button>
+                <button
+                  className="text-xs font-medium text-status-rejected-fg"
+                  onClick={() =>
+                    setCompany({
+                      ...company,
+                      projects: company.projects.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  Slet projekt
+                </button>
+              </div>
             </details>
           );
         })}
       </div>
     </section>
   );
+}
+
+function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
+  if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
+  return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
+function workerProjectConflict(
+  companies: Company[],
+  currentCompanyId: string,
+  currentProject: CompanyProject,
+  workerEmail: string,
+): string {
+  if (!currentProject.startDate || !currentProject.endDate) return "";
+  const email = workerEmail.toLowerCase();
+  for (const company of companies) {
+    for (const project of company.projects) {
+      if (company.id === currentCompanyId && project.id === currentProject.id) continue;
+      if (!project.workerEmails.some((item) => item.toLowerCase() === email)) continue;
+      if (projectDatesOverlap(currentProject, project)) {
+        return `${company.name} / ${project.name || "unavngivet projekt"} (${formatDate(project.startDate)} – ${formatDate(project.endDate)})`;
+      }
+    }
+  }
+  return "";
+}
+
+function formatDate(value: string): string {
+  if (!value) return "—";
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
 function LocalAgreementsSection({

@@ -156,7 +156,9 @@ export type Timesheet = {
   id: string;
   vikar: string;
   vikarEmail: string;
+  vikarPhone?: string;
   tradeSkills?: TradeSkill[];
+  competencies?: string;
   brugervirksomhed: string;
   companyId?: string;
   projectId?: string;
@@ -203,8 +205,10 @@ export type CompanyProject = {
   contactEmail: string;
   referenceNo: string;
   startDate: string;
+  endDate: string;
   selectedAgreementId: string;
   tradeSkills: TradeSkill[];
+  competencies: string;
   workerEmails: string[];
   workPeriod: WorkPeriod;
   defaultStart: string;
@@ -367,7 +371,9 @@ type StoredTimesheet = Omit<
   overenskomst?: string;
   lokalaftale?: boolean;
   vikarEmail?: string;
+  vikarPhone?: string;
   tradeSkills?: TradeSkill[];
+  competencies?: string;
   companyId?: string;
   projectId?: string;
   projectName?: string;
@@ -411,8 +417,10 @@ function normalizeProject(project: Partial<CompanyProject>): CompanyProject {
     contactEmail: project.contactEmail ?? "",
     referenceNo: project.referenceNo ?? "",
     startDate: project.startDate ?? "",
+    endDate: project.endDate ?? "",
     selectedAgreementId: project.selectedAgreementId ?? "",
     tradeSkills: normalizeTradeSkills(project.tradeSkills),
+    competencies: project.competencies ?? "",
     workerEmails: Array.isArray(project.workerEmails)
       ? [...new Set(project.workerEmails.filter(Boolean))]
       : [],
@@ -447,7 +455,9 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   return {
     ...value,
     vikarEmail: value.vikarEmail ?? "",
+    vikarPhone: value.vikarPhone ?? "",
     tradeSkills: normalizeTradeSkills(value.tradeSkills),
+    competencies: value.competencies ?? "",
     companyId: value.companyId ?? "",
     projectId: value.projectId ?? "",
     projectName: value.projectName ?? "",
@@ -878,7 +888,9 @@ export function createBlank(): Timesheet {
     id: crypto.randomUUID(),
     vikar: "",
     vikarEmail: "",
+    vikarPhone: "",
     tradeSkills: [],
+    competencies: "",
     brugervirksomhed: "",
     companyId: "",
     projectId: "",
@@ -907,7 +919,9 @@ export function createBlank(): Timesheet {
 export type CreateWorkerTimesheetInput = {
   vikar: string;
   vikarEmail: string;
+  vikarPhone?: string;
   tradeSkills?: TradeSkill[];
+  competencies?: string;
   brugervirksomhed: string;
   companyId?: string;
   projectId?: string;
@@ -1025,7 +1039,9 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     ...base,
     vikar: input.vikar.trim(),
     vikarEmail: input.vikarEmail.trim(),
+    vikarPhone: input.vikarPhone?.trim() ?? "",
     tradeSkills: normalizeTradeSkills(input.tradeSkills),
+    competencies: input.competencies?.trim() ?? "",
     brugervirksomhed: input.brugervirksomhed.trim(),
     companyId: input.companyId ?? "",
     projectId: input.projectId ?? "",
@@ -1345,7 +1361,9 @@ export async function syncRemoteAppState(): Promise<void> {
 export type KnownWorker = {
   name: string;
   email: string;
+  phone: string;
   tradeSkills: TradeSkill[];
+  competencies: string;
 };
 
 export function listKnownWorkers(): KnownWorker[] {
@@ -1357,10 +1375,19 @@ export function listKnownWorkers(): KnownWorker[] {
     const tradeSkills = [
       ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
     ];
+    const competencies = [
+      ...new Set(
+        [existing?.competencies ?? "", timesheet.competencies ?? ""]
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
+    ].join("; ");
     byEmail.set(email, {
       name: timesheet.vikar || existing?.name || email,
       email: timesheet.vikarEmail,
+      phone: timesheet.vikarPhone || existing?.phone || "",
       tradeSkills,
+      competencies,
     });
   }
   return [...byEmail.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
