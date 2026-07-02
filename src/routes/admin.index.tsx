@@ -101,11 +101,11 @@ function AdminList() {
     <AppShell allow={["admin"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
             <h1 className="text-2xl font-semibold">Timesedler</h1>
-            <Button asChild variant="outline" size="sm">
-              <Link to="/admin/workers">Vikaroversigt</Link>
-            </Button>
+            <Link to="/admin/workers" className="text-base font-medium text-primary hover:underline">
+              Vikaroversigt
+            </Link>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
             Administrér indsendelser, kontrol og regelgrundlag.
