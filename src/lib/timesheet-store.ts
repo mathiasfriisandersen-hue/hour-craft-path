@@ -183,6 +183,8 @@ export type Timesheet = {
   status: Status;
   archived?: boolean;
   workerInactive?: boolean;
+  workerConsentRenewalSentAt?: string;
+  workerConsentRenewedAt?: string;
   rejectionComment?: string;
   createdAt: string;
   updatedAt: string;
@@ -387,6 +389,8 @@ type StoredTimesheet = Omit<
   workerMustChangeAccessCode?: boolean;
   archived?: boolean;
   workerInactive?: boolean;
+  workerConsentRenewalSentAt?: string;
+  workerConsentRenewedAt?: string;
   notes?: string;
 };
 
@@ -481,6 +485,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     status: value.status === "reviewed" ? "approved" : (value.status as Status),
     archived: value.archived ?? false,
     workerInactive: value.workerInactive ?? false,
+    workerConsentRenewalSentAt: value.workerConsentRenewalSentAt ?? "",
+    workerConsentRenewedAt: value.workerConsentRenewedAt ?? "",
     days,
     createdAt: value.createdAt ?? now,
     updatedAt: value.updatedAt ?? now,
@@ -942,6 +948,8 @@ export function createBlank(): Timesheet {
     status: "draft",
     archived: false,
     workerInactive: false,
+    workerConsentRenewalSentAt: "",
+    workerConsentRenewedAt: "",
     createdAt: now,
     updatedAt: now,
   };
@@ -1455,7 +1463,19 @@ export function workerReferenceKeys(worker: KnownWorker): string[] {
 export function timesheetRetentionWarning(
   t: Timesheet,
 ): { level: "warning" | "critical"; text: string } | null {
-  const created = new Date(t.createdAt);
+  if (t.workerInactive || !t.vikarEmail) return null;
+  const key = knownWorkerKey(t);
+  if (!key) return null;
+  const workerTimesheets = readTimesheets().filter(
+    (item) => knownWorkerKey(item) === key && item.status !== "draft",
+  );
+  const latestActivity = workerTimesheets
+    .flatMap((item) => [item.weekStart || item.createdAt, item.workerConsentRenewedAt].filter(Boolean))
+    .sort()
+    .at(-1);
+  if (!latestActivity) return null;
+
+  const created = new Date(latestActivity);
   if (Number.isNaN(created.getTime())) return null;
   const now = new Date();
   const fiveMonths = new Date(created);
@@ -1466,16 +1486,51 @@ export function timesheetRetentionWarning(
   if (now >= sixMonths) {
     return {
       level: "critical",
-      text: "Timesedlen har været oprettet i 6 måneder. Gennemgå om den fortsat skal opbevares, eller om den skal slettes i henhold til virksomhedens slettepolitik og gældende databeskyttelsesregler.",
+      text: "Vikarens samtykke til kontakt er udløbet. Fjern kontakt- og profiloplysninger, men bevar timeseddeldata til dokumentation.",
     };
   }
   if (now >= fiveMonths) {
     return {
       level: "warning",
-      text: "Timesedlen nærmer sig 6 måneders opbevaring. Gennemgå om den fortsat skal opbevares, eller om den skal slettes efter virksomhedens slettepolitik.",
+      text: "Vikarens samtykke til kontakt skal fornyes. Send samtykkemail, hvis vikaren fortsat må kontaktes om jobmuligheder.",
     };
   }
   return null;
+}
+
+export function markWorkerConsentRenewalSent(workerKey: string): Timesheet[] {
+  const key = personLookupKey(workerKey);
+  if (!key) return [];
+  const now = new Date().toISOString();
+  const list = readTimesheets();
+  const updated = list.map((item) =>
+    knownWorkerKey(item) === key
+      ? normalizeTimesheet({ ...item, workerConsentRenewalSentAt: now, updatedAt: now })
+      : item,
+  );
+  writeTimesheets(updated);
+  return updated.filter((item) => knownWorkerKey(item) === key);
+}
+
+export function renewWorkerConsent(workerName: string, workerEmail: string): Timesheet[] {
+  const nameKey = personLookupKey(workerName);
+  const emailKey = personLookupKey(workerEmail);
+  if (!nameKey && !emailKey) return [];
+  const now = new Date().toISOString();
+  const list = readTimesheets();
+  const updated = list.map((item) => {
+    const matchesName = nameKey && personLookupKey(item.vikar) === nameKey;
+    const matchesEmail = emailKey && personLookupKey(item.vikarEmail) === emailKey;
+    return matchesName || matchesEmail
+      ? normalizeTimesheet({ ...item, workerConsentRenewedAt: now, updatedAt: now })
+      : item;
+  });
+  writeTimesheets(updated);
+  return updated.filter((item) => {
+    const matchesName = nameKey && personLookupKey(item.vikar) === nameKey;
+    const matchesEmail = emailKey && personLookupKey(item.vikarEmail) === emailKey;
+    return Boolean(matchesName || matchesEmail);
+  });
 }
 
 export function listKnownContacts(): KnownContact[] {

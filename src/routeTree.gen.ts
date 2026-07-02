@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
 import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
@@ -39,6 +40,11 @@ const KontaktpersonIndexRoute = KontaktpersonIndexRouteImport.update({
 const AdminIndexRoute = AdminIndexRouteImport.update({
   id: '/admin/',
   path: '/admin/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VikarConsentRoute = VikarConsentRouteImport.update({
+  id: '/vikar/consent',
+  path: '/vikar/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VikarInviteRoute = VikarInviteRouteImport.update({
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin': typeof AdminIndexRoute
   '/kontaktperson': typeof KontaktpersonIndexRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/admin/rules': typeof AdminRulesRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
+  '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/consent'
     | '/vikar/invite'
     | '/admin/'
     | '/kontaktperson/'
@@ -140,6 +150,7 @@ export interface FileRouteTypes {
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/consent'
     | '/vikar/invite'
     | '/admin'
     | '/kontaktperson'
@@ -153,6 +164,7 @@ export interface FileRouteTypes {
     | '/admin/rules'
     | '/kontaktperson/$id'
     | '/vikar/$id'
+    | '/vikar/consent'
     | '/vikar/invite'
     | '/admin/'
     | '/kontaktperson/'
@@ -167,6 +179,7 @@ export interface RootRouteChildren {
   AdminRulesRoute: typeof AdminRulesRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   VikarIdRoute: typeof VikarIdRoute
+  VikarConsentRoute: typeof VikarConsentRoute
   VikarInviteRoute: typeof VikarInviteRoute
   AdminIndexRoute: typeof AdminIndexRoute
   KontaktpersonIndexRoute: typeof KontaktpersonIndexRoute
@@ -208,6 +221,13 @@ declare module '@tanstack/react-router' {
       path: '/vikar/invite'
       fullPath: '/vikar/invite'
       preLoaderRoute: typeof VikarInviteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vikar/consent': {
+      id: '/vikar/consent'
+      path: '/vikar/consent'
+      fullPath: '/vikar/consent'
+      preLoaderRoute: typeof VikarConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vikar/$id': {
@@ -263,6 +283,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRulesRoute: AdminRulesRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   VikarIdRoute: VikarIdRoute,
+  VikarConsentRoute: VikarConsentRoute,
   VikarInviteRoute: VikarInviteRoute,
   AdminIndexRoute: AdminIndexRoute,
   KontaktpersonIndexRoute: KontaktpersonIndexRoute,

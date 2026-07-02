@@ -5,6 +5,12 @@ export type WorkerInvitePayload = {
   timesheet: Timesheet;
 };
 
+export type WorkerConsentPayload = {
+  version: 1;
+  workerName: string;
+  workerEmail: string;
+};
+
 function decodeBase64Url(value: string): string {
   const padded = value
     .replaceAll("-", "+")
@@ -70,6 +76,32 @@ export async function createShortWorkerInviteUrl(t: Timesheet): Promise<string> 
   return inviteUrl.toString();
 }
 
+export async function createWorkerConsentUrl(workerName: string, workerEmail: string): Promise<string> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  if (!mailApiUrl) throw new Error("Mailsystemet er ikke konfigureret");
+
+  const response = await fetch(workerApiUrl("/create-worker-consent", mailApiUrl), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ workerName, workerEmail }),
+  });
+
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; consent?: { token?: string }; error?: string }
+    | undefined;
+
+  if (!response.ok || !body?.ok || !body.consent?.token) {
+    throw new Error(body?.error || `Samtykke-server svarede med HTTP ${response.status}`);
+  }
+
+  const basePath = import.meta.env.BASE_URL ?? "/";
+  const consentUrl = new URL(`${basePath}vikar/consent`, window.location.origin);
+  consentUrl.searchParams.set("i", body.consent.token);
+  return consentUrl.toString();
+}
+
 export async function fetchWorkerInviteByToken(
   token: string,
 ): Promise<WorkerInvitePayload | undefined> {
@@ -89,6 +121,33 @@ export async function fetchWorkerInviteByToken(
   }
 
   return body.invite;
+}
+
+export async function fetchWorkerConsentByToken(
+  token: string,
+): Promise<WorkerConsentPayload | undefined> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  if (!mailApiUrl) return undefined;
+
+  const url = new URL(workerApiUrl("/worker-consent", mailApiUrl));
+  url.searchParams.set("i", token);
+
+  const response = await fetch(url.toString(), { cache: "no-store" });
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; consent?: WorkerConsentPayload }
+    | undefined;
+
+  if (
+    !response.ok ||
+    !body?.ok ||
+    body.consent?.version !== 1 ||
+    !body.consent.workerName ||
+    !body.consent.workerEmail
+  ) {
+    return undefined;
+  }
+
+  return body.consent;
 }
 
 export function parseWorkerInviteFromHash(hash: string): WorkerInvitePayload | undefined {

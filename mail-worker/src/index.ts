@@ -31,6 +31,11 @@ type WorkerInviteCreatePayload = {
   timesheet?: unknown;
 };
 
+type WorkerConsentCreatePayload = {
+  workerName?: string;
+  workerEmail?: string;
+};
+
 type AppStatePayload = {
   version?: number;
   updatedAt?: string;
@@ -43,6 +48,7 @@ const MAX_TEXT_LENGTH = 60_000;
 const MAX_HTML_LENGTH = 120_000;
 const MAX_APP_STATE_LENGTH = 900_000;
 const INVITE_TTL_SECONDS = 7 * 24 * 60 * 60;
+const CONSENT_TTL_SECONDS = 31 * 24 * 60 * 60;
 const INVITE_TOKEN_BYTES = 12;
 const APP_STATE_KEY = "app-state-v1";
 
@@ -154,6 +160,25 @@ async function createWorkerInvite(payload: WorkerInviteCreatePayload, env: Env) 
       version: 1,
       timesheet,
     }),
+    { expirationTtl: CONSENT_TTL_SECONDS },
+  );
+
+  return { token, expiresInSeconds: CONSENT_TTL_SECONDS };
+}
+
+async function createWorkerConsent(payload: WorkerConsentCreatePayload, env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  if (!payload.workerName?.trim()) throw new Error("Vikarnavn mangler");
+  if (!isEmail(payload.workerEmail)) throw new Error("Vikarens mail er ugyldig");
+
+  const token = randomToken();
+  await env.WORKER_INVITES.put(
+    token,
+    JSON.stringify({
+      version: 1,
+      workerName: payload.workerName.trim(),
+      workerEmail: payload.workerEmail.trim(),
+    }),
     { expirationTtl: INVITE_TTL_SECONDS },
   );
 
@@ -165,6 +190,13 @@ async function readWorkerInvite(token: string, env: Env) {
   const invite = await env.WORKER_INVITES.get(token);
   if (!invite) throw new Error("Invitationen er udløbet eller findes ikke");
   return JSON.parse(invite) as unknown;
+}
+
+async function readWorkerConsent(token: string, env: Env) {
+  if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
+  const consent = await env.WORKER_INVITES.get(token);
+  if (!consent) throw new Error("Samtykkelinket er udløbet eller findes ikke");
+  return JSON.parse(consent) as unknown;
 }
 
 async function readAppState(env: Env) {
@@ -284,7 +316,9 @@ export default {
       !(
         (request.method === "POST" && url.pathname === "/send-timesheet") ||
         (request.method === "POST" && url.pathname === "/create-worker-invite") ||
+        (request.method === "POST" && url.pathname === "/create-worker-consent") ||
         (request.method === "GET" && url.pathname === "/worker-invite") ||
+        (request.method === "GET" && url.pathname === "/worker-consent") ||
         (request.method === "GET" && url.pathname === "/app-state") ||
         (request.method === "POST" && url.pathname === "/app-state")
       )
@@ -304,6 +338,15 @@ export default {
         }
         const invite = await createWorkerInvite(invitePayload, env);
         return jsonResponse({ ok: true, invite }, 200, headers);
+      }
+
+      if (request.method === "POST" && url.pathname === "/create-worker-consent") {
+        const consentPayload = (await parsePayload(request)) as WorkerConsentCreatePayload;
+        if (!consentPayload) {
+          return jsonResponse({ ok: false, error: "Invalid JSON" }, 400, headers);
+        }
+        const consent = await createWorkerConsent(consentPayload, env);
+        return jsonResponse({ ok: true, consent }, 200, headers);
       }
 
       if (request.method === "GET" && url.pathname === "/app-state") {
@@ -327,6 +370,15 @@ export default {
         }
         const invite = await readWorkerInvite(token, env);
         return jsonResponse({ ok: true, invite }, 200, headers);
+      }
+
+      if (request.method === "GET" && url.pathname === "/worker-consent") {
+        const token = url.searchParams.get("i");
+        if (!isValidInviteToken(token)) {
+          return jsonResponse({ ok: false, error: "Samtykketoken er ugyldig" }, 400, headers);
+        }
+        const consent = await readWorkerConsent(token, env);
+        return jsonResponse({ ok: true, consent }, 200, headers);
       }
 
       const payload = await parsePayload(request);

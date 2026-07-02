@@ -7,6 +7,7 @@ import { useTimesheets } from "@/lib/use-timesheets";
 import {
   calculateTimesheet,
   formatWeekRange,
+  markWorkerConsentRenewalSent,
   setArchived,
   STATUS_LABEL,
   timesheetRetentionWarning,
@@ -16,6 +17,8 @@ import {
   type Status,
 } from "@/lib/timesheet-store";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { sendWorkerConsentRenewalEmail } from "@/lib/timesheet-mail";
+import { createWorkerConsentUrl } from "@/lib/worker-invite";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin — Overblik" }] }),
@@ -30,6 +33,8 @@ function AdminList() {
   const [week, setWeek] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
+  const [sendingConsentId, setSendingConsentId] = useState("");
+  const [consentMessage, setConsentMessage] = useState("");
 
   const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
   const visibleSubmitted = useMemo(
@@ -83,6 +88,26 @@ function AdminList() {
     selectedArchiveIds.forEach((id) => setArchived(id, true));
     setSelectedArchiveIds([]);
     setArchiveMode(false);
+  };
+
+  const sendConsentRenewal = async (item: (typeof submitted)[number]) => {
+    if (!item.vikarEmail) return;
+    setSendingConsentId(item.id);
+    setConsentMessage("");
+    try {
+      const consentUrl = await createWorkerConsentUrl(item.vikar, item.vikarEmail);
+      const result = await sendWorkerConsentRenewalEmail(item.vikar, item.vikarEmail, consentUrl);
+      markWorkerConsentRenewalSent(item.vikar);
+      setConsentMessage(
+        result === "api"
+          ? `Samtykkemail sendt til ${item.vikar || "vikar"}.`
+          : "Mailappen er åbnet med samtykkemail.",
+      );
+    } catch {
+      setConsentMessage("Samtykkemail kunne ikke sendes lige nu.");
+    } finally {
+      setSendingConsentId("");
+    }
   };
 
   return (
@@ -180,6 +205,8 @@ function AdminList() {
         </div>
       </section>
 
+      {consentMessage && <div className="mb-5 text-sm text-muted-foreground">{consentMessage}</div>}
+
       {list.length === 0 ? (
         <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
           Ingen timesedler matcher filtrene.
@@ -264,6 +291,17 @@ function AdminList() {
                       Åbn →
                     </Link>
                   </div>
+                  {retentionWarning && item.vikarEmail && (
+                    <Button
+                      className="mt-3 w-full"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => sendConsentRenewal(item)}
+                      disabled={sendingConsentId === item.id}
+                    >
+                      {sendingConsentId === item.id ? "Sender…" : "Send samtykkemail"}
+                    </Button>
+                  )}
                 </article>
               );
             })}
@@ -346,6 +384,17 @@ function AdminList() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
+                      {retentionWarning && item.vikarEmail && (
+                        <Button
+                          className="mr-3"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => sendConsentRenewal(item)}
+                          disabled={sendingConsentId === item.id}
+                        >
+                          {sendingConsentId === item.id ? "Sender…" : "Samtykke"}
+                        </Button>
+                      )}
                       <Link
                         to="/admin/$id"
                         params={{ id: item.id }}

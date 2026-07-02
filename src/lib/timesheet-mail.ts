@@ -129,6 +129,64 @@ export async function sendWorkerInviteEmail(
   return "api";
 }
 
+function workerConsentRenewalSubject(): string {
+  return "Forny samtykke til jobhenvendelser fra Sub-Z";
+}
+
+function workerConsentRenewalBody(workerName: string, consentUrl: string): string {
+  return [
+    `Hej ${workerName || "vikar"}`,
+    "",
+    "Vi kontakter dig, fordi dit samtykke til, at Sub-Z må kontakte dig om relevante jobmuligheder, skal fornyes.",
+    "",
+    "Hvis du fortsat ønsker at være registreret hos Sub-Z og modtage henvendelser om job, skal du bekræfte dit samtykke via linket her:",
+    "",
+    consentUrl,
+    "",
+    "Når du har bekræftet, bliver dit samtykke fornyet, og du kan igen modtage relevante jobmuligheder fra Sub-Z.",
+    "",
+    "Hvis du ikke ønsker at forny dit samtykke, skal du ikke gøre noget.",
+    "",
+    "Venlig hilsen",
+    "Sub-Z ApS",
+  ].join("\n");
+}
+
+export async function sendWorkerConsentRenewalEmail(
+  workerName: string,
+  workerEmail: string,
+  consentUrl: string,
+): Promise<TimesheetMailResult> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  const subject = workerConsentRenewalSubject();
+  const text = workerConsentRenewalBody(workerName, consentUrl);
+
+  if (!mailApiUrl) {
+    window.location.href = `mailto:${workerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    return "mailto";
+  }
+
+  const response = await fetch(mailApiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      contactEmail: workerEmail,
+      subject,
+      text,
+      sendAdminCopy: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Mailserver svarede med HTTP ${response.status}`);
+  }
+
+  return "api";
+}
+
 type ProjectConfirmationInput = {
   company: Company;
   project: CompanyProject;
