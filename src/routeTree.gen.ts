@@ -17,6 +17,7 @@ import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
 import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
+import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
 import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
@@ -63,6 +64,11 @@ const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
   path: '/kontaktperson/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminWorkersRoute = AdminWorkersRouteImport.update({
+  id: '/admin/workers',
+  path: '/admin/workers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRulesRoute = AdminRulesRouteImport.update({
   id: '/admin/rules',
   path: '/admin/rules',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
+  '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
+  '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
+  '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/workers'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/vikar/consent'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/workers'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/vikar/consent'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/workers'
     | '/kontaktperson/$id'
     | '/vikar/$id'
     | '/vikar/consent'
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   AdminCompaniesRoute: typeof AdminCompaniesRoute
   AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
   AdminRulesRoute: typeof AdminRulesRoute
+  AdminWorkersRoute: typeof AdminWorkersRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   VikarIdRoute: typeof VikarIdRoute
   VikarConsentRoute: typeof VikarConsentRoute
@@ -257,6 +270,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KontaktpersonIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/workers': {
+      id: '/admin/workers'
+      path: '/admin/workers'
+      fullPath: '/admin/workers'
+      preLoaderRoute: typeof AdminWorkersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/rules': {
       id: '/admin/rules'
       path: '/admin/rules'
@@ -302,6 +322,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCompaniesRoute: AdminCompaniesRoute,
   AdminCreateWorkerRoute: AdminCreateWorkerRoute,
   AdminRulesRoute: AdminRulesRoute,
+  AdminWorkersRoute: AdminWorkersRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   VikarIdRoute: VikarIdRoute,
   VikarConsentRoute: VikarConsentRoute,
