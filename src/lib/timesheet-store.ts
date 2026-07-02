@@ -456,6 +456,20 @@ function normalizeCompany(company: StoredCompany): Company {
   };
 }
 
+function normalizeWorkerPhone(value: StoredTimesheet | CreateWorkerTimesheetInput): string {
+  const record = value as Record<string, unknown>;
+  const phone =
+    value.vikarPhone ??
+    record.vikarTelefon ??
+    record.workerPhone ??
+    record.telefon ??
+    record.phone ??
+    record.mobil ??
+    record.mobile ??
+    "";
+  return typeof phone === "string" ? phone.trim() : "";
+}
+
 function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
   const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index], index));
@@ -467,7 +481,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   return {
     ...value,
     vikarEmail: value.vikarEmail ?? "",
-    vikarPhone: value.vikarPhone ?? "",
+    vikarPhone: normalizeWorkerPhone(value),
     tradeSkills: normalizeTradeSkills(value.tradeSkills),
     competencies: value.competencies ?? "",
     companyId: value.companyId ?? "",
@@ -1030,6 +1044,16 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
   const base = createBlank();
   const agreement = getCollectiveAgreementById(input.selectedAgreementId);
   const weekStart = getMondayISO(new Date(`${input.startDate}T12:00:00`));
+  const workerPhone =
+    normalizeWorkerPhone(input) ||
+    listKnownWorkers().find((worker) => {
+      const references = workerReferenceKeys(worker);
+      return (
+        references.includes(personLookupKey(input.vikar)) ||
+        references.includes(personLookupKey(input.vikarEmail))
+      );
+    })?.phone ||
+    "";
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = addDaysToISODate(weekStart, index);
     const isWorkday = index < 5 && (!input.startDate || date >= input.startDate);
@@ -1083,7 +1107,7 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     ...base,
     vikar: input.vikar.trim(),
     vikarEmail: input.vikarEmail.trim(),
-    vikarPhone: input.vikarPhone?.trim() ?? "",
+    vikarPhone: workerPhone,
     tradeSkills: normalizeTradeSkills(input.tradeSkills),
     competencies: input.competencies?.trim() ?? "",
     brugervirksomhed: input.brugervirksomhed.trim(),
@@ -1428,12 +1452,24 @@ function knownWorkerKey(timesheet: Timesheet): string {
   return personLookupKey(timesheet.vikar) || personLookupKey(timesheet.vikarEmail);
 }
 
+function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "email">): string[] {
+  return [
+    ...new Set(
+      [worker.key, personLookupKey(worker.name), personLookupKey(worker.email)].filter(Boolean),
+    ),
+  ];
+}
+
 export function listKnownWorkers(): KnownWorker[] {
-  const byName = new Map<string, KnownWorker>();
+  const workers: KnownWorker[] = [];
   for (const timesheet of readTimesheets()) {
     const key = knownWorkerKey(timesheet);
     if (!key) continue;
-    const existing = byName.get(key);
+    const emailKey = personLookupKey(timesheet.vikarEmail);
+    const existing = workers.find((worker) => {
+      const references = knownWorkerReferenceKeys(worker);
+      return references.includes(key) || (emailKey ? references.includes(emailKey) : false);
+    });
     const inactive = existing?.inactive || timesheet.workerInactive || false;
     const tradeSkills = [
       ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
@@ -1445,23 +1481,28 @@ export function listKnownWorkers(): KnownWorker[] {
           .filter(Boolean),
       ),
     ].join("; ");
-    byName.set(key, {
-      key,
+    const worker = {
+      key: existing?.key || key,
       name: timesheet.vikar || existing?.name || timesheet.vikarEmail,
       email: timesheet.vikarEmail || existing?.email || "",
       phone: timesheet.vikarPhone || existing?.phone || "",
       tradeSkills,
       competencies,
       inactive,
-    });
+    };
+    if (existing) {
+      Object.assign(existing, worker);
+    } else {
+      workers.push(worker);
+    }
   }
-  return [...byName.values()]
+  return workers
     .filter((worker) => !worker.inactive)
     .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
 export function workerReferenceKeys(worker: KnownWorker): string[] {
-  return [...new Set([worker.key].filter(Boolean))];
+  return knownWorkerReferenceKeys(worker);
 }
 
 export function timesheetRetentionWarning(
