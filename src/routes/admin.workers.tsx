@@ -145,23 +145,25 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
     activeTimesheets.some((timesheet) => workerMatchesTimesheet(worker, timesheet)),
   );
 
-  return knownWorkers.map((worker) => {
-    const assignments = activeProjectAssignments(worker, companies, today);
-    const workerTimesheets = activeTimesheets.filter((timesheet) =>
-      workerMatchesTimesheet(worker, timesheet),
-    );
-    const currentTimesheets = workerTimesheets.filter((timesheet) =>
-      isDateInTimesheetWeek(today, timesheet),
-    );
-    const booking = latestBooking(assignments, workerTimesheets);
-    return {
-      worker,
-      assignments,
-      currentTimesheets,
-      bookingStart: booking.startDate,
-      bookingEnd: booking.endDate,
-    };
-  });
+  return knownWorkers
+    .map((worker) => {
+      const assignments = activeProjectAssignments(worker, companies, today);
+      const workerTimesheets = activeTimesheets.filter((timesheet) =>
+        workerMatchesTimesheet(worker, timesheet),
+      );
+      const currentTimesheets = workerTimesheets.filter((timesheet) =>
+        isDateInTimesheetWeek(today, timesheet),
+      );
+      const booking = latestBooking(assignments, workerTimesheets);
+      return {
+        worker,
+        assignments,
+        currentTimesheets,
+        bookingStart: booking.startDate,
+        bookingEnd: booking.endDate,
+      };
+    })
+    .sort(compareWorkerRowsByBookingStart);
 }
 
 function activeProjectAssignments(
@@ -231,6 +233,15 @@ function latestBooking(
       endDate: "",
     }
   );
+}
+
+function compareWorkerRowsByBookingStart(a: WorkerRow, b: WorkerRow): number {
+  if (a.bookingStart && b.bookingStart && a.bookingStart !== b.bookingStart) {
+    return a.bookingStart.localeCompare(b.bookingStart);
+  }
+  if (a.bookingStart && !b.bookingStart) return -1;
+  if (!a.bookingStart && b.bookingStart) return 1;
+  return a.worker.name.localeCompare(b.worker.name, "da-DK");
 }
 
 function localISODate(date: Date): string {
