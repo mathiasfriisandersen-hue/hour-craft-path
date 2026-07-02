@@ -49,6 +49,9 @@ type StoredTimesheet = {
   vikar?: string;
   vikarEmail?: string;
   vikarPhone?: string;
+  kontaktperson?: string;
+  kontaktpersonPhone?: string;
+  kontaktpersonEmail?: string;
   tradeSkills?: unknown[];
   workerAccessCode?: string;
   competencies?: string;
@@ -414,6 +417,9 @@ async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized
       for (const item of group) {
         item.vikarEmail = "";
         item.vikarPhone = "";
+        item.kontaktperson = "";
+        item.kontaktpersonPhone = "";
+        item.kontaktpersonEmail = "";
         item.tradeSkills = [];
         item.workerAccessCode = "";
         item.competencies = "";
