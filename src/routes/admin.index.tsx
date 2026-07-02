@@ -100,16 +100,21 @@ function AdminList() {
   return (
     <AppShell allow={["admin"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+        <div className="flex flex-wrap items-start gap-x-16 gap-y-4">
+          <div>
             <h1 className="text-2xl font-semibold">Timesedler</h1>
-            <Link to="/admin/workers" className="text-base font-medium text-primary hover:underline">
-              Vikaroversigt
-            </Link>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Administrér indsendelser, kontrol og regelgrundlag.
+            </p>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Administrér indsendelser, kontrol og regelgrundlag.
-          </p>
+          <Link to="/admin/workers" className="group block">
+            <h2 className="text-2xl font-semibold text-primary group-hover:underline">
+              Vikaroversigt
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Overblik over ledige vikarer og aktive vikarer
+            </p>
+          </Link>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
