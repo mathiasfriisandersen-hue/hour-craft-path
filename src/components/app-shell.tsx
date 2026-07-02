@@ -41,19 +41,19 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card">
-        <div className="w-full px-6 py-4 flex items-center justify-between gap-6">
-          <Link to={home} className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
+        <div className="flex w-full flex-wrap items-center justify-between gap-3 px-4 py-4 md:flex-nowrap md:gap-6 md:px-6">
+          <Link to={home} className="flex min-w-0 items-center gap-2.5">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-primary font-bold text-primary-foreground">
               T
             </div>
-            <div>
-              <div className="font-semibold leading-tight">Timeseddel</div>
-              <div className="text-xs text-muted-foreground leading-tight">
+            <div className="min-w-0">
+              <div className="truncate font-semibold leading-tight">Timeseddel</div>
+              <div className="hidden truncate text-xs leading-tight text-muted-foreground sm:block">
                 Dokumentation for modtagelse og godkendelse
               </div>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
             <span className="hidden sm:inline text-sm text-muted-foreground">
               Logget ind som:{" "}
               <span className="font-medium text-foreground">{ROLE_LABEL[role]}</span>

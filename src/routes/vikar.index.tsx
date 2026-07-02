@@ -22,7 +22,64 @@ function VikarList() {
         </div>
       </div>
 
-      <div className="rounded-lg border bg-card overflow-x-auto">
+      {list.length === 0 && (
+        <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
+          Ingen timesedler endnu. Brug linket i invitationsmailen fra Sub-Z.
+        </div>
+      )}
+
+      {list.length > 0 && (
+        <div className="space-y-3 md:hidden">
+          {list.map((t) => (
+            <article key={t.id} className="rounded-lg border bg-card p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">Uge {weekNumber(t.weekStart)}</h2>
+                  <p className="text-sm text-muted-foreground">{formatWeekRange(t.weekStart)}</p>
+                </div>
+                <StatusBadge status={t.status} />
+              </div>
+
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Vikar</dt>
+                  <dd>{t.vikar || <em className="text-muted-foreground">—</em>}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Timer</dt>
+                  <dd className="tabular-nums">{totalHours(t.days).toFixed(2)}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-xs text-muted-foreground">Brugervirksomhed</dt>
+                  <dd>{t.brugervirksomhed || <em className="text-muted-foreground">—</em>}</dd>
+                </div>
+              </dl>
+
+              <div className="mt-4 flex items-center justify-end gap-4">
+                {t.status === "draft" && (
+                  <button
+                    onClick={() => {
+                      if (window.confirm("Slet denne kladde?")) remove(t.id);
+                    }}
+                    className="text-sm font-medium text-status-rejected-fg hover:underline"
+                  >
+                    Slet
+                  </button>
+                )}
+                <Link
+                  to="/vikar/$id"
+                  params={{ id: t.id }}
+                  className="text-sm font-medium text-primary hover:underline"
+                >
+                  Åbn →
+                </Link>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
         <table className="w-full text-sm min-w-[640px]">
           <thead className="bg-muted/50 text-left text-muted-foreground">
             <tr>
@@ -36,13 +93,6 @@ function VikarList() {
             </tr>
           </thead>
           <tbody>
-            {list.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
-                  Ingen timesedler endnu. Brug linket i invitationsmailen fra Sub-Z.
-                </td>
-              </tr>
-            )}
             {list.map((t) => (
               <tr key={t.id} className="border-t hover:bg-muted/30">
                 <td className="px-4 py-3 font-medium whitespace-nowrap">

@@ -283,7 +283,107 @@ function VikarEdit() {
             showDelayedMealBreak={showDelayedMealBreak}
           />
         </div>
-        <div className="overflow-x-auto">
+        <div className="space-y-4 border-t p-4 md:hidden">
+          {WEEKDAYS.map((name, index) => {
+            const day = t.days[index];
+            const absent = day.absence !== "none";
+            const date = addDaysToISODate(t.weekStart, index);
+            return (
+              <article key={name} className="rounded-lg border bg-background p-4">
+                <div className="mb-4">
+                  <h3 className="font-medium">
+                    {name} {formatShortDate(date)}
+                  </h3>
+                  <HolidayBadges isoDate={date} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Start">
+                    <Input
+                      type="time"
+                      className="h-9 w-full"
+                      step={300}
+                      value={day.start}
+                      disabled={locked || absent}
+                      onFocus={() => {
+                        if (!day.start) updateDay(index, { start: "07:00" });
+                      }}
+                      onChange={(e) => updateDay(index, { start: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Slut">
+                    <Input
+                      type="time"
+                      className="h-9 w-full"
+                      step={300}
+                      value={day.end}
+                      disabled={locked || absent}
+                      onFocus={() => {
+                        if (!day.end) updateDay(index, { end: "15:30" });
+                      }}
+                      onChange={(e) => updateDay(index, { end: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="Pause 1" className="col-span-2">
+                    <TimeRangeInputs
+                      start={day.pauseStart}
+                      end={day.pauseEnd}
+                      disabled={locked || absent}
+                      defaultStart={DEFAULT_PAUSE_1_START}
+                      defaultEnd={DEFAULT_PAUSE_1_END}
+                      onStartChange={(value) => updateDayPauseRange(index, { pauseStart: value })}
+                      onEndChange={(value) => updateDayPauseRange(index, { pauseEnd: value })}
+                    />
+                  </Field>
+                  <Field label="Pause 2" className="col-span-2">
+                    <TimeRangeInputs
+                      start={day.pause2Start}
+                      end={day.pause2End}
+                      disabled={locked || absent}
+                      defaultStart={DEFAULT_PAUSE_2_START}
+                      defaultEnd={DEFAULT_PAUSE_2_END}
+                      onStartChange={(value) => updateDayPauseRange(index, { pause2Start: value })}
+                      onEndChange={(value) => updateDayPauseRange(index, { pause2End: value })}
+                    />
+                  </Field>
+                  {showDelayedMealBreak && (
+                    <label
+                      className={cn(
+                        "col-span-2 inline-flex min-h-9 items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
+                        locked || absent
+                          ? "cursor-not-allowed opacity-60"
+                          : "cursor-pointer hover:bg-accent",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 shrink-0 accent-primary"
+                        checked={
+                          day.wasInstructedToWorkDuringMealBreak &&
+                          day.mealBreakPostponedMoreThan30Min
+                        }
+                        disabled={locked || absent}
+                        onChange={(e) =>
+                          updateDay(index, {
+                            wasInstructedToWorkDuringMealBreak: e.target.checked,
+                            mealBreakPostponedMoreThan30Min: e.target.checked,
+                            delayedMealBreakCompensation: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>
+                        Jeg blev bedt om at arbejde i min spisepause, og pausen blev udskudt mere
+                        end 30 min.
+                      </span>
+                    </label>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[1080px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
