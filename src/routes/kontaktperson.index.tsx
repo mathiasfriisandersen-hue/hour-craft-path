@@ -54,7 +54,7 @@ function KontaktList() {
             const canAct = t.status === "sent";
             return (
               <div key={t.id} className="rounded-lg border bg-card p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="font-semibold">{t.vikar}</div>
                     <div className="text-sm text-muted-foreground">{t.brugervirksomhed}</div>
@@ -62,7 +62,7 @@ function KontaktList() {
                       Uge {weekNumber(t.weekStart)} · {formatWeekRange(t.weekStart)}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end">
                     <StatusBadge status={t.status} />
                     <div className="text-sm tabular-nums font-medium">
                       {totalHours(t.days).toFixed(2)} timer
@@ -70,11 +70,11 @@ function KontaktList() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   <Link
                     to="/kontaktperson/$id"
                     params={{ id: t.id }}
-                    className="text-sm text-primary font-medium hover:underline mr-auto"
+                    className="text-sm text-primary font-medium hover:underline sm:mr-auto"
                   >
                     Se detaljer →
                   </Link>
@@ -108,7 +108,7 @@ function KontaktList() {
           <div className="space-y-3">
             {handled.map((t) => (
               <div key={t.id} className="rounded-lg border bg-card p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <div className="font-semibold">{t.vikar}</div>
                     <div className="text-sm text-muted-foreground">{t.brugervirksomhed}</div>
@@ -116,18 +116,18 @@ function KontaktList() {
                       Uge {weekNumber(t.weekStart)} · {formatWeekRange(t.weekStart)}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-2">
+                  <div className="flex min-w-0 flex-col items-start gap-2 sm:items-end">
                     <StatusBadge status={t.status} />
                     <div className="text-sm tabular-nums font-medium">
                       {totalHours(t.days).toFixed(2)} timer
                     </div>
                   </div>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+                <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
                   <Link
                     to="/kontaktperson/$id"
                     params={{ id: t.id }}
-                    className="text-sm text-primary font-medium hover:underline mr-auto"
+                    className="text-sm text-primary font-medium hover:underline sm:mr-auto"
                   >
                     Se detaljer →
                   </Link>

@@ -32,8 +32,8 @@ function VikarList() {
         <div className="space-y-3 md:hidden">
           {list.map((t) => (
             <article key={t.id} className="rounded-lg border bg-card p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
+              <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
                   <h2 className="font-semibold">Uge {weekNumber(t.weekStart)}</h2>
                   <p className="text-sm text-muted-foreground">{formatWeekRange(t.weekStart)}</p>
                 </div>
@@ -51,11 +51,13 @@ function VikarList() {
                 </div>
                 <div className="col-span-2">
                   <dt className="text-xs text-muted-foreground">Brugervirksomhed</dt>
-                  <dd>{t.brugervirksomhed || <em className="text-muted-foreground">—</em>}</dd>
+                  <dd className="break-words">
+                    {t.brugervirksomhed || <em className="text-muted-foreground">—</em>}
+                  </dd>
                 </div>
               </dl>
 
-              <div className="mt-4 flex items-center justify-end gap-4">
+              <div className="mt-4 flex flex-wrap items-center justify-end gap-4">
                 {t.status === "draft" && (
                   <button
                     onClick={() => {

@@ -185,7 +185,91 @@ function AdminList() {
           Ingen timesedler matcher filtrene.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border bg-card">
+        <>
+          <div className="space-y-3 md:hidden">
+            {list.map((item) => {
+              const calc = calculateTimesheet(item);
+              const retentionWarning = timesheetRetentionWarning(item);
+              return (
+                <article key={item.id} className="rounded-lg border bg-card p-4">
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <div className="min-w-0">
+                      <h2 className="font-semibold">{item.vikar || "—"}</h2>
+                      <p className="text-sm text-muted-foreground">
+                        {item.brugervirksomhed || "—"}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Uge {weekNumber(item.weekStart)} · {formatWeekRange(item.weekStart)}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={item.status} />
+                      {item.archived && (
+                        <span className="text-xs text-muted-foreground">Arkiveret</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Timer</dt>
+                      <dd className="tabular-nums">{totalHours(item.days).toFixed(2)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-muted-foreground">Kontakt</dt>
+                      <dd>{item.kontaktperson || "—"}</dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-xs text-muted-foreground">Overenskomst</dt>
+                      <dd className="truncate">{calc.agreementName || "—"}</dd>
+                      <dd className="text-xs text-muted-foreground">
+                        {calc.rateValidationStatus}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {retentionWarning && (
+                    <div
+                      className={
+                        retentionWarning.level === "critical"
+                          ? "mt-3 text-xs text-status-rejected-fg"
+                          : "mt-3 text-xs text-status-sent-fg"
+                      }
+                    >
+                      {retentionWarning.text}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex items-center justify-between gap-3">
+                    {archiveMode ? (
+                      <label className="inline-flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={selectedArchiveIds.includes(item.id)}
+                          disabled={Boolean(item.archived)}
+                          onChange={(event) =>
+                            toggleArchiveSelection(item.id, event.target.checked)
+                          }
+                        />
+                        Arkiver
+                      </label>
+                    ) : (
+                      <span />
+                    )}
+                    <Link
+                      to="/admin/$id"
+                      params={{ id: item.id }}
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Åbn →
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
@@ -275,7 +359,8 @@ function AdminList() {
               })}
             </tbody>
           </table>
-        </div>
+          </div>
+        </>
       )}
     </AppShell>
   );
