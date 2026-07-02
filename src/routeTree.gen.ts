@@ -13,13 +13,14 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
 import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
+import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
 import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
+import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
 
 const IndexRoute = IndexRouteImport.update({
@@ -42,14 +43,14 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/admin/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const VikarConsentRoute = VikarConsentRouteImport.update({
-  id: '/vikar/consent',
-  path: '/vikar/consent',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const VikarInviteRoute = VikarInviteRouteImport.update({
   id: '/vikar/invite',
   path: '/vikar/invite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VikarConsentRoute = VikarConsentRouteImport.update({
+  id: '/vikar/consent',
+  path: '/vikar/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VikarIdRoute = VikarIdRouteImport.update({
@@ -77,6 +78,11 @@ const AdminCompaniesRoute = AdminCompaniesRouteImport.update({
   path: '/admin/companies',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminCalendarRoute = AdminCalendarRouteImport.update({
+  id: '/admin/calendar',
+  path: '/admin/calendar',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIdRoute = AdminIdRouteImport.update({
   id: '/admin/$id',
   path: '/admin/$id',
@@ -86,6 +92,7 @@ const AdminIdRoute = AdminIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
@@ -100,6 +107,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
@@ -115,6 +123,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
@@ -131,6 +140,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin/$id'
+    | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
@@ -145,6 +155,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin/$id'
+    | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
@@ -159,6 +170,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin/$id'
+    | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
@@ -174,6 +186,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminIdRoute: typeof AdminIdRoute
+  AdminCalendarRoute: typeof AdminCalendarRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
   AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
   AdminRulesRoute: typeof AdminRulesRoute
@@ -265,6 +278,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCompaniesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/calendar': {
+      id: '/admin/calendar'
+      path: '/admin/calendar'
+      fullPath: '/admin/calendar'
+      preLoaderRoute: typeof AdminCalendarRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/$id': {
       id: '/admin/$id'
       path: '/admin/$id'
@@ -278,6 +298,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminIdRoute: AdminIdRoute,
+  AdminCalendarRoute: AdminCalendarRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
   AdminCreateWorkerRoute: AdminCreateWorkerRoute,
   AdminRulesRoute: AdminRulesRoute,

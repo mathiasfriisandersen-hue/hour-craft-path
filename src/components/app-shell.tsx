@@ -33,6 +33,7 @@ export function AppShell({
           { to: "/admin/rules", label: "Regelgrundlag" },
           { to: "/admin/companies", label: "Virksomheder" },
           { to: "/admin/create-worker", label: "Opret vikar" },
+          { to: "/admin/calendar", label: "Kalender" },
         ]
       : role === "vikar"
         ? [{ to: "/vikar", label: "Mine timesedler" }]
