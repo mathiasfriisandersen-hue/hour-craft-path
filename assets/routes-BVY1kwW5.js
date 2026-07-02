@@ -1,0 +1,1 @@
+import{gt as e}from"./timesheet-store-CNahHpS6.js";import{a as t,o as n,r}from"./auth-BwFE5N9a.js";import{t as i}from"./app-shell-DRP8AZ3D.js";var a=e();function o(){let{role:e,ready:o}=t();return!o||!e?(0,a.jsx)(i,{}):(0,a.jsx)(n,{to:r[e],replace:!0})}export{o as component};
