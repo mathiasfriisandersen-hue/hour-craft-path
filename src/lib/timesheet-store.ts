@@ -1463,12 +1463,13 @@ function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "em
 export function listKnownWorkers(): KnownWorker[] {
   const workers: KnownWorker[] = [];
   for (const timesheet of readTimesheets()) {
-    const key = knownWorkerKey(timesheet);
-    if (!key) continue;
+    const nameKey = personLookupKey(timesheet.vikar);
     const emailKey = personLookupKey(timesheet.vikarEmail);
+    const key = nameKey || emailKey;
+    if (!key) continue;
     const existing = workers.find((worker) => {
       const references = knownWorkerReferenceKeys(worker);
-      return references.includes(key) || (emailKey ? references.includes(emailKey) : false);
+      return nameKey ? references.includes(nameKey) : references.includes(emailKey);
     });
     const inactive =
       existing?.inactive || timesheet.workerInactive || timesheet.workerConsentInactive || false;
