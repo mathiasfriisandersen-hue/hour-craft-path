@@ -7,7 +7,6 @@ import { useTimesheets } from "@/lib/use-timesheets";
 import {
   calculateTimesheet,
   formatWeekRange,
-  markWorkerConsentRenewalSent,
   setArchived,
   STATUS_LABEL,
   timesheetRetentionWarning,
@@ -17,8 +16,6 @@ import {
   type Status,
 } from "@/lib/timesheet-store";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
-import { sendWorkerConsentRenewalEmail } from "@/lib/timesheet-mail";
-import { createWorkerConsentUrl } from "@/lib/worker-invite";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin — Overblik" }] }),
@@ -28,17 +25,21 @@ export const Route = createFileRoute("/admin/")({
 function AdminList() {
   const all = useTimesheets();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<Status | "all" | "archived">("all");
+  const [status, setStatus] = useState<Status | "all" | "archived" | "inactive">("all");
   const [agreement, setAgreement] = useState("all");
   const [week, setWeek] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
-  const [sendingConsentId, setSendingConsentId] = useState("");
-  const [consentMessage, setConsentMessage] = useState("");
 
   const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
   const visibleSubmitted = useMemo(
-    () => submitted.filter((item) => status === "archived" || !item.archived),
+    () =>
+      submitted.filter(
+        (item) =>
+          status === "archived" ||
+          status === "inactive" ||
+          (!item.archived && !item.workerConsentInactive),
+      ),
     [submitted, status],
   );
 
@@ -50,7 +51,12 @@ function AdminList() {
       );
       return (
         (!needle || text.includes(needle)) &&
-        (status === "all" || (status === "archived" ? item.archived : item.status === status)) &&
+        (status === "all" ||
+          (status === "archived"
+            ? item.archived
+            : status === "inactive"
+              ? item.workerConsentInactive
+              : item.status === status)) &&
         (agreement === "all" || item.selectedAgreementId === agreement) &&
         (!week || String(weekNumber(item.weekStart)) === week)
       );
@@ -70,6 +76,7 @@ function AdminList() {
   const counts = (value: Status) =>
     submitted.filter((item) => !item.archived && item.status === value).length;
   const archivedCount = submitted.filter((item) => item.archived).length;
+  const inactiveCount = submitted.filter((item) => item.workerConsentInactive).length;
 
   const toggleArchiveMode = () => {
     setArchiveMode((current) => {
@@ -88,26 +95,6 @@ function AdminList() {
     selectedArchiveIds.forEach((id) => setArchived(id, true));
     setSelectedArchiveIds([]);
     setArchiveMode(false);
-  };
-
-  const sendConsentRenewal = async (item: (typeof submitted)[number]) => {
-    if (!item.vikarEmail) return;
-    setSendingConsentId(item.id);
-    setConsentMessage("");
-    try {
-      const consentUrl = await createWorkerConsentUrl(item.vikar, item.vikarEmail);
-      const result = await sendWorkerConsentRenewalEmail(item.vikar, item.vikarEmail, consentUrl);
-      markWorkerConsentRenewalSent(item.vikar);
-      setConsentMessage(
-        result === "api"
-          ? `Samtykkemail sendt til ${item.vikar || "vikar"}.`
-          : "Mailappen er åbnet med samtykkemail.",
-      );
-    } catch {
-      setConsentMessage("Samtykkemail kunne ikke sendes lige nu.");
-    } finally {
-      setSendingConsentId("");
-    }
   };
 
   return (
@@ -140,7 +127,7 @@ function AdminList() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
         {(["sent", "approved", "rejected"] as Status[]).map((value) => (
           <button
             key={value}
@@ -158,6 +145,13 @@ function AdminList() {
           <div className="text-2xl font-semibold tabular-nums">{archivedCount}</div>
           <div className="mt-1 text-sm text-muted-foreground">Arkiverede</div>
         </button>
+        <button
+          onClick={() => setStatus("inactive")}
+          className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+        >
+          <div className="text-2xl font-semibold tabular-nums">{inactiveCount}</div>
+          <div className="mt-1 text-sm text-muted-foreground">Inaktive timesedler</div>
+        </button>
       </div>
 
       <section className="mb-5 rounded-lg border bg-card p-4">
@@ -170,7 +164,7 @@ function AdminList() {
           <select
             className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
             value={status}
-            onChange={(e) => setStatus(e.target.value as Status | "all" | "archived")}
+            onChange={(e) => setStatus(e.target.value as Status | "all" | "archived" | "inactive")}
           >
             <option value="all">Alle statusser</option>
             {Object.entries(STATUS_LABEL)
@@ -181,6 +175,7 @@ function AdminList() {
                 </option>
               ))}
             <option value="archived">Arkiverede</option>
+            <option value="inactive">Inaktive timesedler</option>
           </select>
           <select
             className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
@@ -204,8 +199,6 @@ function AdminList() {
           />
         </div>
       </section>
-
-      {consentMessage && <div className="mb-5 text-sm text-muted-foreground">{consentMessage}</div>}
 
       {list.length === 0 ? (
         <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
@@ -233,6 +226,9 @@ function AdminList() {
                       <StatusBadge status={item.status} />
                       {item.archived && (
                         <span className="text-xs text-muted-foreground">Arkiveret</span>
+                      )}
+                      {item.workerConsentInactive && (
+                        <span className="text-xs text-muted-foreground">Inaktiv</span>
                       )}
                     </div>
                   </div>
@@ -291,17 +287,6 @@ function AdminList() {
                       Åbn →
                     </Link>
                   </div>
-                  {retentionWarning && item.vikarEmail && (
-                    <Button
-                      className="mt-3 w-full"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => sendConsentRenewal(item)}
-                      disabled={sendingConsentId === item.id}
-                    >
-                      {sendingConsentId === item.id ? "Sender…" : "Send samtykkemail"}
-                    </Button>
-                  )}
                 </article>
               );
             })}
@@ -371,6 +356,9 @@ function AdminList() {
                       {item.archived && (
                         <div className="mt-1 text-xs text-muted-foreground">Arkiveret</div>
                       )}
+                      {item.workerConsentInactive && (
+                        <div className="mt-1 text-xs text-muted-foreground">Inaktiv</div>
+                      )}
                       {retentionWarning && (
                         <div
                           className={
@@ -384,17 +372,6 @@ function AdminList() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {retentionWarning && item.vikarEmail && (
-                        <Button
-                          className="mr-3"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => sendConsentRenewal(item)}
-                          disabled={sendingConsentId === item.id}
-                        >
-                          {sendingConsentId === item.id ? "Sender…" : "Samtykke"}
-                        </Button>
-                      )}
                       <Link
                         to="/admin/$id"
                         params={{ id: item.id }}

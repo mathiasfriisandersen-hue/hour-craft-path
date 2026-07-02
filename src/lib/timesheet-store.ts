@@ -183,6 +183,7 @@ export type Timesheet = {
   status: Status;
   archived?: boolean;
   workerInactive?: boolean;
+  workerConsentInactive?: boolean;
   workerConsentRenewalSentAt?: string;
   workerConsentRenewedAt?: string;
   rejectionComment?: string;
@@ -389,6 +390,7 @@ type StoredTimesheet = Omit<
   workerMustChangeAccessCode?: boolean;
   archived?: boolean;
   workerInactive?: boolean;
+  workerConsentInactive?: boolean;
   workerConsentRenewalSentAt?: string;
   workerConsentRenewedAt?: string;
   notes?: string;
@@ -485,6 +487,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     status: value.status === "reviewed" ? "approved" : (value.status as Status),
     archived: value.archived ?? false,
     workerInactive: value.workerInactive ?? false,
+    workerConsentInactive: value.workerConsentInactive ?? false,
     workerConsentRenewalSentAt: value.workerConsentRenewalSentAt ?? "",
     workerConsentRenewedAt: value.workerConsentRenewedAt ?? "",
     days,
@@ -948,6 +951,7 @@ export function createBlank(): Timesheet {
     status: "draft",
     archived: false,
     workerInactive: false,
+    workerConsentInactive: false,
     workerConsentRenewalSentAt: "",
     workerConsentRenewedAt: "",
     createdAt: now,

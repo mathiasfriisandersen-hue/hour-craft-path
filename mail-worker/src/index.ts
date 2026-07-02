@@ -3,6 +3,7 @@ type Env = {
   RESEND_FROM_EMAIL: string;
   ADMIN_EMAIL: string;
   ALLOWED_ORIGIN?: string;
+  APP_BASE_URL?: string;
   WORKER_INVITES: KVNamespace;
 };
 
@@ -41,6 +42,23 @@ type AppStatePayload = {
   updatedAt?: string;
   timesheets?: unknown[];
   companies?: unknown[];
+};
+
+type StoredTimesheet = {
+  id?: string;
+  vikar?: string;
+  vikarEmail?: string;
+  vikarPhone?: string;
+  workerAccessCode?: string;
+  competencies?: string;
+  status?: string;
+  weekStart?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  workerInactive?: boolean;
+  workerConsentInactive?: boolean;
+  workerConsentRenewalSentAt?: string;
+  workerConsentRenewedAt?: string;
 };
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
@@ -92,6 +110,22 @@ function isOriginAllowed(request: Request, env: Env): boolean {
 
 function isEmail(value: unknown): value is string {
   return typeof value === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function personKey(value: unknown): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function addMonths(date: Date, months: number): Date {
+  const next = new Date(date);
+  next.setMonth(next.getMonth() + months);
+  return next;
+}
+
+function parseDate(value: unknown): Date | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  const date = new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
 function cleanSubject(value: unknown): string {
@@ -160,10 +194,10 @@ async function createWorkerInvite(payload: WorkerInviteCreatePayload, env: Env) 
       version: 1,
       timesheet,
     }),
-    { expirationTtl: CONSENT_TTL_SECONDS },
+    { expirationTtl: INVITE_TTL_SECONDS },
   );
 
-  return { token, expiresInSeconds: CONSENT_TTL_SECONDS };
+  return { token, expiresInSeconds: INVITE_TTL_SECONDS };
 }
 
 async function createWorkerConsent(payload: WorkerConsentCreatePayload, env: Env) {
@@ -179,10 +213,10 @@ async function createWorkerConsent(payload: WorkerConsentCreatePayload, env: Env
       workerName: payload.workerName.trim(),
       workerEmail: payload.workerEmail.trim(),
     }),
-    { expirationTtl: INVITE_TTL_SECONDS },
+    { expirationTtl: CONSENT_TTL_SECONDS },
   );
 
-  return { token, expiresInSeconds: INVITE_TTL_SECONDS };
+  return { token, expiresInSeconds: CONSENT_TTL_SECONDS };
 }
 
 async function readWorkerInvite(token: string, env: Env) {
@@ -225,6 +259,33 @@ async function writeAppState(payload: AppStatePayload, env: Env) {
   }
   await env.WORKER_INVITES.put(APP_STATE_KEY, serialized);
   return state;
+}
+
+function appBaseUrl(env: Env): string {
+  return (env.APP_BASE_URL || allowedOrigins(env)[0] || "").replace(/\/$/, "");
+}
+
+function workerConsentRenewalSubject(): string {
+  return "Forny samtykke til jobhenvendelser fra Sub-Z";
+}
+
+function workerConsentRenewalBody(workerName: string, consentUrl: string): string {
+  return [
+    `Hej ${workerName || "vikar"}`,
+    "",
+    "Vi kontakter dig, fordi dit samtykke til, at Sub-Z må kontakte dig om relevante jobmuligheder, skal fornyes.",
+    "",
+    "Hvis du fortsat ønsker at være registreret hos Sub-Z og modtage henvendelser om job, skal du bekræfte dit samtykke via linket her:",
+    "",
+    consentUrl,
+    "",
+    "Når du har bekræftet, bliver dit samtykke fornyet, og du kan igen modtage relevante jobmuligheder fra Sub-Z.",
+    "",
+    "Hvis du ikke ønsker at forny dit samtykke, skal du ikke gøre noget.",
+    "",
+    "Venlig hilsen",
+    "Sub-Z ApS",
+  ].join("\n");
 }
 
 async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
@@ -303,7 +364,105 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
   };
 }
 
+async function sendSingleEmail(
+  to: string,
+  subject: string,
+  text: string,
+  env: Env,
+): Promise<unknown> {
+  return sendViaResend({ contactEmail: to, subject, text, sendAdminCopy: false }, env);
+}
+
+async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized: number }> {
+  const state = (await readAppState(env)) as AppStatePayload;
+  const timesheets = Array.isArray(state.timesheets)
+    ? (state.timesheets as StoredTimesheet[])
+    : [];
+  const baseUrl = appBaseUrl(env);
+  if (!baseUrl || timesheets.length === 0) return { sent: 0, anonymized: 0 };
+
+  const now = new Date();
+  let sent = 0;
+  let anonymized = 0;
+  const groups = new Map<string, StoredTimesheet[]>();
+
+  for (const item of timesheets) {
+    if (item.status === "draft" || item.workerInactive || item.workerConsentInactive) continue;
+    const key = personKey(item.vikar) || personKey(item.vikarEmail);
+    if (!key || !isEmail(item.vikarEmail)) continue;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+
+  for (const group of groups.values()) {
+    const latestActivity = group
+      .flatMap((item) => [parseDate(item.weekStart || item.createdAt), parseDate(item.workerConsentRenewedAt)])
+      .filter((date): date is Date => Boolean(date))
+      .sort((a, b) => a.getTime() - b.getTime())
+      .at(-1);
+    if (!latestActivity) continue;
+
+    const warningAt = addMonths(latestActivity, 5);
+    const inactiveAt = addMonths(latestActivity, 6);
+    const latestSent = group
+      .map((item) => parseDate(item.workerConsentRenewalSentAt))
+      .filter((date): date is Date => Boolean(date))
+      .sort((a, b) => a.getTime() - b.getTime())
+      .at(-1);
+
+    if (now >= inactiveAt) {
+      for (const item of group) {
+        item.vikarEmail = "";
+        item.vikarPhone = "";
+        item.workerAccessCode = "";
+        item.competencies = "";
+        item.workerConsentInactive = true;
+        item.updatedAt = now.toISOString();
+      }
+      anonymized += group.length;
+      continue;
+    }
+
+    if (now >= warningAt && (!latestSent || latestSent < latestActivity)) {
+      const worker = group[0];
+      const consent = await createWorkerConsent(
+        { workerName: worker.vikar || "vikar", workerEmail: worker.vikarEmail },
+        env,
+      );
+      const consentUrl = `${baseUrl}/vikar/consent?i=${encodeURIComponent(consent.token)}`;
+      await sendSingleEmail(
+        worker.vikarEmail || "",
+        workerConsentRenewalSubject(),
+        workerConsentRenewalBody(worker.vikar || "vikar", consentUrl),
+        env,
+      );
+      for (const item of group) {
+        item.workerConsentRenewalSentAt = now.toISOString();
+        item.updatedAt = now.toISOString();
+      }
+      sent += 1;
+    }
+  }
+
+  if (sent || anonymized) {
+    await writeAppState(
+      {
+        version: 1,
+        updatedAt: now.toISOString(),
+        timesheets,
+        companies: state.companies ?? [],
+      },
+      env,
+    );
+  }
+
+  return { sent, anonymized };
+}
+
 export default {
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    await runConsentRetention(env);
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const headers = corsHeaders(request, env);
 

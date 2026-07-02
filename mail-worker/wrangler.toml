@@ -5,7 +5,11 @@ compatibility_date = "2026-06-28"
 [vars]
 ADMIN_EMAIL = "mathiasfriisandersen@gmail.com"
 ALLOWED_ORIGIN = "https://mathiasfriisandersen.dk"
+APP_BASE_URL = "https://mathiasfriisandersen.dk/hour-craft-path"
 RESEND_FROM_EMAIL = "Sub-Z Timesheet <timesheet@send.mathiasfriisandersen.dk>"
+
+[[triggers]]
+crons = ["0 8 * * *"]
 
 [[kv_namespaces]]
 binding = "WORKER_INVITES"
