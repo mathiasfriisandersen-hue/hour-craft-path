@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ export const Route = createFileRoute("/admin/")({
 
 function AdminList() {
   const { role } = useAuth();
+  const canManageArchive = role === "admin";
   const all = useTimesheets();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status | "all" | "archived" | "inactive">("all");
@@ -33,16 +34,21 @@ function AdminList() {
   const [archiveMode, setArchiveMode] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
 
+  useEffect(() => {
+    if (!canManageArchive && (status === "archived" || status === "inactive")) {
+      setStatus("all");
+    }
+  }, [canManageArchive, status]);
+
   const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
   const visibleSubmitted = useMemo(
     () =>
       submitted.filter(
         (item) =>
-          status === "archived" ||
-          status === "inactive" ||
+          (canManageArchive && (status === "archived" || status === "inactive")) ||
           (!item.archived && !item.workerConsentInactive),
       ),
-    [submitted, status],
+    [canManageArchive, submitted, status],
   );
 
   const list = useMemo(() => {
@@ -55,15 +61,15 @@ function AdminList() {
         (!needle || text.includes(needle)) &&
         (status === "all" ||
           (status === "archived"
-            ? item.archived
+            ? canManageArchive && item.archived
             : status === "inactive"
-              ? item.workerConsentInactive
+              ? canManageArchive && item.workerConsentInactive
               : item.status === status)) &&
         (agreement === "all" || item.selectedAgreementId === agreement) &&
         (!week || String(weekNumber(item.weekStart)) === week)
       );
     });
-  }, [visibleSubmitted, query, status, agreement, week]);
+  }, [canManageArchive, visibleSubmitted, query, status, agreement, week]);
 
   const exportCsv = () => {
     const blob = new Blob([timesheetsToCsv(list)], { type: "text/csv;charset=utf-8" });
@@ -121,16 +127,18 @@ function AdminList() {
           </Link>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant={archiveMode ? "default" : "outline"}
-            onClick={archiveMode && selectedArchiveIds.length ? archiveSelected : toggleArchiveMode}
-            disabled={!submitted.length}
-          >
-            {archiveMode && selectedArchiveIds.length
-              ? `Arkivér valgte (${selectedArchiveIds.length})`
-              : "Arkiver"}
-          </Button>
-          {archiveMode && (
+          {canManageArchive && (
+            <Button
+              variant={archiveMode ? "default" : "outline"}
+              onClick={archiveMode && selectedArchiveIds.length ? archiveSelected : toggleArchiveMode}
+              disabled={!submitted.length}
+            >
+              {archiveMode && selectedArchiveIds.length
+                ? `Arkivér valgte (${selectedArchiveIds.length})`
+                : "Arkiver"}
+            </Button>
+          )}
+          {canManageArchive && archiveMode && (
             <Button type="button" variant="outline" onClick={toggleArchiveMode}>
               Annullér
             </Button>
@@ -141,7 +149,7 @@ function AdminList() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
+      <div className={`mb-6 grid grid-cols-2 gap-3 ${canManageArchive ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
         {(["sent", "approved", "rejected"] as Status[]).map((value) => (
           <button
             key={value}
@@ -152,20 +160,24 @@ function AdminList() {
             <div className="mt-1 text-sm text-muted-foreground">{STATUS_LABEL[value]}</div>
           </button>
         ))}
-        <button
-          onClick={() => setStatus("archived")}
-          className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
-        >
-          <div className="text-2xl font-semibold tabular-nums">{archivedCount}</div>
-          <div className="mt-1 text-sm text-muted-foreground">Arkiverede</div>
-        </button>
-        <button
-          onClick={() => setStatus("inactive")}
-          className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
-        >
-          <div className="text-2xl font-semibold tabular-nums">{inactiveCount}</div>
-          <div className="mt-1 text-sm text-muted-foreground">Inaktive timesedler</div>
-        </button>
+        {canManageArchive && (
+          <>
+            <button
+              onClick={() => setStatus("archived")}
+              className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+            >
+              <div className="text-2xl font-semibold tabular-nums">{archivedCount}</div>
+              <div className="mt-1 text-sm text-muted-foreground">Arkiverede</div>
+            </button>
+            <button
+              onClick={() => setStatus("inactive")}
+              className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
+            >
+              <div className="text-2xl font-semibold tabular-nums">{inactiveCount}</div>
+              <div className="mt-1 text-sm text-muted-foreground">Inaktive timesedler</div>
+            </button>
+          </>
+        )}
       </div>
 
       <section className="mb-5 rounded-lg border bg-card p-4">
@@ -188,8 +200,12 @@ function AdminList() {
                   {label}
                 </option>
               ))}
-            <option value="archived">Arkiverede</option>
-            <option value="inactive">Inaktive timesedler</option>
+            {canManageArchive && (
+              <>
+                <option value="archived">Arkiverede</option>
+                <option value="inactive">Inaktive timesedler</option>
+              </>
+            )}
           </select>
           <select
             className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
@@ -278,7 +294,7 @@ function AdminList() {
                   )}
 
                   <div className="mt-4 flex items-center justify-between gap-3">
-                    {archiveMode ? (
+                    {canManageArchive && archiveMode ? (
                       <label className="inline-flex items-center gap-2 text-sm">
                         <input
                           type="checkbox"
@@ -311,7 +327,7 @@ function AdminList() {
             <thead className="bg-muted/50 text-left text-muted-foreground">
               <tr>
                 {[
-                  archiveMode ? "Arkiver" : "",
+                  canManageArchive && archiveMode ? "Arkiver" : "",
                   "Vikar",
                   "Virksomhed",
                   "Uge",
@@ -333,7 +349,7 @@ function AdminList() {
                 return (
                   <tr key={item.id} className="border-t hover:bg-muted/20">
                     <td className="px-4 py-3">
-                      {archiveMode && (
+                      {canManageArchive && archiveMode && (
                         <input
                           type="checkbox"
                           checked={selectedArchiveIds.includes(item.id)}

@@ -6,7 +6,7 @@ import { findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
-const ROLES: Role[] = ["vikar", "kontaktperson", "admin", "bruger"];
+const ROLES: Role[] = ["vikar", "kontaktperson", "bruger", "admin"];
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -48,7 +48,7 @@ export function LoginScreen() {
 
   return (
     <div className="grid min-h-screen place-items-center bg-background px-4 text-foreground">
-      <div className="w-full max-w-md rounded-lg border bg-card p-5 shadow-sm sm:p-8">
+      <div className="w-full max-w-xl rounded-lg border bg-card p-5 shadow-sm sm:p-8">
         <div className="flex items-center gap-2.5 mb-6">
           <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
             T
@@ -77,7 +77,7 @@ export function LoginScreen() {
                   type="button"
                   onClick={() => setRole(r)}
                   className={cn(
-                    "rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                    "rounded-md border px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                     role === r
                       ? "border-primary bg-primary text-primary-foreground"
                       : "bg-background hover:bg-accent",
