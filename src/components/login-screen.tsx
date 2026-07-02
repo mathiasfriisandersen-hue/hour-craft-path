@@ -47,8 +47,8 @@ export function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground grid place-items-center px-4">
-      <div className="w-full max-w-md rounded-lg border bg-card p-8 shadow-sm">
+    <div className="grid min-h-screen place-items-center bg-background px-4 text-foreground">
+      <div className="w-full max-w-md rounded-lg border bg-card p-5 shadow-sm sm:p-8">
         <div className="flex items-center gap-2.5 mb-6">
           <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
             T
@@ -70,7 +70,7 @@ export function LoginScreen() {
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <label className="text-sm font-medium">Vælg rolle</label>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
               {ROLES.map((r) => (
                 <button
                   key={r}
@@ -118,14 +118,14 @@ export function LoginScreen() {
           </Button>
         </form>
 
-        <div className="mt-6 pt-5 border-t flex items-center justify-between gap-3">
+        <div className="mt-6 flex items-center justify-between gap-3 border-t pt-5">
           <p className="text-xs text-muted-foreground leading-snug">
             Demooplysninger gemmes ikke permanent og kan ryddes af admin.
           </p>
           <img
             src={subzLogo}
             alt="SUB-Z — Esprit de corps at work"
-            className="h-8 w-auto shrink-0"
+            className="hidden h-8 w-auto shrink-0 sm:block"
           />
         </div>
       </div>

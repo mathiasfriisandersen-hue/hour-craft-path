@@ -143,7 +143,7 @@ function AdminList() {
             onChange={(e) => setQuery(e.target.value)}
           />
           <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
             value={status}
             onChange={(e) => setStatus(e.target.value as Status | "all" | "archived")}
           >
@@ -158,7 +158,7 @@ function AdminList() {
             <option value="archived">Arkiverede</option>
           </select>
           <select
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
             value={agreement}
             onChange={(e) => setAgreement(e.target.value)}
           >

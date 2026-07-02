@@ -76,7 +76,7 @@ export function AppShell({
         </div>
       </header>
       <div className="border-b bg-card/70">
-        <nav className="flex w-full gap-1 overflow-x-auto px-4 md:px-6">
+        <nav className="flex w-full flex-wrap gap-1 px-4 md:flex-nowrap md:overflow-x-auto md:px-6">
           {nav.map((item) => (
             <Link
               key={item.to}
