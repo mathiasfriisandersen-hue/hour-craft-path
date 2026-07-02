@@ -119,7 +119,7 @@ function AdminList() {
         {(["sent", "approved", "rejected"] as Status[]).map((value) => (
           <button
             key={value}
-            onClick={() => setStatus(status === value ? "all" : value)}
+            onClick={() => setStatus(value)}
             className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
           >
             <div className="text-2xl font-semibold tabular-nums">{counts(value)}</div>
@@ -127,7 +127,7 @@ function AdminList() {
           </button>
         ))}
         <button
-          onClick={() => setStatus(status === "archived" ? "all" : "archived")}
+          onClick={() => setStatus("archived")}
           className="rounded-lg border bg-card p-4 text-left transition-colors hover:bg-muted/30"
         >
           <div className="text-2xl font-semibold tabular-nums">{archivedCount}</div>
