@@ -8,8 +8,8 @@ ALLOWED_ORIGIN = "https://mathiasfriisandersen.dk"
 APP_BASE_URL = "https://mathiasfriisandersen.dk/hour-craft-path"
 RESEND_FROM_EMAIL = "Sub-Z Timesheet <timesheet@send.mathiasfriisandersen.dk>"
 
-[[triggers]]
-crons = ["0 8 * * *"]
+[triggers]
+crons = ["*/15 * * * *"]
 
 [[kv_namespaces]]
 binding = "WORKER_INVITES"
