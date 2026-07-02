@@ -6,7 +6,7 @@ import { findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
-const ROLES: Role[] = ["vikar", "kontaktperson", "admin"];
+const ROLES: Role[] = ["vikar", "kontaktperson", "admin", "bruger"];
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -70,7 +70,7 @@ export function LoginScreen() {
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <label className="text-sm font-medium">Vælg rolle</label>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
               {ROLES.map((r) => (
                 <button
                   key={r}

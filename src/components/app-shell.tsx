@@ -26,15 +26,17 @@ export function AppShell({
 
   const home = ROLE_HOME[role];
   const denied = allow && !allow.includes(role);
+  const adminNav = [
+    { to: "/admin", label: "Overblik" },
+    ...(role === "admin" ? [{ to: "/admin/rules", label: "Regelgrundlag" }] : []),
+    { to: "/admin/companies", label: "Virksomheder" },
+    { to: "/admin/create-worker", label: "Opret vikar" },
+    { to: "/admin/calendar", label: "Kalender" },
+    ...(role === "admin" ? [{ to: "/admin/users", label: "Brugere" }] : []),
+  ];
   const nav =
-    role === "admin"
-      ? [
-          { to: "/admin", label: "Overblik" },
-          { to: "/admin/rules", label: "Regelgrundlag" },
-          { to: "/admin/companies", label: "Virksomheder" },
-          { to: "/admin/create-worker", label: "Opret vikar" },
-          { to: "/admin/calendar", label: "Kalender" },
-        ]
+    role === "admin" || role === "bruger"
+      ? adminNav
       : role === "vikar"
         ? [{ to: "/vikar", label: "Mine timesedler" }]
         : [{ to: "/kontaktperson", label: "Til godkendelse" }];

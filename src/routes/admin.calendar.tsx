@@ -79,7 +79,7 @@ function AdminCalendar() {
   const currentMonthLabel = useMemo(() => formatMonth(month), [month]);
 
   return (
-    <AppShell allow={["admin"]}>
+    <AppShell allow={["admin", "bruger"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Kalender</h1>

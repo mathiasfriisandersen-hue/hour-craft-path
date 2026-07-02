@@ -47,7 +47,7 @@ function WorkerOverview() {
   const available = rows.filter((row) => !row.assignments.length && !row.currentTimesheets.length);
 
   return (
-    <AppShell allow={["admin"]}>
+    <AppShell allow={["admin", "bruger"]}>
       <div className="mb-6">
         <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground">
           ← Timesedler

@@ -16,6 +16,7 @@ import {
   type Status,
 } from "@/lib/timesheet-store";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { useAuth } from "@/lib/auth";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin — Overblik" }] }),
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/admin/")({
 });
 
 function AdminList() {
+  const { role } = useAuth();
   const all = useTimesheets();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status | "all" | "archived" | "inactive">("all");
@@ -98,13 +100,15 @@ function AdminList() {
   };
 
   return (
-    <AppShell allow={["admin"]}>
+    <AppShell allow={["admin", "bruger"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-wrap items-start gap-x-16 gap-y-4">
           <div>
             <h1 className="text-2xl font-semibold">Timesedler</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Administrér indsendelser, kontrol og regelgrundlag.
+              {role === "admin"
+                ? "Administrér indsendelser, kontrol og regelgrundlag."
+                : "Administrér indsendelser og kontrol."}
             </p>
           </div>
           <Link to="/admin/workers" className="group block">

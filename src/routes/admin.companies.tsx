@@ -85,7 +85,7 @@ function CompaniesPage() {
   };
 
   return (
-    <AppShell allow={["admin"]}>
+    <AppShell allow={["admin", "bruger"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Virksomheder, projekter og lokalaftaler</h1>

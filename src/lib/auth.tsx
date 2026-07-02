@@ -1,18 +1,20 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { syncRemoteAppState } from "@/lib/timesheet-store";
 
-export type Role = "vikar" | "kontaktperson" | "admin";
+export type Role = "vikar" | "kontaktperson" | "admin" | "bruger";
 
 export const ROLE_LABEL: Record<Role, string> = {
   vikar: "Vikar",
   kontaktperson: "Kontaktperson",
   admin: "Admin",
+  bruger: "Bruger 1",
 };
 
 export const ROLE_HOME: Record<Role, string> = {
   vikar: "/vikar",
   kontaktperson: "/kontaktperson",
   admin: "/admin",
+  bruger: "/admin",
 };
 
 export const DEMO_PASSWORD = "0000";
@@ -35,7 +37,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Role | null;
-      if (stored === "vikar" || stored === "kontaktperson" || stored === "admin") {
+      if (
+        stored === "vikar" ||
+        stored === "kontaktperson" ||
+        stored === "admin" ||
+        stored === "bruger"
+      ) {
         setRole(stored);
       }
     } catch {
