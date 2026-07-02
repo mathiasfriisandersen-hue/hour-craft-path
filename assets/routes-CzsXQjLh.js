@@ -1,1 +1,0 @@
-import{mt as e}from"./timesheet-store-BL-V4Zd-.js";import{a as t,o as n,r}from"./auth-DUTbIgcH.js";import{t as i}from"./app-shell-C-WXdOYJ.js";var a=e();function o(){let{role:e,ready:o}=t();return!o||!e?(0,a.jsx)(i,{}):(0,a.jsx)(n,{to:r[e],replace:!0})}export{o as component};
