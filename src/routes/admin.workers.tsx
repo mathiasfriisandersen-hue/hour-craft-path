@@ -239,7 +239,7 @@ function compareWorkerRowsByBookingStart(a: WorkerRow, b: WorkerRow): number {
   if (!a.bookingStart && b.bookingStart) return -1;
   if (a.bookingStart && !b.bookingStart) return 1;
   if (a.bookingStart && b.bookingStart && a.bookingStart !== b.bookingStart) {
-    return a.bookingStart.localeCompare(b.bookingStart);
+    return b.bookingStart.localeCompare(a.bookingStart);
   }
   return a.worker.name.localeCompare(b.worker.name, "da-DK");
 }
