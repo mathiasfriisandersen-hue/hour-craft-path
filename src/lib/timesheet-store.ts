@@ -1453,11 +1453,9 @@ function knownWorkerKey(timesheet: Timesheet): string {
 }
 
 function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "email">): string[] {
-  return [
-    ...new Set(
-      [worker.key, personLookupKey(worker.name), personLookupKey(worker.email)].filter(Boolean),
-    ),
-  ];
+  const identityReferences = [worker.key, personLookupKey(worker.name)].filter(Boolean);
+  if (identityReferences.length) return [...new Set(identityReferences)];
+  return [personLookupKey(worker.email)].filter(Boolean);
 }
 
 export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
