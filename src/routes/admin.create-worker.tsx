@@ -7,6 +7,7 @@ import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
   createTimesheetForWorker,
+  generateOneTimeCode,
   knownWorkersFromTimesheets,
   listCompanies,
   listKnownContacts,
@@ -152,12 +153,6 @@ function initialForm(): FormState {
     weekPlan: initialWeekPlan(),
     startDate: todayISO(),
   };
-}
-
-function generateOneTimeCode(): string {
-  const values = new Uint32Array(1);
-  window.crypto.getRandomValues(values);
-  return String(values[0] % 1_000_000).padStart(6, "0");
 }
 
 function CreateWorkerPage() {
@@ -442,6 +437,7 @@ function CreateWorkerPage() {
             }))
           : undefined,
         workerAccessCode: generateOneTimeCode(),
+        contactPersonAccessCode: generateOneTimeCode(),
       }),
     );
     setCreatedId(timesheet.id);
@@ -532,8 +528,8 @@ function CreateWorkerPage() {
               Genereres automatisk
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Systemet laver en 6-cifret engangskode og sender den til vikaren i invitationsmailen.
-              Vikaren bliver bedt om at ændre adgangskoden efter første login.
+              Systemet laver 6-cifrede engangskoder til vikar og kontaktperson.
+              De bliver bedt om at ændre adgangskoden efter første login.
             </p>
           </Field>
           <Field label="Brugervirksomhed *">

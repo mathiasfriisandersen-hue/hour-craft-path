@@ -167,6 +167,8 @@ export type Timesheet = {
   kontaktperson: string;
   kontaktpersonPhone: string;
   kontaktpersonEmail: string;
+  contactPersonAccessCode?: string;
+  contactPersonMustChangeAccessCode?: boolean;
   referenceNo: string;
   arbejdssted: string;
   selectedAgreementId: string;
@@ -385,6 +387,8 @@ type StoredTimesheet = Omit<
   projectName?: string;
   projectEndDate?: string;
   kontaktpersonPhone?: string;
+  contactPersonAccessCode?: string;
+  contactPersonMustChangeAccessCode?: boolean;
   hourlyWage?: number;
   workerAccessCode?: string;
   workerMustChangeAccessCode?: boolean;
@@ -489,6 +493,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     projectName: value.projectName ?? "",
     projectEndDate: value.projectEndDate ?? "",
     kontaktpersonPhone: value.kontaktpersonPhone ?? "",
+    contactPersonAccessCode: value.contactPersonAccessCode,
+    contactPersonMustChangeAccessCode: value.contactPersonMustChangeAccessCode ?? false,
     referenceNo: value.referenceNo ?? "",
     hourlyWage: Number(value.hourlyWage) || 0,
     workerAccessCode: value.workerAccessCode,
@@ -892,6 +898,20 @@ export function findByWorkerAccessCode(code: string): Timesheet | undefined {
   );
 }
 
+export function findByContactPersonAccessCode(code: string): Timesheet | undefined {
+  if (!/^\d{4,8}$/.test(code)) return undefined;
+  return readTimesheets().find(
+    (item) =>
+      item.contactPersonAccessCode === code && item.contactPersonMustChangeAccessCode === false,
+  );
+}
+
+export function generateOneTimeCode(): string {
+  const values = new Uint32Array(1);
+  crypto.getRandomValues(values);
+  return String(values[0] % 1_000_000).padStart(6, "0");
+}
+
 export function upsert(t: Timesheet): Timesheet {
   const list = readTimesheets();
   const updated = normalizeTimesheet({ ...t, updatedAt: new Date().toISOString() });
@@ -950,6 +970,8 @@ export function createBlank(): Timesheet {
     kontaktperson: "",
     kontaktpersonPhone: "",
     kontaktpersonEmail: "",
+    contactPersonAccessCode: "",
+    contactPersonMustChangeAccessCode: false,
     referenceNo: "",
     arbejdssted: "",
     selectedAgreementId: "",
@@ -1008,6 +1030,7 @@ export type CreateWorkerTimesheetInput = {
   weekPlan?: CreateWorkerDayPlan[];
   startDate: string;
   workerAccessCode: string;
+  contactPersonAccessCode?: string;
 };
 
 export type CreateWorkerDayPlan = {
@@ -1119,6 +1142,8 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     kontaktperson: input.kontaktperson.trim(),
     kontaktpersonPhone: input.kontaktpersonPhone.trim(),
     kontaktpersonEmail: input.kontaktpersonEmail.trim(),
+    contactPersonAccessCode: input.contactPersonAccessCode?.trim() ?? "",
+    contactPersonMustChangeAccessCode: Boolean(input.contactPersonAccessCode?.trim()),
     referenceNo: input.referenceNo.trim(),
     selectedAgreementId: input.selectedAgreementId,
     overenskomst: agreement?.name ?? "",
@@ -1837,6 +1862,7 @@ type EmailBodyOptions = {
 
 type MailTextOptions = {
   footerMessage?: string;
+  contactInviteUrl?: string;
 };
 
 export function emailBody(t: Timesheet, options: EmailBodyOptions = {}): string {
@@ -1959,6 +1985,25 @@ export function contactPersonEmailBody(t: Timesheet, options: MailTextOptions = 
     "",
     "Hvis der er fejl eller indsigelser, skal de sendes skriftligt inden samme frist med angivelse af, hvilke registreringer der bestrides, og hvorfor.",
     "",
+    ...(options.contactInviteUrl
+      ? [
+          "LOGIN",
+          "Åbn linket herunder for at gennemgå og godkende timesedlen:",
+          "",
+          options.contactInviteUrl,
+          "",
+          ...(t.contactPersonMustChangeAccessCode
+            ? [
+                "Log ind første gang med denne engangskode:",
+                "",
+                t.contactPersonAccessCode || "—",
+                "",
+                "Efter første login bliver du bedt om at ændre adgangskoden.",
+              ]
+            : ["Brug din personlige adgangskode, hvis du allerede har valgt en."]),
+          "",
+        ]
+      : []),
     "TIMESSEDDEL TIL GODKENDELSE",
     "",
     "OPLYSNINGER",

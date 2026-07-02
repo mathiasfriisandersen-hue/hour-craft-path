@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
-import { findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
+import { findByContactPersonAccessCode, findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
@@ -27,9 +27,11 @@ export function LoginScreen() {
       /^\d{4,8}$/.test(password);
     const matchedVikarTimesheet =
       role === "vikar" && !validVikarPassword ? findByWorkerAccessCode(password) : undefined;
+    const matchedContactTimesheet =
+      role === "kontaktperson" ? findByContactPersonAccessCode(password) : undefined;
     const validDemoPassword = password === DEMO_PASSWORD;
 
-    if (!validDemoPassword && !validVikarPassword && !matchedVikarTimesheet) {
+    if (!validDemoPassword && !validVikarPassword && !matchedVikarTimesheet && !matchedContactTimesheet) {
       setError("Forkert adgangskode");
       return;
     }
@@ -41,6 +43,14 @@ export function LoginScreen() {
     }
     if (matchedVikarTimesheet) {
       navigate({ to: "/vikar/$id", params: { id: matchedVikarTimesheet.id }, replace: true });
+      return;
+    }
+    if (matchedContactTimesheet) {
+      navigate({
+        to: "/kontaktperson/$id",
+        params: { id: matchedContactTimesheet.id },
+        replace: true,
+      });
       return;
     }
     navigate({ to: ROLE_HOME[role], replace: true });
@@ -64,7 +74,8 @@ export function LoginScreen() {
         <h1 className="text-2xl font-semibold tracking-tight">Log ind</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Demo-login: vælg rolle og brug koden <span className="font-mono font-semibold">0000</span>
-          . Vikarer kan også bruge deres personlige adgangskode via invitationslinket.
+          . Vikarer og kontaktpersoner kan også bruge deres personlige adgangskode via
+          invitationslinket.
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-5">

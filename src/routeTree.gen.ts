@@ -16,6 +16,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
 import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
+import { Route as KontaktpersonInviteRouteImport } from './routes/kontaktperson.invite'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
 import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
@@ -58,6 +59,11 @@ const VikarConsentRoute = VikarConsentRouteImport.update({
 const VikarIdRoute = VikarIdRouteImport.update({
   id: '/vikar/$id',
   path: '/vikar/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const KontaktpersonInviteRoute = KontaktpersonInviteRouteImport.update({
+  id: '/kontaktperson/invite',
+  path: '/kontaktperson/invite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/admin/users': typeof AdminUsersRoute
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
@@ -128,6 +135,7 @@ export interface FileRoutesByTo {
   '/admin/users': typeof AdminUsersRoute
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
@@ -146,6 +154,7 @@ export interface FileRoutesById {
   '/admin/users': typeof AdminUsersRoute
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
+  '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
@@ -165,6 +174,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
+    | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
+    | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
+    | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
@@ -217,6 +229,7 @@ export interface RootRouteChildren {
   AdminUsersRoute: typeof AdminUsersRoute
   AdminWorkersRoute: typeof AdminWorkersRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
+  KontaktpersonInviteRoute: typeof KontaktpersonInviteRoute
   VikarIdRoute: typeof VikarIdRoute
   VikarConsentRoute: typeof VikarConsentRoute
   VikarInviteRoute: typeof VikarInviteRoute
@@ -274,6 +287,13 @@ declare module '@tanstack/react-router' {
       path: '/vikar/$id'
       fullPath: '/vikar/$id'
       preLoaderRoute: typeof VikarIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/kontaktperson/invite': {
+      id: '/kontaktperson/invite'
+      path: '/kontaktperson/invite'
+      fullPath: '/kontaktperson/invite'
+      preLoaderRoute: typeof KontaktpersonInviteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/kontaktperson/$id': {
@@ -345,6 +365,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminUsersRoute: AdminUsersRoute,
   AdminWorkersRoute: AdminWorkersRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
+  KontaktpersonInviteRoute: KontaktpersonInviteRoute,
   VikarIdRoute: VikarIdRoute,
   VikarConsentRoute: VikarConsentRoute,
   VikarInviteRoute: VikarInviteRoute,

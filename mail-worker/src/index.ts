@@ -54,6 +54,8 @@ type StoredTimesheet = {
   kontaktpersonEmail?: string;
   tradeSkills?: unknown[];
   workerAccessCode?: string;
+  contactPersonAccessCode?: string;
+  contactPersonMustChangeAccessCode?: boolean;
   competencies?: string;
   status?: string;
   weekStart?: string;
@@ -422,6 +424,8 @@ async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized
         item.kontaktpersonEmail = "";
         item.tradeSkills = [];
         item.workerAccessCode = "";
+        item.contactPersonAccessCode = "";
+        item.contactPersonMustChangeAccessCode = false;
         item.competencies = "";
         item.workerConsentInactive = true;
         item.updatedAt = now.toISOString();

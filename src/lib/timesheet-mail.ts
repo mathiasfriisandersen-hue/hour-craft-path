@@ -2,7 +2,9 @@ import {
   contactPersonEmailBody,
   emailBody,
   emailSubject,
+  generateOneTimeCode,
   mailtoUrl,
+  upsert,
   workerSubmissionReceiptBody,
   workerSubmissionReceiptSubject,
   workerInviteEmailBody,
@@ -14,6 +16,7 @@ import {
   type Timesheet,
 } from "./timesheet-store";
 import { getCollectiveAgreementById } from "./collectiveAgreements";
+import { createShortContactPersonInviteUrl } from "./worker-invite";
 
 const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
 let runtimeMailApiUrl: string | undefined;
@@ -62,21 +65,34 @@ export async function sendTimesheetEmail(
     return "mailto";
   }
 
+  const contactTimesheet =
+    t.contactPersonAccessCode && t.contactPersonMustChangeAccessCode !== undefined
+      ? t
+      : upsert({
+          ...t,
+          contactPersonAccessCode: generateOneTimeCode(),
+          contactPersonMustChangeAccessCode: true,
+        });
+  const contactInviteUrl = await createShortContactPersonInviteUrl(contactTimesheet);
+
   const response = await fetch(mailApiUrl, {
     method: "POST",
     headers: {
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      timesheetId: t.id,
-      contactEmail: t.kontaktpersonEmail,
-      replyTo: t.vikarEmail,
-      subject: emailSubject(t),
-      text: contactPersonEmailBody(t, { footerMessage: options.contactFooterMessage }),
-      adminText: emailBody(t),
-      workerEmail: t.vikarEmail,
-      workerSubject: workerSubmissionReceiptSubject(t),
-      workerText: workerSubmissionReceiptBody(t, {
+      timesheetId: contactTimesheet.id,
+      contactEmail: contactTimesheet.kontaktpersonEmail,
+      replyTo: contactTimesheet.vikarEmail,
+      subject: emailSubject(contactTimesheet),
+      text: contactPersonEmailBody(contactTimesheet, {
+        footerMessage: options.contactFooterMessage,
+        contactInviteUrl,
+      }),
+      adminText: emailBody(contactTimesheet),
+      workerEmail: contactTimesheet.vikarEmail,
+      workerSubject: workerSubmissionReceiptSubject(contactTimesheet),
+      workerText: workerSubmissionReceiptBody(contactTimesheet, {
         footerMessage: options.workerFooterMessage,
       }),
     }),

@@ -76,6 +76,32 @@ export async function createShortWorkerInviteUrl(t: Timesheet): Promise<string> 
   return inviteUrl.toString();
 }
 
+export async function createShortContactPersonInviteUrl(t: Timesheet): Promise<string> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  if (!mailApiUrl) throw new Error("Mailsystemet er ikke konfigureret");
+
+  const response = await fetch(workerApiUrl("/create-worker-invite", mailApiUrl), {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ timesheet: t }),
+  });
+
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; invite?: { token?: string }; error?: string }
+    | undefined;
+
+  if (!response.ok || !body?.ok || !body.invite?.token) {
+    throw new Error(body?.error || `Invite-server svarede med HTTP ${response.status}`);
+  }
+
+  const basePath = import.meta.env.BASE_URL ?? "/";
+  const inviteUrl = new URL(`${basePath}kontaktperson/invite`, window.location.origin);
+  inviteUrl.searchParams.set("i", body.invite.token);
+  return inviteUrl.toString();
+}
+
 export async function createWorkerConsentUrl(workerName: string, workerEmail: string): Promise<string> {
   const mailApiUrl = await timesheetMailApiUrl();
   if (!mailApiUrl) throw new Error("Mailsystemet er ikke konfigureret");
