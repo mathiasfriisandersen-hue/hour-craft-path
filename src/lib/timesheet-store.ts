@@ -1470,7 +1470,8 @@ export function listKnownWorkers(): KnownWorker[] {
       const references = knownWorkerReferenceKeys(worker);
       return references.includes(key) || (emailKey ? references.includes(emailKey) : false);
     });
-    const inactive = existing?.inactive || timesheet.workerInactive || false;
+    const inactive =
+      existing?.inactive || timesheet.workerInactive || timesheet.workerConsentInactive || false;
     const tradeSkills = [
       ...new Set([...(existing?.tradeSkills ?? []), ...(timesheet.tradeSkills ?? [])]),
     ];

@@ -7,6 +7,7 @@ import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import {
   createTimesheetForWorker,
   listCompanies,
+  listAll,
   listKnownContacts,
   listKnownWorkers,
   TRADE_SKILLS,
@@ -16,6 +17,7 @@ import {
   type CompanyProject,
   type CreateWorkerDayPlan,
   type CreateWorkerTimesheetInput,
+  type Timesheet,
   type TradeSkill,
   type WorkPeriod,
 } from "@/lib/timesheet-store";
@@ -160,6 +162,7 @@ function generateOneTimeCode(): string {
 function CreateWorkerPage() {
   const navigate = useNavigate();
   const companies = listCompanies();
+  const timesheets = listAll();
   const knownWorkers = listKnownWorkers();
   const knownContacts = listKnownContacts();
   const [form, setForm] = useState<FormState>(initialForm);
@@ -189,6 +192,7 @@ function CreateWorkerPage() {
         (worker) =>
           !workerProjectConflict(
             companies,
+            timesheets,
             selectedCompany?.id ?? "",
             selectedProjectForAvailability,
             worker,
@@ -1023,13 +1027,14 @@ function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
 
 function workerProjectConflict(
   companies: ReturnType<typeof listCompanies>,
+  timesheets: Timesheet[],
   currentCompanyId: string,
   currentProject: CompanyProject,
   worker: ReturnType<typeof listKnownWorkers>[number],
 ): boolean {
   if (!currentProject.startDate || !currentProject.endDate) return false;
   const references = workerReferenceKeys(worker);
-  return companies.some((company) =>
+  const hasProjectConflict = companies.some((company) =>
     company.projects.some((project) => {
       if (company.id === currentCompanyId && project.id === currentProject.id) return false;
       if (!project.workerEmails.some((item) => references.includes(item.toLowerCase())))
@@ -1037,4 +1042,57 @@ function workerProjectConflict(
       return projectDatesOverlap(currentProject, project);
     }),
   );
+  if (hasProjectConflict) return true;
+  return timesheets.some((timesheet) => {
+    if (
+      timesheet.status === "draft" ||
+      timesheet.archived ||
+      timesheet.workerInactive ||
+      timesheet.workerConsentInactive
+    ) {
+      return false;
+    }
+    if (!workerMatchesTimesheet(worker, timesheet)) return false;
+    return projectDatesOverlap(currentProject, timesheetPeriod(timesheet));
+  });
+}
+
+function workerMatchesTimesheet(
+  worker: ReturnType<typeof listKnownWorkers>[number],
+  timesheet: Timesheet,
+): boolean {
+  const references = workerReferenceKeys(worker);
+  return [timesheet.vikar, timesheet.vikarEmail]
+    .map((item) => item.trim().toLowerCase())
+    .some((item) => references.includes(item));
+}
+
+function timesheetPeriod(timesheet: Timesheet): CompanyProject {
+  return {
+    id: timesheet.projectId || timesheet.id,
+    name: timesheet.projectName || "",
+    contactName: "",
+    contactPhone: "",
+    contactEmail: "",
+    referenceNo: "",
+    startDate: timesheet.weekStart,
+    endDate: timesheet.projectEndDate || addDays(timesheet.weekStart, 6),
+    selectedAgreementId: timesheet.selectedAgreementId,
+    tradeSkills: timesheet.tradeSkills ?? [],
+    competencies: timesheet.competencies ?? "",
+    workerEmails: [timesheet.vikar, timesheet.vikarEmail].filter(Boolean),
+    workPeriod: "day",
+    defaultStart: "",
+    defaultEnd: "",
+    pauseStart: "",
+    pauseEnd: "",
+    pause2Start: "",
+    pause2End: "",
+  };
+}
+
+function addDays(isoDate: string, days: number): string {
+  const date = new Date(`${isoDate}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
