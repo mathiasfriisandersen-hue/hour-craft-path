@@ -236,11 +236,11 @@ function latestBooking(
 }
 
 function compareWorkerRowsByBookingStart(a: WorkerRow, b: WorkerRow): number {
+  if (!a.bookingStart && b.bookingStart) return -1;
+  if (a.bookingStart && !b.bookingStart) return 1;
   if (a.bookingStart && b.bookingStart && a.bookingStart !== b.bookingStart) {
     return a.bookingStart.localeCompare(b.bookingStart);
   }
-  if (a.bookingStart && !b.bookingStart) return -1;
-  if (!a.bookingStart && b.bookingStart) return 1;
   return a.worker.name.localeCompare(b.worker.name, "da-DK");
 }
 
