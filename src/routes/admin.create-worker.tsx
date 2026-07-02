@@ -182,13 +182,8 @@ function CreateWorkerPage() {
         endDate: form.projectEndDate || selectedProject.endDate,
       }
     : undefined;
-  const tradeMatchedWorkers = selectedProject?.tradeSkills.length
-    ? knownWorkers.filter((worker) =>
-        worker.tradeSkills.some((skill) => selectedProject.tradeSkills.includes(skill)),
-      )
-    : knownWorkers;
   const projectWorkerOptions = selectedProjectForAvailability
-    ? tradeMatchedWorkers.filter(
+    ? knownWorkers.filter(
         (worker) =>
           !workerProjectConflict(
             companies,
@@ -198,7 +193,7 @@ function CreateWorkerPage() {
             worker,
           ),
       )
-    : tradeMatchedWorkers;
+    : knownWorkers;
 
   const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
     setForm((current) => ({
@@ -673,8 +668,7 @@ function CreateWorkerPage() {
               ))}
             </select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Listen filtreres efter projektets fag og valgte periode, når projekt og
-              projektafslutning er valgt.
+              Listen viser aktive tidligere vikarer, der er ledige i den valgte periode.
             </p>
           </Field>
           <div className="md:col-span-2">
