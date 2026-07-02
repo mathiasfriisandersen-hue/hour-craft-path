@@ -28,6 +28,8 @@ type WorkerRow = {
   worker: KnownWorker;
   assignments: Assignment[];
   currentTimesheets: Timesheet[];
+  bookingStart: string;
+  bookingEnd: string;
 };
 
 function WorkerOverview() {
@@ -91,9 +93,17 @@ function WorkerSection({
                   <h3 className="font-medium">{row.worker.name || "—"}</h3>
                   <p className="text-sm text-muted-foreground">{row.worker.email || "—"}</p>
                 </div>
-                {row.worker.phone && (
-                  <div className="text-sm text-muted-foreground">{row.worker.phone}</div>
-                )}
+                <div className="text-sm text-muted-foreground sm:text-right">
+                  {row.bookingStart || row.bookingEnd ? (
+                    <>
+                      <div>Start vagt {formatDate(row.bookingStart)}</div>
+                      <div>Slut vagt {formatDate(row.bookingEnd)}</div>
+                    </>
+                  ) : (
+                    <div>Ingen aktiv booking</div>
+                  )}
+                  {row.worker.phone && <div className="mt-1">{row.worker.phone}</div>}
+                </div>
               </div>
               {row.assignments.length > 0 && (
                 <div className="mt-3 space-y-1.5 text-sm">
@@ -135,14 +145,23 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
     activeTimesheets.some((timesheet) => workerMatchesTimesheet(worker, timesheet)),
   );
 
-  return knownWorkers.map((worker) => ({
-    worker,
-    assignments: activeProjectAssignments(worker, companies, today),
-    currentTimesheets: activeTimesheets.filter(
-      (timesheet) =>
-        workerMatchesTimesheet(worker, timesheet) && isDateInTimesheetWeek(today, timesheet),
-    ),
-  }));
+  return knownWorkers.map((worker) => {
+    const assignments = activeProjectAssignments(worker, companies, today);
+    const workerTimesheets = activeTimesheets.filter((timesheet) =>
+      workerMatchesTimesheet(worker, timesheet),
+    );
+    const currentTimesheets = workerTimesheets.filter((timesheet) =>
+      isDateInTimesheetWeek(today, timesheet),
+    );
+    const booking = latestBooking(assignments, workerTimesheets);
+    return {
+      worker,
+      assignments,
+      currentTimesheets,
+      bookingStart: booking.startDate,
+      bookingEnd: booking.endDate,
+    };
+  });
 }
 
 function activeProjectAssignments(
@@ -190,6 +209,28 @@ function addDays(isoDate: string, days: number): string {
   const date = new Date(`${isoDate}T12:00:00`);
   date.setDate(date.getDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function latestBooking(
+  assignments: Assignment[],
+  timesheets: Timesheet[],
+): { startDate: string; endDate: string } {
+  const periods = [
+    ...assignments.map((assignment) => ({
+      startDate: assignment.startDate,
+      endDate: assignment.endDate,
+    })),
+    ...timesheets.map((timesheet) => ({
+      startDate: timesheet.weekStart,
+      endDate: timesheet.projectEndDate || addDays(timesheet.weekStart, 6),
+    })),
+  ].filter((period) => period.startDate && period.endDate);
+  return (
+    periods.sort((a, b) => b.startDate.localeCompare(a.startDate)).at(0) ?? {
+      startDate: "",
+      endDate: "",
+    }
+  );
 }
 
 function localISODate(date: Date): string {
