@@ -41,7 +41,7 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b bg-card">
-        <div className="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between gap-6">
+        <div className="mx-auto max-w-[1800px] px-6 py-4 flex items-center justify-between gap-6">
           <Link to={home} className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-md bg-primary text-primary-foreground grid place-items-center font-bold">
               T
@@ -76,7 +76,7 @@ export function AppShell({
         </div>
       </header>
       <div className="border-b bg-card/70">
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 md:px-6">
+        <nav className="mx-auto flex max-w-[1800px] gap-1 overflow-x-auto px-4 md:px-6">
           {nav.map((item) => (
             <Link
               key={item.to}
@@ -93,7 +93,7 @@ export function AppShell({
           ))}
         </nav>
       </div>
-      <main className="mx-auto max-w-7xl px-4 py-6 md:px-6 md:py-8">
+      <main className="mx-auto max-w-[1800px] px-4 py-6 md:px-6 md:py-8">
         {denied ? (
           <div className="rounded-lg border bg-card p-8 text-center">
             <h1 className="text-xl font-semibold">Du er logget ind som {ROLE_LABEL[role]}</h1>
