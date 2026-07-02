@@ -1460,9 +1460,9 @@ function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "em
   ];
 }
 
-export function listKnownWorkers(): KnownWorker[] {
+export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
   const workers: KnownWorker[] = [];
-  for (const timesheet of readTimesheets()) {
+  for (const timesheet of timesheets) {
     const nameKey = personLookupKey(timesheet.vikar);
     const emailKey = personLookupKey(timesheet.vikarEmail);
     const key = nameKey || emailKey;
@@ -1501,6 +1501,10 @@ export function listKnownWorkers(): KnownWorker[] {
   return workers
     .filter((worker) => !worker.inactive)
     .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+}
+
+export function listKnownWorkers(): KnownWorker[] {
+  return knownWorkersFromTimesheets(readTimesheets());
 }
 
 export function workerReferenceKeys(worker: KnownWorker): string[] {

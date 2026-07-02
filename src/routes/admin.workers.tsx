@@ -3,8 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
+  knownWorkersFromTimesheets,
   listCompanies,
-  listKnownWorkers,
   workerReferenceKeys,
   type Company,
   type CompanyProject,
@@ -131,7 +131,7 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
       !item.workerInactive &&
       !item.workerConsentInactive,
   );
-  const knownWorkers = listKnownWorkers().filter((worker) =>
+  const knownWorkers = knownWorkersFromTimesheets(timesheets).filter((worker) =>
     activeTimesheets.some((timesheet) => workerMatchesTimesheet(worker, timesheet)),
   );
 

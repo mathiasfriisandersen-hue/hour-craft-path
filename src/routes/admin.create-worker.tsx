@@ -4,10 +4,11 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { useTimesheets } from "@/lib/use-timesheets";
 import {
   createTimesheetForWorker,
+  knownWorkersFromTimesheets,
   listCompanies,
-  listAll,
   listKnownContacts,
   listKnownWorkers,
   TRADE_SKILLS,
@@ -161,9 +162,9 @@ function generateOneTimeCode(): string {
 
 function CreateWorkerPage() {
   const navigate = useNavigate();
+  const timesheets = useTimesheets();
   const companies = listCompanies();
-  const timesheets = listAll();
-  const knownWorkers = listKnownWorkers();
+  const knownWorkers = knownWorkersFromTimesheets(timesheets);
   const knownContacts = listKnownContacts();
   const [form, setForm] = useState<FormState>(initialForm);
   const [errors, setErrors] = useState<string[]>([]);
