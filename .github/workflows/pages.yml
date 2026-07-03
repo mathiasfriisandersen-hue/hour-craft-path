@@ -28,13 +28,15 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Build
         run: npm run build
 
-      - name: Disable Jekyll
-        run: touch dist/client/.nojekyll
+      - name: Add GitHub Pages SPA fallback
+        run: |
+          touch dist/client/.nojekyll
+          cp dist/client/index.html dist/client/404.html
 
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3
