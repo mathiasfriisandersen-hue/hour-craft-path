@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
-import { companiesVisibleForRole, timesheetsVisibleForRole } from "@/lib/company-access";
 import type { Role } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
@@ -30,6 +29,7 @@ type WorkerRow = {
   worker: KnownWorker;
   assignments: Assignment[];
   currentTimesheets: Timesheet[];
+  nextBookingStart: string;
   bookingStart: string;
   bookingEnd: string;
 };
@@ -60,20 +60,12 @@ export function WorkerOverviewContent({
     return () => window.removeEventListener("timesheets-changed", refresh);
   }, []);
 
-  const visibleCompanies = useMemo(
-    () => companiesVisibleForRole(companies, role),
-    [companies, role],
-  );
-  const visibleTimesheets = useMemo(
-    () => timesheetsVisibleForRole(timesheets, role, companies),
-    [timesheets, role, companies],
-  );
   const rows = useMemo(
-    () => buildWorkerRows(visibleTimesheets, visibleCompanies),
-    [visibleTimesheets, visibleCompanies],
+    () => buildWorkerRows(timesheets, companies),
+    [timesheets, companies],
   );
-  const working = rows.filter((row) => row.assignments.length || row.currentTimesheets.length);
-  const available = rows.filter((row) => !row.assignments.length && !row.currentTimesheets.length);
+  const working = rows.filter((row) => row.currentTimesheets.length);
+  const available = rows.filter((row) => !row.currentTimesheets.length).sort(compareAvailableWorkerRows);
 
   return (
     <>
@@ -148,7 +140,7 @@ function WorkerSection({
                     {row.worker.phone && <div className="mt-1">Tlf. {row.worker.phone}</div>}
                   </div>
                 </div>
-                {row.assignments.length > 0 && (
+                {title === "I arbejde" && row.assignments.length > 0 && (
                   <div className="mt-3 space-y-1.5 text-sm">
                     {row.assignments.map((assignment) => (
                       <div key={`${assignment.companyName}-${assignment.projectName}`}>
@@ -250,17 +242,20 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
   return knownWorkers
     .map((worker) => {
       const assignments = activeProjectAssignments(worker, companies, today);
+      const futureAssignments = futureProjectAssignments(worker, companies, today);
       const workerTimesheets = activeTimesheets.filter((timesheet) =>
         workerMatchesTimesheet(worker, timesheet),
       );
       const currentTimesheets = workerTimesheets.filter((timesheet) =>
-        isDateInTimesheetWeek(today, timesheet),
+        isTimesheetShiftToday(today, timesheet),
       );
+      const nextBookingDate = nextBookingStartForWorker(futureAssignments, workerTimesheets, today);
       const booking = latestBooking(assignments, workerTimesheets);
       return {
         worker,
         assignments,
         currentTimesheets,
+        nextBookingStart: nextBookingDate,
         bookingStart: booking.startDate,
         bookingEnd: booking.endDate,
       };
@@ -313,6 +308,44 @@ function activeProjectAssignments(
   return assignments;
 }
 
+function futureProjectAssignments(
+  worker: KnownWorker,
+  companies: Company[],
+  today: string,
+): Assignment[] {
+  const references = workerReferenceKeys(worker);
+  const assignments: Assignment[] = [];
+
+  for (const company of companies) {
+    for (const project of company.projects) {
+      if (!project.startDate || project.startDate <= today) continue;
+      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase()))) continue;
+
+      assignments.push({
+        companyName: company.name,
+        projectName: project.name,
+        startDate: project.startDate,
+        endDate: project.endDate,
+      });
+    }
+  }
+
+  return assignments;
+}
+
+function nextBookingStartForWorker(
+  futureAssignments: Assignment[],
+  timesheets: Timesheet[],
+  today: string,
+): string {
+  const futureStarts = [
+    ...futureAssignments.map((assignment) => assignment.startDate),
+    ...futureTimesheetShiftDates(timesheets, today),
+  ].filter(Boolean);
+
+  return futureStarts.sort((a, b) => a.localeCompare(b))[0] ?? "";
+}
+
 function workerMatchesTimesheet(worker: KnownWorker, timesheet: Timesheet): boolean {
   const references = workerReferenceKeys(worker);
   return [timesheet.vikar, timesheet.vikarEmail]
@@ -326,10 +359,34 @@ function isActiveProject(project: CompanyProject, today: string): boolean {
   );
 }
 
-function isDateInTimesheetWeek(today: string, timesheet: Timesheet): boolean {
+function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
   if (!timesheet.weekStart) return false;
-  const endDate = addDays(timesheet.weekStart, 6);
-  return timesheet.weekStart <= today && today <= endDate;
+
+  const dayIndex = daysBetween(timesheet.weekStart, today);
+  if (dayIndex < 0 || dayIndex >= timesheet.days.length) return false;
+
+  const day = timesheet.days[dayIndex];
+  return Boolean(day?.start && day?.end);
+}
+
+function futureTimesheetShiftDates(timesheets: Timesheet[], today: string): string[] {
+  return timesheets.flatMap((timesheet) => {
+    if (!timesheet.weekStart) return [];
+
+    return timesheet.days
+      .map((day, index) => ({
+        date: addDays(timesheet.weekStart, index),
+        hasShift: Boolean(day?.start && day?.end),
+      }))
+      .filter((item) => item.hasShift && item.date > today)
+      .map((item) => item.date);
+  });
+}
+
+function daysBetween(startIsoDate: string, endIsoDate: string): number {
+  const start = new Date(`${startIsoDate}T12:00:00`);
+  const end = new Date(`${endIsoDate}T12:00:00`);
+  return Math.round((end.getTime() - start.getTime()) / 86_400_000);
 }
 
 function addDays(isoDate: string, days: number): string {
@@ -366,6 +423,17 @@ function compareWorkerRowsByBookingStart(a: WorkerRow, b: WorkerRow): number {
   if (a.bookingStart && b.bookingStart && a.bookingStart !== b.bookingStart) {
     return b.bookingStart.localeCompare(a.bookingStart);
   }
+  return a.worker.name.localeCompare(b.worker.name, "da-DK");
+}
+
+function compareAvailableWorkerRows(a: WorkerRow, b: WorkerRow): number {
+  if (!a.nextBookingStart && b.nextBookingStart) return -1;
+  if (a.nextBookingStart && !b.nextBookingStart) return 1;
+
+  if (a.nextBookingStart && b.nextBookingStart && a.nextBookingStart !== b.nextBookingStart) {
+    return b.nextBookingStart.localeCompare(a.nextBookingStart);
+  }
+
   return a.worker.name.localeCompare(b.worker.name, "da-DK");
 }
 
