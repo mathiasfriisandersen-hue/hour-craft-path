@@ -147,8 +147,10 @@ export function AdminOverviewContent({
                 : "Administrér indsendelser og kontrol."}
             </p>
           </div>
-          <a
-            href={previewUserId ? `/admin/users/${previewUserId}?view=workers` : `${sectionBase}/workers`}
+          <Link
+            to={previewUserId ? "/admin/users/$id" : `${sectionBase}/workers`}
+            params={previewUserId ? { id: previewUserId } : undefined}
+            search={previewUserId ? { view: "workers" } : undefined}
             className="group block"
           >
             <h2 className="text-2xl font-semibold text-primary group-hover:underline">
@@ -157,7 +159,7 @@ export function AdminOverviewContent({
             <p className="mt-1 text-sm text-muted-foreground">
               Overblik over ledige vikarer og aktive vikarer
             </p>
-          </a>
+          </Link>
           {previewUserId && (
             <a href={`/admin/users/${previewUserId}?view=companies`} className="group block">
               <h2 className="text-2xl font-semibold text-primary group-hover:underline">
