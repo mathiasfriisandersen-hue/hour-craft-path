@@ -71,7 +71,7 @@ function workPeriodTimes(workPeriod: WorkPeriod): { start: string; end: string }
   return { start: "07:00", end: "15:00" };
 }
 
-function CompaniesPage() {
+export function CompaniesPage() {
   const { role } = useAuth();
   const [companies, setCompanies] = useState(listCompanies);
   const [editing, setEditing] = useState<Company | null>(null);

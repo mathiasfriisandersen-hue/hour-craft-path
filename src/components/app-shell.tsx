@@ -42,6 +42,8 @@ export function AppShell({
       : [
           { to: adminBase, label: "Overblik" },
           { to: `${adminBase}/workers`, label: "Ledige vikarer" },
+          { to: `${adminBase}/companies`, label: "Virksomheder" },
+          { to: `${adminBase}/create-worker`, label: "Opret vikar" },
         ];
   const nav =
     role === "admin" || role === "bruger" || role === "bruger2"

@@ -175,7 +175,7 @@ function initialForm(): FormState {
   };
 }
 
-function CreateWorkerPage() {
+export function CreateWorkerPage() {
   const { role } = useAuth();
   const navigate = useNavigate();
   const timesheets = useTimesheets();

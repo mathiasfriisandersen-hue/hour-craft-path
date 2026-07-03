@@ -21,7 +21,11 @@ import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonInviteRouteImport } from './routes/kontaktperson.invite'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
 import { Route as Bruger2WorkersRouteImport } from './routes/bruger2.workers'
+import { Route as Bruger2CreateWorkerRouteImport } from './routes/bruger2.create-worker'
+import { Route as Bruger2CompaniesRouteImport } from './routes/bruger2.companies'
 import { Route as Bruger1WorkersRouteImport } from './routes/bruger1.workers'
+import { Route as Bruger1CreateWorkerRouteImport } from './routes/bruger1.create-worker'
+import { Route as Bruger1CompaniesRouteImport } from './routes/bruger1.companies'
 import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminStatisticsRouteImport } from './routes/admin.statistics'
@@ -92,9 +96,29 @@ const Bruger2WorkersRoute = Bruger2WorkersRouteImport.update({
   path: '/bruger2/workers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Bruger2CreateWorkerRoute = Bruger2CreateWorkerRouteImport.update({
+  id: '/bruger2/create-worker',
+  path: '/bruger2/create-worker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger2CompaniesRoute = Bruger2CompaniesRouteImport.update({
+  id: '/bruger2/companies',
+  path: '/bruger2/companies',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Bruger1WorkersRoute = Bruger1WorkersRouteImport.update({
   id: '/bruger1/workers',
   path: '/bruger1/workers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger1CreateWorkerRoute = Bruger1CreateWorkerRouteImport.update({
+  id: '/bruger1/create-worker',
+  path: '/bruger1/create-worker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger1CompaniesRoute = Bruger1CompaniesRouteImport.update({
+  id: '/bruger1/companies',
+  path: '/bruger1/companies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminWorkersRoute = AdminWorkersRouteImport.update({
@@ -153,7 +177,11 @@ export interface FileRoutesByFullPath {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/companies': typeof Bruger1CompaniesRoute
+  '/bruger1/create-worker': typeof Bruger1CreateWorkerRoute
   '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/companies': typeof Bruger2CompaniesRoute
+  '/bruger2/create-worker': typeof Bruger2CreateWorkerRoute
   '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -177,7 +205,11 @@ export interface FileRoutesByTo {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/companies': typeof Bruger1CompaniesRoute
+  '/bruger1/create-worker': typeof Bruger1CreateWorkerRoute
   '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/companies': typeof Bruger2CompaniesRoute
+  '/bruger2/create-worker': typeof Bruger2CreateWorkerRoute
   '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -202,7 +234,11 @@ export interface FileRoutesById {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/companies': typeof Bruger1CompaniesRoute
+  '/bruger1/create-worker': typeof Bruger1CreateWorkerRoute
   '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/companies': typeof Bruger2CompaniesRoute
+  '/bruger2/create-worker': typeof Bruger2CreateWorkerRoute
   '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -228,7 +264,11 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/companies'
+    | '/bruger1/create-worker'
     | '/bruger1/workers'
+    | '/bruger2/companies'
+    | '/bruger2/create-worker'
     | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
@@ -252,7 +292,11 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/companies'
+    | '/bruger1/create-worker'
     | '/bruger1/workers'
+    | '/bruger2/companies'
+    | '/bruger2/create-worker'
     | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
@@ -276,7 +320,11 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/companies'
+    | '/bruger1/create-worker'
     | '/bruger1/workers'
+    | '/bruger2/companies'
+    | '/bruger2/create-worker'
     | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
@@ -301,7 +349,11 @@ export interface RootRouteChildren {
   AdminStatisticsRoute: typeof AdminStatisticsRoute
   AdminUsersRoute: typeof AdminUsersRouteWithChildren
   AdminWorkersRoute: typeof AdminWorkersRoute
+  Bruger1CompaniesRoute: typeof Bruger1CompaniesRoute
+  Bruger1CreateWorkerRoute: typeof Bruger1CreateWorkerRoute
   Bruger1WorkersRoute: typeof Bruger1WorkersRoute
+  Bruger2CompaniesRoute: typeof Bruger2CompaniesRoute
+  Bruger2CreateWorkerRoute: typeof Bruger2CreateWorkerRoute
   Bruger2WorkersRoute: typeof Bruger2WorkersRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   KontaktpersonInviteRoute: typeof KontaktpersonInviteRoute
@@ -401,11 +453,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Bruger2WorkersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bruger2/create-worker': {
+      id: '/bruger2/create-worker'
+      path: '/bruger2/create-worker'
+      fullPath: '/bruger2/create-worker'
+      preLoaderRoute: typeof Bruger2CreateWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger2/companies': {
+      id: '/bruger2/companies'
+      path: '/bruger2/companies'
+      fullPath: '/bruger2/companies'
+      preLoaderRoute: typeof Bruger2CompaniesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bruger1/workers': {
       id: '/bruger1/workers'
       path: '/bruger1/workers'
       fullPath: '/bruger1/workers'
       preLoaderRoute: typeof Bruger1WorkersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger1/create-worker': {
+      id: '/bruger1/create-worker'
+      path: '/bruger1/create-worker'
+      fullPath: '/bruger1/create-worker'
+      preLoaderRoute: typeof Bruger1CreateWorkerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger1/companies': {
+      id: '/bruger1/companies'
+      path: '/bruger1/companies'
+      fullPath: '/bruger1/companies'
+      preLoaderRoute: typeof Bruger1CompaniesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/workers': {
@@ -496,7 +576,11 @@ const rootRouteChildren: RootRouteChildren = {
   AdminStatisticsRoute: AdminStatisticsRoute,
   AdminUsersRoute: AdminUsersRouteWithChildren,
   AdminWorkersRoute: AdminWorkersRoute,
+  Bruger1CompaniesRoute: Bruger1CompaniesRoute,
+  Bruger1CreateWorkerRoute: Bruger1CreateWorkerRoute,
   Bruger1WorkersRoute: Bruger1WorkersRoute,
+  Bruger2CompaniesRoute: Bruger2CompaniesRoute,
+  Bruger2CreateWorkerRoute: Bruger2CreateWorkerRoute,
   Bruger2WorkersRoute: Bruger2WorkersRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   KontaktpersonInviteRoute: KontaktpersonInviteRoute,
