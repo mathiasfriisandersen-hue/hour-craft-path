@@ -153,6 +153,20 @@ function formatDate(value: string): string {
   return year && month && day ? `${day}/${month}/${year}` : value;
 }
 
+function htmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+function htmlRow(label: string, value: string): string {
+  return `<tr><td style="padding:6px 12px 6px 0;color:#4b5563;">${htmlEscape(
+    label,
+  )}</td><td style="padding:6px 0;font-weight:600;color:#111827;">${htmlEscape(value || "—")}</td></tr>`;
+}
+
 function workerStartDate(t: Timesheet): string {
   const firstWorkdayIndex = t.days.findIndex((day) => day.start && day.end);
   return addDaysToISODate(t.weekStart, firstWorkdayIndex >= 0 ? firstWorkdayIndex : 0);
@@ -199,6 +213,52 @@ function contactPersonInviteBody(t: Timesheet, inviteUrl: string): string {
   ].join("\n");
 }
 
+function contactPersonInviteHtml(t: Timesheet, inviteUrl: string): string {
+  const safeInviteUrl = htmlEscape(inviteUrl);
+  return `<!doctype html>
+<html lang="da">
+  <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+      <p style="margin:0 0 16px;">Hej ${htmlEscape(t.kontaktperson || "kontaktperson")}</p>
+      <p style="margin:0 0 20px;line-height:1.5;">${htmlEscape(
+        t.vikar || "Vikaren",
+      )} starter hos ${htmlEscape(t.brugervirksomhed || "jer")} den ${htmlEscape(
+        formatDate(workerStartDate(t)),
+      )}.</p>
+      <p style="margin:0 0 10px;font-weight:700;">Vikaroplysninger</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:22px;">
+        <tbody>
+          ${htmlRow("Navn", t.vikar || "—")}
+          ${htmlRow("Telefon", t.vikarPhone || "—")}
+          ${htmlRow("Mail", t.vikarEmail || "—")}
+          ${htmlRow("Startdato", formatDate(workerStartDate(t)))}
+          ${htmlRow("Periode", `Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`)}
+          ${htmlRow("Arbejdssted", t.arbejdssted || "—")}
+          ${htmlRow("Reference", t.referenceNo || "—")}
+        </tbody>
+      </table>
+      <p style="margin:0 0 10px;font-weight:700;">Login</p>
+      <p style="margin:0 0 18px;line-height:1.5;">Du kan åbne timesedlen via knappen herunder.</p>
+      <p style="margin:0 0 24px;">
+        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">Åbn timeseddel</a>
+      </p>
+      <p style="margin:0 0 8px;color:#4b5563;font-size:13px;line-height:1.5;">Hvis knappen ikke virker, kan du kopiere dette link:</p>
+      <p style="margin:0 0 22px;font-size:13px;line-height:1.5;"><a href="${safeInviteUrl}" style="color:#1f4e79;">${safeInviteUrl}</a></p>
+      ${
+        t.contactPersonMustChangeAccessCode
+          ? `<p style="margin:0 0 6px;line-height:1.5;">Log ind første gang med denne engangskode:</p>
+      <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
+        t.contactPersonAccessCode || "—",
+      )}</p>
+      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">Efter første login bliver du bedt om at ændre adgangskoden.</p>`
+          : `<p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">Brug din personlige adgangskode, hvis du allerede har valgt en.</p>`
+      }
+      <p style="margin:0;">Med venlig hilsen<br />Sub-Z</p>
+    </div>
+  </body>
+</html>`;
+}
+
 export async function sendContactPersonInviteEmail(
   t: Timesheet,
   inviteUrl: string,
@@ -206,6 +266,7 @@ export async function sendContactPersonInviteEmail(
   const mailApiUrl = await timesheetMailApiUrl();
   const subject = contactPersonInviteSubject(t);
   const text = contactPersonInviteBody(t, inviteUrl);
+  const html = contactPersonInviteHtml(t, inviteUrl);
 
   if (!mailApiUrl) {
     window.location.href = `mailto:${t.kontaktpersonEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
@@ -223,6 +284,7 @@ export async function sendContactPersonInviteEmail(
       replyTo: t.vikarEmail,
       subject,
       text,
+      html,
       adminText: emailBody(t),
       sendAdminCopy: false,
     }),
