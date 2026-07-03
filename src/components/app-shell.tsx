@@ -1,4 +1,4 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { STATUS_CLASS, STATUS_LABEL, type Status } from "@/lib/timesheet-store";
@@ -21,7 +21,7 @@ export function AppShell({
     return <div className="min-h-screen bg-background" />;
   }
   if (!role) {
-    return <LoginScreen />;
+    return pathname === "/" ? <LoginScreen /> : <Navigate to="/" replace />;
   }
 
   const home = ROLE_HOME[role];

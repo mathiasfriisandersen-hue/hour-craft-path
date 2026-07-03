@@ -38,16 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     try {
-      const stored = localStorage.getItem(STORAGE_KEY) as Role | null;
-      if (
-        stored === "vikar" ||
-        stored === "kontaktperson" ||
-        stored === "admin" ||
-        stored === "bruger" ||
-        stored === "bruger2"
-      ) {
-        setRole(stored);
-      }
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       /* ignore */
     }
@@ -63,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (r: Role) => {
     try {
-      localStorage.setItem(STORAGE_KEY, r);
+      localStorage.removeItem(STORAGE_KEY);
     } catch {
       /* ignore */
     }

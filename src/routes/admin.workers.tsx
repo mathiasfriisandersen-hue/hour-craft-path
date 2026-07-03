@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { companiesVisibleForRole, timesheetsVisibleForRole } from "@/lib/company-access";
-import { useAuth, type Role } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
   knownWorkersFromTimesheets,
@@ -35,10 +35,9 @@ type WorkerRow = {
 };
 
 function WorkerOverview() {
-  const { role } = useAuth();
   return (
-    <AppShell allow={["admin", "bruger", "bruger2"]}>
-      <WorkerOverviewContent role={role ?? "bruger"} showBackLink />
+    <AppShell allow={["admin"]}>
+      <WorkerOverviewContent role="admin" showBackLink />
     </AppShell>
   );
 }
