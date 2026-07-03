@@ -1,1 +1,0 @@
-import{r as e}from"./index-D-F3pPSX.js";var t=e;export{t as component};
