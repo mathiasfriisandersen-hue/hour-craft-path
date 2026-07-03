@@ -2,6 +2,7 @@ import {
   contactPersonEmailBody,
   emailBody,
   emailSubject,
+  formatWeekRange,
   generateOneTimeCode,
   mailtoUrl,
   upsert,
@@ -10,12 +11,14 @@ import {
   workerInviteEmailBody,
   workerInviteEmailHtml,
   workerInviteEmailSubject,
+  weekNumber,
   type Company,
   type CompanyProject,
   type KnownWorker,
   type Timesheet,
 } from "./timesheet-store";
 import { getCollectiveAgreementById } from "./collectiveAgreements";
+import { addDaysToISODate } from "./danishHolidays";
 import { createShortContactPersonInviteUrl } from "./worker-invite";
 
 const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
@@ -133,6 +136,94 @@ export async function sendWorkerInviteEmail(
       subject,
       text,
       html,
+      sendAdminCopy: false,
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text().catch(() => "");
+    throw new Error(message || `Mailserver svarede med HTTP ${response.status}`);
+  }
+
+  return "api";
+}
+
+function formatDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
+function workerStartDate(t: Timesheet): string {
+  const firstWorkdayIndex = t.days.findIndex((day) => day.start && day.end);
+  return addDaysToISODate(t.weekStart, firstWorkdayIndex >= 0 ? firstWorkdayIndex : 0);
+}
+
+function contactPersonInviteSubject(t: Timesheet): string {
+  return `Ny vikar starter – ${t.vikar || "vikar"} – ${formatDate(workerStartDate(t))}`;
+}
+
+function contactPersonInviteBody(t: Timesheet, inviteUrl: string): string {
+  return [
+    `Hej ${t.kontaktperson || "kontaktperson"}`,
+    "",
+    `${t.vikar || "Vikaren"} starter hos ${t.brugervirksomhed || "jer"} den ${formatDate(
+      workerStartDate(t),
+    )}.`,
+    "",
+    "VIKAROPLYSNINGER",
+    `Navn: ${t.vikar || "—"}`,
+    `Telefon: ${t.vikarPhone || "—"}`,
+    `Mail: ${t.vikarEmail || "—"}`,
+    `Startdato: ${formatDate(workerStartDate(t))}`,
+    `Periode: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
+    `Arbejdssted: ${t.arbejdssted || "—"}`,
+    `Reference: ${t.referenceNo || "—"}`,
+    "",
+    "LOGIN",
+    "Du kan åbne timesedlen via linket her:",
+    "",
+    inviteUrl,
+    "",
+    ...(t.contactPersonMustChangeAccessCode
+      ? [
+          "Log ind første gang med denne engangskode:",
+          "",
+          t.contactPersonAccessCode || "—",
+          "",
+          "Efter første login bliver du bedt om at ændre adgangskoden.",
+        ]
+      : ["Brug din personlige adgangskode, hvis du allerede har valgt en."]),
+    "",
+    "Med venlig hilsen",
+    "Sub-Z",
+  ].join("\n");
+}
+
+export async function sendContactPersonInviteEmail(
+  t: Timesheet,
+  inviteUrl: string,
+): Promise<TimesheetMailResult> {
+  const mailApiUrl = await timesheetMailApiUrl();
+  const subject = contactPersonInviteSubject(t);
+  const text = contactPersonInviteBody(t, inviteUrl);
+
+  if (!mailApiUrl) {
+    window.location.href = `mailto:${t.kontaktpersonEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    return "mailto";
+  }
+
+  const response = await fetch(mailApiUrl, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      timesheetId: t.id,
+      contactEmail: t.kontaktpersonEmail,
+      replyTo: t.vikarEmail,
+      subject,
+      text,
+      adminText: emailBody(t),
       sendAdminCopy: false,
     }),
   });

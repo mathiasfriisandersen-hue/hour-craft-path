@@ -23,8 +23,8 @@ import {
   type TradeSkill,
   type WorkPeriod,
 } from "@/lib/timesheet-store";
-import { sendWorkerInviteEmail } from "@/lib/timesheet-mail";
-import { createShortWorkerInviteUrl } from "@/lib/worker-invite";
+import { sendContactPersonInviteEmail, sendWorkerInviteEmail } from "@/lib/timesheet-mail";
+import { createShortContactPersonInviteUrl, createShortWorkerInviteUrl } from "@/lib/worker-invite";
 
 export const Route = createFileRoute("/admin/create-worker")({
   head: () => ({ meta: [{ title: "Admin — Opret vikar" }] }),
@@ -444,15 +444,19 @@ function CreateWorkerPage() {
 
     try {
       const inviteUrl = await createShortWorkerInviteUrl(timesheet);
-      const result = await sendWorkerInviteEmail(timesheet, inviteUrl);
+      const contactInviteUrl = await createShortContactPersonInviteUrl(timesheet);
+      const [workerResult, contactResult] = await Promise.all([
+        sendWorkerInviteEmail(timesheet, inviteUrl),
+        sendContactPersonInviteEmail(timesheet, contactInviteUrl),
+      ]);
       setMessage(
-        result === "api"
-          ? "Vikaren er oprettet, og invitationsmailen er sendt."
+        workerResult === "api" && contactResult === "api"
+          ? "Vikaren er oprettet, og invitationsmail er sendt til vikar og kontaktperson."
           : "Vikaren er oprettet. Mailappen er åbnet som fallback, fordi mailsystemet ikke svarede.",
       );
     } catch {
       setMessage(
-        "Vikaren er oprettet, men invitationsmailen kunne ikke sendes automatisk. Prøv igen eller send manuelt.",
+        "Vikaren er oprettet, men invitationsmails kunne ikke sendes automatisk. Prøv igen eller send manuelt.",
       );
     } finally {
       setSending(false);
