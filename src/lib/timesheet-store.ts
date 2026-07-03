@@ -154,6 +154,7 @@ export type DayRuleMarker = {
 
 export type Timesheet = {
   id: string;
+  ownerRole?: "bruger" | "bruger2";
   vikar: string;
   vikarEmail: string;
   vikarPhone?: string;
@@ -196,6 +197,8 @@ export type Timesheet = {
 export type Company = {
   id: string;
   name: string;
+  ownerRole?: "bruger" | "bruger2";
+  cvrNumber: string;
   contactName: string;
   contactPhone: string;
   contactEmail: string;
@@ -416,6 +419,10 @@ function normalizeWorkPeriod(value: unknown): WorkPeriod {
   return value === "evening" || value === "night" ? value : "day";
 }
 
+function normalizeOwnerRole(value: unknown): "bruger" | "bruger2" | undefined {
+  return value === "bruger" || value === "bruger2" ? value : undefined;
+}
+
 function defaultTimesForWorkPeriod(workPeriod: WorkPeriod): { start: string; end: string } {
   if (workPeriod === "evening") return { start: "14:00", end: "23:00" };
   if (workPeriod === "night") return { start: "22:00", end: "07:00" };
@@ -451,8 +458,11 @@ function normalizeProject(project: Partial<CompanyProject>): CompanyProject {
 }
 
 function normalizeCompany(company: StoredCompany): Company {
+  const ownerRole = normalizeOwnerRole(company.ownerRole);
   return {
     ...company,
+    ownerRole,
+    cvrNumber: company.cvrNumber ?? "",
     contactPhone: company.contactPhone ?? "",
     selectedAgreementId: company.selectedAgreementId ?? "",
     localAgreements: company.localAgreements ?? [],
@@ -484,6 +494,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const localAgreementApplies = value.localAgreementApplies ?? value.lokalaftale ?? false;
   return {
     ...value,
+    ownerRole: normalizeOwnerRole(value.ownerRole),
     vikarEmail: value.vikarEmail ?? "",
     vikarPhone: normalizeWorkerPhone(value),
     tradeSkills: normalizeTradeSkills(value.tradeSkills),
@@ -957,6 +968,7 @@ export function createBlank(): Timesheet {
   const now = new Date().toISOString();
   return {
     id: crypto.randomUUID(),
+    ownerRole: undefined,
     vikar: "",
     vikarEmail: "",
     vikarPhone: "",
@@ -1031,6 +1043,7 @@ export type CreateWorkerTimesheetInput = {
   startDate: string;
   workerAccessCode: string;
   contactPersonAccessCode?: string;
+  ownerRole?: "bruger" | "bruger2";
 };
 
 export type CreateWorkerDayPlan = {
@@ -1128,6 +1141,7 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
 
   return {
     ...base,
+    ownerRole: input.ownerRole,
     vikar: input.vikar.trim(),
     vikarEmail: input.vikarEmail.trim(),
     vikarPhone: workerPhone,
@@ -1478,9 +1492,11 @@ function knownWorkerKey(timesheet: Timesheet): string {
 }
 
 function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "email">): string[] {
-  const identityReferences = [worker.key, personLookupKey(worker.name)].filter(Boolean);
-  if (identityReferences.length) return [...new Set(identityReferences)];
-  return [personLookupKey(worker.email)].filter(Boolean);
+  return [
+    ...new Set(
+      [worker.key, personLookupKey(worker.name), personLookupKey(worker.email)].filter(Boolean),
+    ),
+  ];
 }
 
 export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
@@ -1544,7 +1560,9 @@ export function timesheetRetentionWarning(
     (item) => knownWorkerKey(item) === key && item.status !== "draft",
   );
   const latestActivity = workerTimesheets
-    .flatMap((item) => [item.weekStart || item.createdAt, item.workerConsentRenewedAt].filter(Boolean))
+    .flatMap((item) =>
+      [item.weekStart || item.createdAt, item.workerConsentRenewedAt].filter(Boolean),
+    )
     .sort()
     .at(-1);
   if (!latestActivity) return null;
@@ -2263,5 +2281,704 @@ export function timesheetsToCsv(list: Timesheet[]): string {
   return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\n")}`;
 }
 
+type DemoWorkerSeed = {
+  id: string;
+  ownerRole: "bruger" | "bruger2";
+  companyId: string;
+  companyName: string;
+  companyContactName: string;
+  companyContactPhone: string;
+  companyContactEmail: string;
+  address: string;
+  name: string;
+  email: string;
+  phone: string;
+  agreementId: string;
+  tradeSkill: TradeSkill;
+  competencies: string;
+  hourlyWage: number;
+  workForm: "weekend" | "holiday" | "overtime" | "night" | "evening" | "shift" | "normal";
+};
+
+function demoWorkersSeed(): DemoWorkerSeed[] {
+  return [
+    {
+      id: "demo-timesheet-bruger-1-weekend-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-industri",
+      companyName: "Nordic Produktion",
+      companyContactName: "Mette Holm",
+      companyContactPhone: "28110001",
+      companyContactEmail: "mette.holm@nordicproduktion.demo",
+      address: "Fabrikvej 12, 6700 Esbjerg",
+      name: "Weekendarbejde Vikar 1",
+      email: "weekend1@demo-vikar.dk",
+      phone: "30100001",
+      agreementId: "industriens-overenskomst",
+      tradeSkill: "Industri / produktion",
+      competencies: "Pakning og weekendkoersel",
+      hourlyWage: 198,
+      workForm: "weekend",
+    },
+    {
+      id: "demo-timesheet-bruger-1-helligdag-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-industri",
+      companyName: "Nordic Produktion",
+      companyContactName: "Mette Holm",
+      companyContactPhone: "28110001",
+      companyContactEmail: "mette.holm@nordicproduktion.demo",
+      address: "Fabrikvej 12, 6700 Esbjerg",
+      name: "Helligdag Vikar 1",
+      email: "helligdag1@demo-vikar.dk",
+      phone: "30100002",
+      agreementId: "industri-trae-moebeloverenskomsten",
+      tradeSkill: "Montage",
+      competencies: "Linjemontage og opstart",
+      hourlyWage: 205,
+      workForm: "holiday",
+    },
+    {
+      id: "demo-timesheet-bruger-1-overarbejde-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-industri",
+      companyName: "Nordic Produktion",
+      companyContactName: "Mette Holm",
+      companyContactPhone: "28110001",
+      companyContactEmail: "mette.holm@nordicproduktion.demo",
+      address: "Fabrikvej 12, 6700 Esbjerg",
+      name: "Overarbejde Vikar 1",
+      email: "overarbejde1@demo-vikar.dk",
+      phone: "30100003",
+      agreementId: "trae-moebeloverenskomsten",
+      tradeSkill: "Træ / møbel",
+      competencies: "Samling og efterarbejde",
+      hourlyWage: 202,
+      workForm: "overtime",
+    },
+    {
+      id: "demo-timesheet-bruger-1-nat-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-byg",
+      companyName: "Vest Bygservice",
+      companyContactName: "Lars Mikkelsen",
+      companyContactPhone: "28110002",
+      companyContactEmail: "lars@vestbygservice.demo",
+      address: "Teglvangen 5, 6000 Kolding",
+      name: "Natarbejde Vikar 1",
+      email: "nat1@demo-vikar.dk",
+      phone: "30100004",
+      agreementId: "bygge-anlaegsoverenskomsten",
+      tradeSkill: "Anlæg",
+      competencies: "Natbeton og afspaerring",
+      hourlyWage: 214,
+      workForm: "night",
+    },
+    {
+      id: "demo-timesheet-bruger-1-aften-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-byg",
+      companyName: "Vest Bygservice",
+      companyContactName: "Lars Mikkelsen",
+      companyContactPhone: "28110002",
+      companyContactEmail: "lars@vestbygservice.demo",
+      address: "Teglvangen 5, 6000 Kolding",
+      name: "Aftenarbejde Vikar 1",
+      email: "aften1@demo-vikar.dk",
+      phone: "30100005",
+      agreementId: "bygge-anlaegsoverenskomsten-dansk-haandvaerk-3f",
+      tradeSkill: "Byggeri / håndværk",
+      competencies: "Aftenhold og oprydning",
+      hourlyWage: 208,
+      workForm: "evening",
+    },
+    {
+      id: "demo-timesheet-bruger-1-skiftehold-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-byg",
+      companyName: "Vest Bygservice",
+      companyContactName: "Lars Mikkelsen",
+      companyContactPhone: "28110002",
+      companyContactEmail: "lars@vestbygservice.demo",
+      address: "Teglvangen 5, 6000 Kolding",
+      name: "Skiftehold Vikar 1",
+      email: "skiftehold1@demo-vikar.dk",
+      phone: "30100006",
+      agreementId: "jord-betonoverenskomsten",
+      tradeSkill: "Jord / beton",
+      competencies: "Skiftehold paa betonstation",
+      hourlyWage: 216,
+      workForm: "shift",
+    },
+    {
+      id: "demo-timesheet-bruger-1-dag-1",
+      ownerRole: "bruger",
+      companyId: "demo-company-bruger-1-byg",
+      companyName: "Vest Bygservice",
+      companyContactName: "Lars Mikkelsen",
+      companyContactPhone: "28110002",
+      companyContactEmail: "lars@vestbygservice.demo",
+      address: "Teglvangen 5, 6000 Kolding",
+      name: "Dagarbejde Vikar 1",
+      email: "dag1@demo-vikar.dk",
+      phone: "30100007",
+      agreementId: "murer-murerarbejdsmandsarbejde",
+      tradeSkill: "Murer",
+      competencies: "Facade og fugearbejde",
+      hourlyWage: 211,
+      workForm: "normal",
+    },
+    {
+      id: "demo-timesheet-bruger-2-weekend-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Weekendarbejde Vikar 2",
+      email: "weekend2@demo-vikar.dk",
+      phone: "30100008",
+      agreementId: "isoleringsoverenskomsten",
+      tradeSkill: "Isolering",
+      competencies: "Weekendisolering paa teknikrum",
+      hourlyWage: 207,
+      workForm: "weekend",
+    },
+    {
+      id: "demo-timesheet-bruger-2-weekend-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Weekendarbejde Vikar 3",
+      email: "weekend3@demo-vikar.dk",
+      phone: "30100009",
+      agreementId: "maleroverenskomsten",
+      tradeSkill: "Maler",
+      competencies: "Spartel og finish i weekenden",
+      hourlyWage: 199,
+      workForm: "weekend",
+    },
+    {
+      id: "demo-timesheet-bruger-2-helligdag-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Helligdag Vikar 2",
+      email: "helligdag2@demo-vikar.dk",
+      phone: "30100010",
+      agreementId: "elektrikeroverenskomsten",
+      tradeSkill: "Elektriker",
+      competencies: "Fejlsoegning og service",
+      hourlyWage: 223,
+      workForm: "holiday",
+    },
+    {
+      id: "demo-timesheet-bruger-2-helligdag-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Helligdag Vikar 3",
+      email: "helligdag3@demo-vikar.dk",
+      phone: "30100011",
+      agreementId: "el-overenskomsten-di-def",
+      tradeSkill: "El-installation",
+      competencies: "Montage og tavlearbejde",
+      hourlyWage: 226,
+      workForm: "holiday",
+    },
+    {
+      id: "demo-timesheet-bruger-2-overarbejde-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Overarbejde Vikar 2",
+      email: "overarbejde2@demo-vikar.dk",
+      phone: "30100012",
+      agreementId: "vvs-overenskomsten",
+      tradeSkill: "VVS",
+      competencies: "Ekstra montage og trykproeve",
+      hourlyWage: 219,
+      workForm: "overtime",
+    },
+    {
+      id: "demo-timesheet-bruger-2-overarbejde-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Overarbejde Vikar 3",
+      email: "overarbejde3@demo-vikar.dk",
+      phone: "30100013",
+      agreementId: "industri-vvs-overenskomsten",
+      tradeSkill: "Blikkenslager",
+      competencies: "Kanalarbejde og indregulering",
+      hourlyWage: 221,
+      workForm: "overtime",
+    },
+    {
+      id: "demo-timesheet-bruger-2-nat-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Natarbejde Vikar 2",
+      email: "nat2@demo-vikar.dk",
+      phone: "30100014",
+      agreementId: "vvs-blikkenslageroverenskomsten",
+      tradeSkill: "VVS",
+      competencies: "Natservice og fejlretning",
+      hourlyWage: 224,
+      workForm: "night",
+    },
+    {
+      id: "demo-timesheet-bruger-2-nat-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Natarbejde Vikar 3",
+      email: "nat3@demo-vikar.dk",
+      phone: "30100015",
+      agreementId: "industriens-overenskomst",
+      tradeSkill: "Smed / metal",
+      competencies: "Svejs og reparation i natdrift",
+      hourlyWage: 217,
+      workForm: "night",
+    },
+    {
+      id: "demo-timesheet-bruger-2-aften-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Aftenarbejde Vikar 2",
+      email: "aften2@demo-vikar.dk",
+      phone: "30100016",
+      agreementId: "industri-trae-moebeloverenskomsten",
+      tradeSkill: "CNC / maskinarbejde",
+      competencies: "Aftenhold paa CNC-linje",
+      hourlyWage: 213,
+      workForm: "evening",
+    },
+    {
+      id: "demo-timesheet-bruger-2-aften-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Aftenarbejde Vikar 3",
+      email: "aften3@demo-vikar.dk",
+      phone: "30100017",
+      agreementId: "trae-moebeloverenskomsten",
+      tradeSkill: "Tømrer / snedker",
+      competencies: "Snedkeri og samling",
+      hourlyWage: 206,
+      workForm: "evening",
+    },
+    {
+      id: "demo-timesheet-bruger-2-skiftehold-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Skiftehold Vikar 2",
+      email: "skiftehold2@demo-vikar.dk",
+      phone: "30100018",
+      agreementId: "industrioverenskomsten-byggeri",
+      tradeSkill: "Ufaglært / specialarbejder",
+      competencies: "Skiftehold paa elementfabrik",
+      hourlyWage: 204,
+      workForm: "shift",
+    },
+    {
+      id: "demo-timesheet-bruger-2-skiftehold-3",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-vvs",
+      companyName: "Jysk VVS & Anlaeg",
+      companyContactName: "Rasmus Toft",
+      companyContactPhone: "28110004",
+      companyContactEmail: "rasmus@jyskvvs.demo",
+      address: "Anlaegsparken 9, 8200 Aarhus N",
+      name: "Skiftehold Vikar 3",
+      email: "skiftehold3@demo-vikar.dk",
+      phone: "30100019",
+      agreementId: "bygningsoverenskomsten",
+      tradeSkill: "Murerarbejdsmand",
+      competencies: "Materialelogistik i skiftehold",
+      hourlyWage: 203,
+      workForm: "shift",
+    },
+    {
+      id: "demo-timesheet-bruger-2-dag-2",
+      ownerRole: "bruger2",
+      companyId: "demo-company-bruger-2-el",
+      companyName: "Sub-Z El & Montage",
+      companyContactName: "Camilla Birk",
+      companyContactPhone: "28110003",
+      companyContactEmail: "camilla@subzelmontage.demo",
+      address: "Havnevej 22, 7100 Vejle",
+      name: "Dagarbejde Vikar 2",
+      email: "dag2@demo-vikar.dk",
+      phone: "30100020",
+      agreementId: "bygge-anlaegsoverenskomsten",
+      tradeSkill: "Montage",
+      competencies: "Daghold og udfoerende montage",
+      hourlyWage: 210,
+      workForm: "normal",
+    },
+  ];
+}
+
+function demoDayPlan(workForm: DemoWorkerSeed["workForm"], index: number): CreateWorkerDayPlan {
+  const base = {
+    start: "",
+    end: "",
+    pause: 0,
+    pauseStart: "",
+    pauseEnd: "",
+    pause2Start: "",
+    pause2End: "",
+    dayWorkStart: "",
+    dayWorkEnd: "",
+    eveningWorkStart: "",
+    eveningWorkEnd: "",
+    nightWorkStart: "",
+    nightWorkEnd: "",
+    shiftWork: false,
+  };
+  const weekday = index < 5;
+  if (workForm === "weekend") {
+    if (index !== 5 && index !== 6) return base;
+    return {
+      ...base,
+      start: index === 5 ? "08:00" : "09:00",
+      end: index === 5 ? "16:00" : "15:00",
+      pause: 30,
+      pauseStart: "11:00",
+      pauseEnd: "11:30",
+      dayWorkStart: index === 5 ? "08:00" : "09:00",
+      dayWorkEnd: index === 5 ? "16:00" : "15:00",
+    };
+  }
+  if (workForm === "holiday") {
+    if (index !== 3) return base;
+    return {
+      ...base,
+      start: "07:00",
+      end: "15:00",
+      pause: 30,
+      pauseStart: "11:00",
+      pauseEnd: "11:30",
+      dayWorkStart: "07:00",
+      dayWorkEnd: "15:00",
+    };
+  }
+  if (workForm === "overtime") {
+    if (!weekday) return base;
+    const late = index === 1 || index === 3;
+    return {
+      ...base,
+      start: "07:00",
+      end: late ? "18:00" : "16:30",
+      pause: 30,
+      pauseStart: "11:30",
+      pauseEnd: "12:00",
+      dayWorkStart: "07:00",
+      dayWorkEnd: late ? "18:00" : "16:30",
+    };
+  }
+  if (workForm === "night") {
+    if (!weekday) return base;
+    return {
+      ...base,
+      start: "22:00",
+      end: "06:00",
+      pause: 30,
+      pauseStart: "02:00",
+      pauseEnd: "02:30",
+      nightWorkStart: "22:00",
+      nightWorkEnd: "06:00",
+    };
+  }
+  if (workForm === "evening") {
+    if (!weekday) return base;
+    return {
+      ...base,
+      start: "14:00",
+      end: "22:00",
+      pause: 30,
+      pauseStart: "18:00",
+      pauseEnd: "18:30",
+      eveningWorkStart: "14:00",
+      eveningWorkEnd: "22:00",
+    };
+  }
+  if (workForm === "shift") {
+    if (!weekday) return base;
+    return {
+      ...base,
+      start: "06:00",
+      end: "14:00",
+      pause: 30,
+      pauseStart: "10:00",
+      pauseEnd: "10:30",
+      dayWorkStart: "06:00",
+      dayWorkEnd: "14:00",
+      shiftWork: true,
+    };
+  }
+  if (!weekday) return base;
+  return {
+    ...base,
+    start: "07:00",
+    end: "15:00",
+    pause: 30,
+    pauseStart: "11:00",
+    pauseEnd: "11:30",
+    dayWorkStart: "07:00",
+    dayWorkEnd: "15:00",
+  };
+}
+
+function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timesheet {
+  const projectId = `${worker.id}-project`;
+  const projectName = `${worker.name} projekt`;
+  const timesheet = createTimesheetForWorker({
+    vikar: worker.name,
+    vikarEmail: worker.email,
+    vikarPhone: worker.phone,
+    tradeSkills: [worker.tradeSkill],
+    competencies: worker.competencies,
+    brugervirksomhed: worker.companyName,
+    companyId: worker.companyId,
+    projectId,
+    projectName,
+    projectEndDate: addDaysToISODate(weekStart, 28),
+    arbejdssted: worker.address,
+    kontaktperson: worker.companyContactName,
+    kontaktpersonPhone: worker.companyContactPhone,
+    kontaktpersonEmail: worker.companyContactEmail,
+    referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
+    selectedAgreementId: worker.agreementId,
+    hourlyWage: worker.hourlyWage,
+    defaultStart:
+      worker.workForm === "night" ? "22:00" : worker.workForm === "evening" ? "14:00" : "07:00",
+    defaultEnd:
+      worker.workForm === "night" ? "06:00" : worker.workForm === "evening" ? "22:00" : "15:00",
+    defaultPause: 30,
+    defaultPauseStart:
+      worker.workForm === "night" ? "02:00" : worker.workForm === "evening" ? "18:00" : "11:00",
+    defaultPauseEnd:
+      worker.workForm === "night" ? "02:30" : worker.workForm === "evening" ? "18:30" : "11:30",
+    defaultDayWorkStart: "07:00",
+    defaultDayWorkEnd: "15:00",
+    defaultEveningWorkStart: "14:00",
+    defaultEveningWorkEnd: "22:00",
+    defaultNightWorkStart: "22:00",
+    defaultNightWorkEnd: "06:00",
+    shiftWorkApplies: worker.workForm === "shift",
+    weekPlan: Array.from({ length: 7 }, (_, index) => demoDayPlan(worker.workForm, index)),
+    startDate: weekStart,
+    workerAccessCode: "0000",
+    contactPersonAccessCode: "0000",
+  });
+
+  const days = timesheet.days.map((day, index) => {
+    const nextDay = { ...day };
+    if (worker.workForm === "holiday" && index === 3) {
+      nextDay.dayType = "sunday_or_public_holiday";
+      nextDay.isArtificialHolidayTest = true;
+      nextDay.taskType = "Helligdagsvagt";
+      nextDay.comment = "Demo: behandles som helligdag";
+    }
+    if (worker.workForm === "weekend" && (index === 5 || index === 6)) {
+      nextDay.workType = "weekend_work_agreement";
+      nextDay.weekendAgreementApplies = true;
+      nextDay.taskType = "Weekendarbejde";
+    }
+    if (worker.workForm === "overtime" && (index === 1 || index === 3)) {
+      nextDay.workType = "overtime";
+      nextDay.taskType = "Overarbejde";
+    }
+    if (worker.workForm === "night") nextDay.taskType = "Nathold";
+    if (worker.workForm === "evening") nextDay.taskType = "Aftenhold";
+    if (worker.workForm === "shift") {
+      nextDay.workType = "shift_work";
+      nextDay.shiftWork = true;
+      nextDay.taskType = "Skiftehold";
+    }
+    if (worker.workForm === "normal") nextDay.taskType = "Daghold";
+    return nextDay;
+  });
+
+  return normalizeTimesheet({
+    ...timesheet,
+    id: worker.id,
+    status: worker.ownerRole === "bruger2" ? "sent" : "approved",
+    workerMustChangeAccessCode: false,
+    contactPersonMustChangeAccessCode: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    days,
+  });
+}
+
+function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Company[] {
+  const byId = new Map<string, Company>();
+  for (const worker of workers) {
+    if (!byId.has(worker.companyId)) {
+      byId.set(worker.companyId, {
+        id: worker.companyId,
+        name: worker.companyName,
+        ownerRole: worker.ownerRole,
+        cvrNumber: "",
+        contactName: worker.companyContactName,
+        contactPhone: worker.companyContactPhone,
+        contactEmail: worker.companyContactEmail,
+        address: worker.address,
+        selectedAgreementId: worker.agreementId,
+        localAgreements: [],
+        projects: [],
+      });
+    }
+    byId.get(worker.companyId)?.projects.push({
+      id: `${worker.id}-project`,
+      name: `${worker.name} projekt`,
+      contactName: worker.companyContactName,
+      contactPhone: worker.companyContactPhone,
+      contactEmail: worker.companyContactEmail,
+      referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
+      startDate: weekStart,
+      endDate: addDaysToISODate(weekStart, 28),
+      selectedAgreementId: worker.agreementId,
+      tradeSkills: [worker.tradeSkill],
+      competencies: worker.competencies,
+      workerEmails: [worker.email],
+      workPeriod:
+        worker.workForm === "night" ? "night" : worker.workForm === "evening" ? "evening" : "day",
+      defaultStart:
+        worker.workForm === "night" ? "22:00" : worker.workForm === "evening" ? "14:00" : "07:00",
+      defaultEnd:
+        worker.workForm === "night" ? "06:00" : worker.workForm === "evening" ? "22:00" : "15:00",
+      pauseStart:
+        worker.workForm === "night" ? "02:00" : worker.workForm === "evening" ? "18:00" : "11:00",
+      pauseEnd:
+        worker.workForm === "night" ? "02:30" : worker.workForm === "evening" ? "18:30" : "11:30",
+      pause2Start: "",
+      pause2End: "",
+    });
+  }
+
+  byId.set("demo-company-admin-pending", {
+    id: "demo-company-admin-pending",
+    name: "Admin Demo Virksomhed",
+    cvrNumber: "",
+    contactName: "Admin Kontakt",
+    contactPhone: "28110005",
+    contactEmail: "admin@demo-virksomhed.demo",
+    address: "Kontorparken 1, 2100 Koebenhavn O",
+    selectedAgreementId: "industri-trae-moebeloverenskomsten",
+    localAgreements: [],
+    projects: [
+      {
+        id: "demo-project-admin-pending-1",
+        name: "Afventer placering",
+        contactName: "Admin Kontakt",
+        contactPhone: "28110005",
+        contactEmail: "admin@demo-virksomhed.demo",
+        referenceNo: "ADM-100",
+        startDate: weekStart,
+        endDate: addDaysToISODate(weekStart, 28),
+        selectedAgreementId: "industri-trae-moebeloverenskomsten",
+        tradeSkills: ["Industri / produktion"],
+        competencies: "Virksomhed uden ejer vises kun for admin",
+        workerEmails: [],
+        workPeriod: "day",
+        defaultStart: "07:00",
+        defaultEnd: "15:00",
+        pauseStart: "11:00",
+        pauseEnd: "11:30",
+        pause2Start: "",
+        pause2End: "",
+      },
+    ],
+  });
+
+  return [...byId.values()].map(normalizeCompany);
+}
+
 // Kept for backwards compatibility with the existing hook. New installations start empty.
-export function seedIfEmpty(): void {}
+export function seedIfEmpty(): void {
+  const weekStart = getMondayISO();
+  const demoWorkers = demoWorkersSeed();
+  const demoTimesheets = demoWorkers.map((worker) => createDemoTimesheet(worker, weekStart));
+  const demoCompanies = demoCompaniesForSeed(weekStart, demoWorkers);
+  const existingTimesheets = readTimesheets();
+  const existingCompanies = listCompanies();
+
+  const mergedTimesheets = [
+    ...existingTimesheets.filter((item) => !item.id.startsWith("demo-timesheet-")),
+    ...demoTimesheets,
+  ];
+  const mergedCompanies = [
+    ...existingCompanies.filter((company) => !company.id.startsWith("demo-company-")),
+    ...demoCompanies,
+  ];
+
+  const hasCurrentDemoTimesheets = demoTimesheets.every((demoTimesheet) =>
+    existingTimesheets.some(
+      (item) => item.id === demoTimesheet.id && item.ownerRole === demoTimesheet.ownerRole,
+    ),
+  );
+  const hasCurrentDemoCompanies = demoCompanies.every((demoCompany) =>
+    existingCompanies.some(
+      (company) => company.id === demoCompany.id && company.ownerRole === demoCompany.ownerRole,
+    ),
+  );
+
+  if (hasCurrentDemoTimesheets && hasCurrentDemoCompanies) {
+    return;
+  }
+
+  setStorageItem(TIMESHEET_KEY, JSON.stringify(mergedTimesheets));
+  setStorageItem(COMPANY_KEY, JSON.stringify(mergedCompanies));
+  markLocalUpdated();
+  queueRemoteAppStatePersist();
+  emit();
+}

@@ -4,12 +4,15 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { companiesVisibleForRole, companyOwnerForRole } from "@/lib/company-access";
+import { useAuth } from "@/lib/auth";
 import { sendProjectConfirmationEmail } from "@/lib/timesheet-mail";
 import {
   listCompanies,
   listKnownWorkers,
   removeCompany,
   saveCompany,
+  seedIfEmpty,
   TRADE_SKILLS,
   workerReferenceKeys,
   type Company,
@@ -51,6 +54,7 @@ function blankCompany(): Company {
   return {
     id: crypto.randomUUID(),
     name: "",
+    cvrNumber: "",
     contactName: "",
     contactPhone: "",
     contactEmail: "",
@@ -68,10 +72,12 @@ function workPeriodTimes(workPeriod: WorkPeriod): { start: string; end: string }
 }
 
 function CompaniesPage() {
+  const { role } = useAuth();
   const [companies, setCompanies] = useState(listCompanies);
   const [editing, setEditing] = useState<Company | null>(null);
   const knownWorkers = listKnownWorkers();
   const refresh = () => setCompanies(listCompanies());
+  const visibleCompanies = companiesVisibleForRole(companies, role);
   const update = (patch: Partial<Company>) => editing && setEditing({ ...editing, ...patch });
   useEffect(() => {
     window.addEventListener("timesheets-changed", refresh);
@@ -84,8 +90,13 @@ function CompaniesPage() {
     setEditing(null);
   };
 
+  useEffect(() => {
+    seedIfEmpty();
+    refresh();
+  }, []);
+
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Virksomheder, projekter og lokalaftaler</h1>
@@ -94,15 +105,19 @@ function CompaniesPage() {
             oprettelse af vikarer.
           </p>
         </div>
-        <Button onClick={() => setEditing(blankCompany())}>Ny virksomhed</Button>
+        <Button
+          onClick={() => setEditing({ ...blankCompany(), ownerRole: companyOwnerForRole(role) })}
+        >
+          Ny virksomhed
+        </Button>
       </div>
       <div className="space-y-3">
-        {companies.length === 0 && (
+        {visibleCompanies.length === 0 && (
           <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
             Ingen virksomheder er oprettet endnu.
           </div>
         )}
-        {companies.map((company) => (
+        {visibleCompanies.map((company) => (
           <div key={company.id} className="rounded-lg border bg-card p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -155,6 +170,12 @@ function CompaniesPage() {
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Virksomhedsnavn *">
                 <Input value={editing.name} onChange={(e) => update({ name: e.target.value })} />
+              </Field>
+              <Field label="CVR.nr">
+                <Input
+                  value={editing.cvrNumber}
+                  onChange={(e) => update({ cvrNumber: e.target.value })}
+                />
               </Field>
               <Field label="Kontaktperson">
                 <Input
