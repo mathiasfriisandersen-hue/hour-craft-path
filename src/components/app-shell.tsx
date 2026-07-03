@@ -29,13 +29,15 @@ export function AppShell({
   const adminNav = [
     { to: "/admin", label: "Overblik" },
     ...(role === "admin" ? [{ to: "/admin/rules", label: "Regelgrundlag" }] : []),
+    { to: "/admin/workers", label: "Ledige vikarer" },
     { to: "/admin/companies", label: "Virksomheder" },
     { to: "/admin/create-worker", label: "Opret vikar" },
     { to: "/admin/calendar", label: "Kalender" },
     ...(role === "admin" ? [{ to: "/admin/users", label: "Brugere" }] : []),
+    ...(role === "admin" ? [{ to: "/admin/statistics", label: "Statistik" }] : []),
   ];
   const nav =
-    role === "admin" || role === "bruger"
+    role === "admin" || role === "bruger" || role === "bruger2"
       ? adminNav
       : role === "vikar"
         ? [{ to: "/vikar", label: "Mine timesedler" }]

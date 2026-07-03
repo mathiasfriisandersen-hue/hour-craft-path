@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
+import { companiesVisibleForRole, timesheetsVisibleForRole } from "@/lib/company-access";
+import { useAuth, type Role } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
   knownWorkersFromTimesheets,
@@ -33,6 +35,23 @@ type WorkerRow = {
 };
 
 function WorkerOverview() {
+  const { role } = useAuth();
+  return (
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
+      <WorkerOverviewContent role={role ?? "bruger"} showBackLink />
+    </AppShell>
+  );
+}
+
+export function WorkerOverviewContent({
+  role,
+  showBackLink = false,
+  backHref = "/admin",
+}: {
+  role: Role;
+  showBackLink?: boolean;
+  backHref?: string;
+}) {
   const timesheets = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
 
@@ -42,16 +61,29 @@ function WorkerOverview() {
     return () => window.removeEventListener("timesheets-changed", refresh);
   }, []);
 
-  const rows = useMemo(() => buildWorkerRows(timesheets, companies), [timesheets, companies]);
+  const visibleCompanies = useMemo(
+    () => companiesVisibleForRole(companies, role),
+    [companies, role],
+  );
+  const visibleTimesheets = useMemo(
+    () => timesheetsVisibleForRole(timesheets, role, companies),
+    [timesheets, role, companies],
+  );
+  const rows = useMemo(
+    () => buildWorkerRows(visibleTimesheets, visibleCompanies),
+    [visibleTimesheets, visibleCompanies],
+  );
   const working = rows.filter((row) => row.assignments.length || row.currentTimesheets.length);
   const available = rows.filter((row) => !row.assignments.length && !row.currentTimesheets.length);
 
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <>
       <div className="mb-6">
-        <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Timesedler
-        </Link>
+        {showBackLink && (
+          <a href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
+            ← Timesedler
+          </a>
+        )}
         <h1 className="mt-3 text-2xl font-semibold">Vikaroversigt</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Se hvilke aktive vikarer der er i arbejde, og hvilke der er ledige.
@@ -62,7 +94,7 @@ function WorkerOverview() {
         <WorkerSection title="I arbejde" rows={working} emptyText="Ingen vikarer er i arbejde." />
         <WorkerSection title="Ledige" rows={available} emptyText="Ingen ledige vikarer fundet." />
       </div>
-    </AppShell>
+    </>
   );
 }
 
@@ -75,6 +107,16 @@ function WorkerSection({
   rows: WorkerRow[];
   emptyText: string;
 }) {
+  const [expandedWorkerKeys, setExpandedWorkerKeys] = useState<string[]>([]);
+
+  const toggleWorker = (workerKey: string) => {
+    setExpandedWorkerKeys((current) =>
+      current.includes(workerKey)
+        ? current.filter((key) => key !== workerKey)
+        : [...current, workerKey],
+    );
+  };
+
   return (
     <section className="rounded-lg border bg-card">
       <div className="border-b px-4 py-3">
@@ -86,49 +128,112 @@ function WorkerSection({
         <div className="px-4 py-8 text-sm text-muted-foreground">{emptyText}</div>
       ) : (
         <div className="divide-y">
-          {rows.map((row) => (
-            <article key={row.worker.key} className="p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-medium">{row.worker.name || "—"}</h3>
-                  <p className="text-sm text-muted-foreground">{row.worker.email || "—"}</p>
+          {rows.map((row) => {
+            const isExpanded = expandedWorkerKeys.includes(row.worker.key);
+            return (
+              <article key={row.worker.key} className="p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">{row.worker.name || "—"}</h3>
+                    <p className="text-sm text-muted-foreground">{row.worker.email || "—"}</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground sm:text-right">
+                    {row.bookingStart || row.bookingEnd ? (
+                      <>
+                        <div>Start vagt {formatDate(row.bookingStart)}</div>
+                        <div>Slut vagt {formatDate(row.bookingEnd)}</div>
+                      </>
+                    ) : (
+                      <div>Ingen aktiv booking</div>
+                    )}
+                    {row.worker.phone && <div className="mt-1">Tlf. {row.worker.phone}</div>}
+                  </div>
                 </div>
-                <div className="text-sm text-muted-foreground sm:text-right">
-                  {row.bookingStart || row.bookingEnd ? (
-                    <>
-                      <div>Start vagt {formatDate(row.bookingStart)}</div>
-                      <div>Slut vagt {formatDate(row.bookingEnd)}</div>
-                    </>
-                  ) : (
-                    <div>Ingen aktiv booking</div>
-                  )}
-                  {row.worker.phone && <div className="mt-1">{row.worker.phone}</div>}
-                </div>
-              </div>
-              {row.assignments.length > 0 && (
-                <div className="mt-3 space-y-1.5 text-sm">
-                  {row.assignments.map((assignment) => (
-                    <div key={`${assignment.companyName}-${assignment.projectName}`}>
-                      <span className="font-medium">{assignment.companyName}</span>
-                      <span className="text-muted-foreground">
-                        {" "} / {assignment.projectName || "Projekt"} ·{" "}
-                        {formatDate(assignment.startDate)} –{" "}
-                        {formatDate(assignment.endDate)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {row.currentTimesheets.length > 0 && (
-                <div className="mt-3 text-sm text-muted-foreground">
-                  Aktiv timeseddeluge: {row.currentTimesheets.length}
-                </div>
-              )}
-            </article>
-          ))}
+                {row.assignments.length > 0 && (
+                  <div className="mt-3 space-y-1.5 text-sm">
+                    {row.assignments.map((assignment) => (
+                      <div key={`${assignment.companyName}-${assignment.projectName}`}>
+                        <span className="font-medium">{assignment.companyName}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          / {assignment.projectName || "Projekt"} ·{" "}
+                          {formatDate(assignment.startDate)} – {formatDate(assignment.endDate)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {row.currentTimesheets.length > 0 && (
+                  <div className="mt-3 text-sm text-muted-foreground">
+                    Aktiv timeseddeluge: {row.currentTimesheets.length}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="mt-3 text-sm font-medium text-primary hover:underline"
+                  aria-expanded={isExpanded}
+                  onClick={() => toggleWorker(row.worker.key)}
+                >
+                  {isExpanded ? "Skjul oplysninger" : "Vis oplysninger"}
+                </button>
+                {isExpanded && <WorkerDetails row={row} />}
+              </article>
+            );
+          })}
         </div>
       )}
     </section>
+  );
+}
+
+function WorkerDetails({ row }: { row: WorkerRow }) {
+  const timesheet = row.currentTimesheets[0];
+  const assignment = row.assignments[0];
+  const hasActiveBooking = Boolean(timesheet || assignment);
+  const tradeSkills = row.worker.tradeSkills.length ? row.worker.tradeSkills.join(", ") : "—";
+  const period =
+    row.bookingStart || row.bookingEnd
+      ? `${formatDate(row.bookingStart)} – ${formatDate(row.bookingEnd)}`
+      : "—";
+
+  return (
+    <dl className="mt-4 border-t pt-3 text-sm">
+      <DetailRow label="Vikar" value={row.worker.name || "—"} />
+      <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
+      <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
+      {hasActiveBooking ? (
+        <>
+          <DetailRow
+            label="Brugervirksomhed"
+            value={timesheet?.brugervirksomhed || assignment?.companyName || "—"}
+          />
+          <DetailRow
+            label="Projekt"
+            value={timesheet?.projectName || assignment?.projectName || "—"}
+          />
+          <DetailRow label="Kontaktperson" value={timesheet?.kontaktperson || "—"} />
+          <DetailRow label="Kontaktperson telefon" value={timesheet?.kontaktpersonPhone || "—"} />
+          <DetailRow label="Mail" value={timesheet?.kontaktpersonEmail || "—"} />
+          <DetailRow label="Reference" value={timesheet?.referenceNo || "—"} />
+          <DetailRow label="Arbejdssted" value={timesheet?.arbejdssted || "—"} />
+          <DetailRow label="Periode" value={period} />
+          <DetailRow label="Overenskomst" value={timesheet?.overenskomst || "—"} />
+        </>
+      ) : (
+        <DetailRow label="Booking" value="Ingen aktiv booking" />
+      )}
+      <DetailRow label="Fag" value={tradeSkills} />
+      <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
+    </dl>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="grid gap-1 border-b py-2 last:border-b-0 sm:grid-cols-[11rem_1fr]">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-medium text-foreground sm:text-right">{value}</dd>
+    </div>
   );
 }
 
@@ -141,9 +246,7 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
       !item.workerInactive &&
       !item.workerConsentInactive,
   );
-  const knownWorkers = knownWorkersFromTimesheets(timesheets).filter((worker) =>
-    activeTimesheets.some((timesheet) => workerMatchesTimesheet(worker, timesheet)),
-  );
+  const knownWorkers = knownWorkersForOverview(timesheets, companies);
 
   return knownWorkers
     .map((worker) => {
@@ -164,6 +267,29 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
       };
     })
     .sort(compareWorkerRowsByBookingStart);
+}
+
+function knownWorkersForOverview(timesheets: Timesheet[], companies: Company[]): KnownWorker[] {
+  const workers = [...knownWorkersFromTimesheets(timesheets)];
+  for (const company of companies) {
+    for (const project of company.projects) {
+      for (const reference of project.workerEmails) {
+        const key = reference.trim().toLowerCase();
+        if (!key) continue;
+        if (workers.some((worker) => workerReferenceKeys(worker).includes(key))) continue;
+        workers.push({
+          key,
+          name: reference.trim(),
+          email: reference.includes("@") ? reference.trim() : "",
+          phone: "",
+          tradeSkills: project.tradeSkills,
+          competencies: project.competencies,
+          inactive: false,
+        });
+      }
+    }
+  }
+  return workers.filter((worker) => !worker.inactive);
 }
 
 function activeProjectAssignments(

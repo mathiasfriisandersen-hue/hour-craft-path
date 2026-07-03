@@ -20,11 +20,13 @@ import { Route as KontaktpersonInviteRouteImport } from './routes/kontaktperson.
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
 import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminStatisticsRouteImport } from './routes/admin.statistics'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
 import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
+import { Route as AdminUsersIdRouteImport } from './routes/admin.users.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -81,6 +83,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminStatisticsRoute = AdminStatisticsRouteImport.update({
+  id: '/admin/statistics',
+  path: '/admin/statistics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminRulesRoute = AdminRulesRouteImport.update({
   id: '/admin/rules',
   path: '/admin/rules',
@@ -106,6 +113,11 @@ const AdminIdRoute = AdminIdRouteImport.update({
   path: '/admin/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminUsersIdRoute = AdminUsersIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AdminUsersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -114,7 +126,8 @@ export interface FileRoutesByFullPath {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
-  '/admin/users': typeof AdminUsersRoute
+  '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -124,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
+  '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -132,7 +146,8 @@ export interface FileRoutesByTo {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
-  '/admin/users': typeof AdminUsersRoute
+  '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -142,6 +157,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/kontaktperson': typeof KontaktpersonIndexRoute
   '/vikar': typeof VikarIndexRoute
+  '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -151,7 +167,8 @@ export interface FileRoutesById {
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
   '/admin/rules': typeof AdminRulesRoute
-  '/admin/users': typeof AdminUsersRoute
+  '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
@@ -161,6 +178,7 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
+  '/admin/users/$id': typeof AdminUsersIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +189,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
@@ -181,6 +200,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/kontaktperson/'
     | '/vikar/'
+    | '/admin/users/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -189,6 +209,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
@@ -199,6 +220,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/kontaktperson'
     | '/vikar'
+    | '/admin/users/$id'
   id:
     | '__root__'
     | '/'
@@ -207,6 +229,7 @@ export interface FileRouteTypes {
     | '/admin/companies'
     | '/admin/create-worker'
     | '/admin/rules'
+    | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
     | '/kontaktperson/$id'
@@ -217,6 +240,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/kontaktperson/'
     | '/vikar/'
+    | '/admin/users/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -226,7 +250,8 @@ export interface RootRouteChildren {
   AdminCompaniesRoute: typeof AdminCompaniesRoute
   AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
   AdminRulesRoute: typeof AdminRulesRoute
-  AdminUsersRoute: typeof AdminUsersRoute
+  AdminStatisticsRoute: typeof AdminStatisticsRoute
+  AdminUsersRoute: typeof AdminUsersRouteWithChildren
   AdminWorkersRoute: typeof AdminWorkersRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   KontaktpersonInviteRoute: typeof KontaktpersonInviteRoute
@@ -317,6 +342,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/statistics': {
+      id: '/admin/statistics'
+      path: '/admin/statistics'
+      fullPath: '/admin/statistics'
+      preLoaderRoute: typeof AdminStatisticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/rules': {
       id: '/admin/rules'
       path: '/admin/rules'
@@ -352,8 +384,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/users/$id': {
+      id: '/admin/users/$id'
+      path: '/$id'
+      fullPath: '/admin/users/$id'
+      preLoaderRoute: typeof AdminUsersIdRouteImport
+      parentRoute: typeof AdminUsersRoute
+    }
   }
 }
+
+interface AdminUsersRouteChildren {
+  AdminUsersIdRoute: typeof AdminUsersIdRoute
+}
+
+const AdminUsersRouteChildren: AdminUsersRouteChildren = {
+  AdminUsersIdRoute: AdminUsersIdRoute,
+}
+
+const AdminUsersRouteWithChildren = AdminUsersRoute._addFileChildren(
+  AdminUsersRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -362,7 +413,8 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCompaniesRoute: AdminCompaniesRoute,
   AdminCreateWorkerRoute: AdminCreateWorkerRoute,
   AdminRulesRoute: AdminRulesRoute,
-  AdminUsersRoute: AdminUsersRoute,
+  AdminStatisticsRoute: AdminStatisticsRoute,
+  AdminUsersRoute: AdminUsersRouteWithChildren,
   AdminWorkersRoute: AdminWorkersRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   KontaktpersonInviteRoute: KontaktpersonInviteRoute,

@@ -4,8 +4,11 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
+import { companiesVisibleForRole, companyOwnerForRole } from "@/lib/company-access";
+import { useAuth } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
+  createBlank,
   createTimesheetForWorker,
   generateOneTimeCode,
   knownWorkersFromTimesheets,
@@ -98,6 +101,23 @@ function defaultWorkWindow(form: FormState): { start: string; end: string } {
   return { start: form.defaultStart, end: form.defaultEnd };
 }
 
+function companyDetailsStarted(form: FormState): boolean {
+  return [
+    form.brugervirksomhed,
+    form.companyId,
+    form.projectId,
+    form.projectName,
+    form.projectEndDate,
+    form.arbejdssted,
+    form.kontaktperson,
+    form.kontaktpersonPhone,
+    form.kontaktpersonEmail,
+    form.referenceNo,
+    form.selectedAgreementId,
+    form.hourlyWage,
+  ].some((value) => String(value ?? "").trim());
+}
+
 function initialWeekPlan(): WorkerDayForm[] {
   return WEEKDAYS.map((_, index) => ({
     start: "",
@@ -156,9 +176,11 @@ function initialForm(): FormState {
 }
 
 function CreateWorkerPage() {
+  const { role } = useAuth();
   const navigate = useNavigate();
   const timesheets = useTimesheets();
-  const companies = listCompanies();
+  const allCompanies = listCompanies();
+  const companies = companiesVisibleForRole(allCompanies, role);
   const knownWorkers = knownWorkersFromTimesheets(timesheets);
   const knownContacts = listKnownContacts();
   const [form, setForm] = useState<FormState>(initialForm);
@@ -171,25 +193,25 @@ function CreateWorkerPage() {
   const selectedCompany = companies.find((item) => item.id === form.companyId);
   const companyProjects = selectedCompany?.projects ?? [];
   const selectedProject = companyProjects.find((project) => project.id === form.projectId);
-  const selectedProjectForAvailability = selectedProject
-    ? {
-        ...selectedProject,
-        startDate: form.startDate || selectedProject.startDate,
-        endDate: form.projectEndDate || selectedProject.endDate,
-      }
-    : undefined;
-  const projectWorkerOptions = selectedProjectForAvailability
+  const ownerRole = companyOwnerForRole(role) ?? selectedCompany?.ownerRole;
+  const availabilityProject = availabilityProjectFromForm(form, selectedProject);
+  const projectWorkerOptions = availabilityProject
     ? knownWorkers.filter(
         (worker) =>
           !workerProjectConflict(
-            companies,
+            allCompanies,
             timesheets,
             selectedCompany?.id ?? "",
-            selectedProjectForAvailability,
+            availabilityProject,
             worker,
           ),
       )
     : knownWorkers;
+  const hasCompanyDetails = companyDetailsStarted(form);
+  const createWorkerOnlyDisabled = sending || hasCompanyDetails;
+  const createWorkerOnlyMessage = hasCompanyDetails
+    ? "Ved oprettelse af projekt skal du sende mail til vikar"
+    : "";
 
   const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
     setForm((current) => ({
@@ -353,15 +375,20 @@ function CreateWorkerPage() {
     });
   };
 
-  const validateForm = () => {
+  const validateWorkerFields = () => {
     const nextErrors: string[] = [];
-    const requirePair = (start: string, end: string, label: string) => {
-      if (Boolean(start) !== Boolean(end)) nextErrors.push(`${label}: udfyld både start og slut`);
-    };
     if (!form.vikar.trim()) nextErrors.push("Vikarnavn mangler");
     if (!/^\S+@\S+\.\S+$/.test(form.vikarEmail))
       nextErrors.push("Vikarens mail mangler eller er ugyldig");
     if (!form.tradeSkills?.length) nextErrors.push("Vælg mindst ét fag for vikaren");
+    return nextErrors;
+  };
+
+  const validateForm = () => {
+    const nextErrors: string[] = [...validateWorkerFields()];
+    const requirePair = (start: string, end: string, label: string) => {
+      if (Boolean(start) !== Boolean(end)) nextErrors.push(`${label}: udfyld både start og slut`);
+    };
     if (!form.brugervirksomhed.trim()) nextErrors.push("Brugervirksomhed mangler");
     if (!form.arbejdssted.trim()) nextErrors.push("Brugervirksomhed adresse/arbejdssted mangler");
     if (!form.kontaktperson.trim()) nextErrors.push("Kontaktperson mangler");
@@ -385,6 +412,20 @@ function CreateWorkerPage() {
     if (form.projectEndDate && form.startDate && form.projectEndDate < form.startDate) {
       nextErrors.push("Projektafslutning må ikke være før startdato");
     }
+    const selectedKnownWorker = knownWorkerFromForm(knownWorkers, form);
+    if (
+      availabilityProject &&
+      selectedKnownWorker &&
+      workerProjectConflict(
+        allCompanies,
+        timesheets,
+        selectedCompany?.id ?? "",
+        availabilityProject,
+        selectedKnownWorker,
+      )
+    ) {
+      nextErrors.push("Vikaren er allerede booket i den valgte projektperiode");
+    }
     if (form.shiftWorkApplies) {
       form.weekPlan.forEach((day, index) => {
         if (!Number.isFinite(Number(day.pause)) || Number(day.pause) < 0)
@@ -398,6 +439,30 @@ function CreateWorkerPage() {
     }
     if (!form.startDate) nextErrors.push("Startdato mangler");
     return nextErrors;
+  };
+
+  const createWorkerOnly = () => {
+    const nextErrors = validateWorkerFields();
+    setErrors(nextErrors);
+    if (nextErrors.length) return;
+    if (hasCompanyDetails) return;
+
+    const now = new Date().toISOString();
+    const worker = upsert({
+      ...createBlank(),
+      ownerRole,
+      vikar: form.vikar.trim(),
+      vikarEmail: form.vikarEmail.trim(),
+      vikarPhone: form.vikarPhone?.trim() ?? "",
+      tradeSkills: form.tradeSkills ?? [],
+      competencies: form.competencies?.trim() ?? "",
+      workerMustChangeAccessCode: false,
+      contactPersonMustChangeAccessCode: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    setCreatedId(worker.id);
+    setMessage("Vikaren er oprettet til senere brug.");
   };
 
   const submit = async (event: FormEvent) => {
@@ -438,6 +503,7 @@ function CreateWorkerPage() {
           : undefined,
         workerAccessCode: generateOneTimeCode(),
         contactPersonAccessCode: generateOneTimeCode(),
+        ownerRole,
       }),
     );
     setCreatedId(timesheet.id);
@@ -464,7 +530,7 @@ function CreateWorkerPage() {
   };
 
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Opret vikar</h1>
@@ -532,11 +598,11 @@ function CreateWorkerPage() {
               Genereres automatisk
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Systemet laver 6-cifrede engangskoder til vikar og kontaktperson.
-              De bliver bedt om at ændre adgangskoden efter første login.
+              Systemet laver 6-cifrede engangskoder til vikar og kontaktperson. De bliver bedt om at
+              ændre adgangskoden efter første login.
             </p>
           </Field>
-          <Field label="Brugervirksomhed *">
+          <Field label={`Brugervirksomhed${hasCompanyDetails ? " *" : ""}`}>
             <Input
               list="admin-create-company-list"
               value={form.brugervirksomhed}
@@ -570,13 +636,13 @@ function CreateWorkerPage() {
               )}
             </Field>
           )}
-          <Field label="Brugervirksomhed adresse / arbejdssted *">
+          <Field label={`Brugervirksomhed adresse / arbejdssted${hasCompanyDetails ? " *" : ""}`}>
             <Input
               value={form.arbejdssted}
               onChange={(e) => update({ arbejdssted: e.target.value })}
             />
           </Field>
-          <Field label="Kontaktperson *">
+          <Field label={`Kontaktperson${hasCompanyDetails ? " *" : ""}`}>
             <Input
               list="admin-create-contact-list"
               value={form.kontaktperson}
@@ -588,13 +654,13 @@ function CreateWorkerPage() {
               ))}
             </datalist>
           </Field>
-          <Field label="Kontaktperson telefonnummer *">
+          <Field label={`Kontaktperson telefonnummer${hasCompanyDetails ? " *" : ""}`}>
             <Input
               value={form.kontaktpersonPhone}
               onChange={(e) => update({ kontaktpersonPhone: e.target.value })}
             />
           </Field>
-          <Field label="Kontaktpersonens mail *">
+          <Field label={`Kontaktpersonens mail${hasCompanyDetails ? " *" : ""}`}>
             <Input
               type="email"
               list="admin-create-contact-email-list"
@@ -615,7 +681,7 @@ function CreateWorkerPage() {
               onChange={(e) => update({ referenceNo: e.target.value })}
             />
           </Field>
-          <Field label="Overenskomst *">
+          <Field label={`Overenskomst${hasCompanyDetails ? " *" : ""}`}>
             <select
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               value={form.selectedAgreementId}
@@ -629,7 +695,7 @@ function CreateWorkerPage() {
               ))}
             </select>
           </Field>
-          <Field label="Timeløn *">
+          <Field label={`Timeløn${hasCompanyDetails ? " *" : ""}`}>
             <Input
               type="number"
               min={0}
@@ -861,14 +927,24 @@ function CreateWorkerPage() {
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">{message}</div>
-          <div className="flex gap-2">
-            <Button type="button" variant="outline" onClick={() => navigate({ to: "/admin" })}>
-              Annullér
+          <div className="text-sm text-muted-foreground">{createWorkerOnlyMessage || message}</div>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={createWorkerOnly}
+              disabled={createWorkerOnlyDisabled}
+            >
+              Opret vikar
             </Button>
-            <Button type="submit" disabled={sending}>
-              {sending ? "Sender…" : "Opret vikar og send mail"}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={() => navigate({ to: "/admin" })}>
+                Annullér
+              </Button>
+              <Button type="submit" disabled={sending}>
+                {sending ? "Sender…" : "Opret vikar og send mail"}
+              </Button>
+            </div>
           </div>
         </div>
       </form>
@@ -1015,9 +1091,62 @@ function DefaultTimeInput({
   );
 }
 
+function availabilityProjectFromForm(
+  form: FormState,
+  selectedProject?: CompanyProject,
+): CompanyProject | undefined {
+  const startDate = form.startDate || selectedProject?.startDate || "";
+  if (!startDate) return undefined;
+  const endDate =
+    form.projectEndDate || selectedProject?.endDate || defaultBookingEndDate(startDate);
+  const tradeSkills = form.tradeSkills ?? [];
+
+  return {
+    id: selectedProject?.id || form.projectId || "__current-booking__",
+    name: selectedProject?.name || form.projectName || "",
+    contactName: selectedProject?.contactName || form.kontaktperson,
+    contactPhone: selectedProject?.contactPhone || form.kontaktpersonPhone,
+    contactEmail: selectedProject?.contactEmail || form.kontaktpersonEmail,
+    referenceNo: selectedProject?.referenceNo || form.referenceNo,
+    startDate,
+    endDate,
+    selectedAgreementId: form.selectedAgreementId || selectedProject?.selectedAgreementId || "",
+    tradeSkills: tradeSkills.length ? tradeSkills : (selectedProject?.tradeSkills ?? []),
+    competencies: form.competencies || selectedProject?.competencies || "",
+    workerEmails: selectedProject?.workerEmails ?? [],
+    workPeriod: selectedProject?.workPeriod ?? "day",
+    defaultStart: form.defaultStart || selectedProject?.defaultStart || "",
+    defaultEnd: form.defaultEnd || selectedProject?.defaultEnd || "",
+    pauseStart: form.defaultPauseStart || selectedProject?.pauseStart || "",
+    pauseEnd: form.defaultPauseEnd || selectedProject?.pauseEnd || "",
+    pause2Start: form.defaultPause2Start || selectedProject?.pause2Start || "",
+    pause2End: form.defaultPause2End || selectedProject?.pause2End || "",
+  };
+}
+
+function knownWorkerFromForm(
+  workers: ReturnType<typeof listKnownWorkers>,
+  form: FormState,
+): ReturnType<typeof listKnownWorkers>[number] | undefined {
+  const formReferences = [form.vikar, form.vikarEmail]
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+  return workers.find((worker) => {
+    const workerReferences = workerReferenceKeys(worker);
+    return formReferences.some((item) => workerReferences.includes(item));
+  });
+}
+
 function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
   if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
   return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
+function defaultBookingEndDate(startDate: string): string {
+  const date = new Date(`${startDate}T12:00:00`);
+  const dayIndex = (date.getDay() + 6) % 7;
+  if (dayIndex < 5) date.setDate(date.getDate() + (4 - dayIndex));
+  return date.toISOString().slice(0, 10);
 }
 
 function workerProjectConflict(

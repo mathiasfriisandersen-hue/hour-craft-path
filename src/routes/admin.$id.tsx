@@ -55,7 +55,7 @@ function AdminDetail() {
 
   if (!t)
     return (
-      <AppShell allow={["admin", "bruger"]}>
+      <AppShell allow={["admin", "bruger", "bruger2"]}>
         <div>Indlæser…</div>
       </AppShell>
     );
@@ -153,7 +153,7 @@ function AdminDetail() {
   };
 
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
       <div className="mb-6">
         <Link to="/admin" className="text-sm text-muted-foreground hover:text-foreground">
           ← Admin-overblik
@@ -208,6 +208,7 @@ function AdminDetail() {
           <dl className="space-y-1 text-sm">
             <Row label="Vikar" value={t.vikar} />
             <Row label="Vikarens e-mail" value={t.vikarEmail} />
+            <Row label="Vikarens telefon" value={t.vikarPhone || "—"} />
             <Row label="Brugervirksomhed" value={t.brugervirksomhed} />
             <Row label="Kontaktperson" value={t.kontaktperson} />
             <Row label="Kontaktperson telefon" value={t.kontaktpersonPhone} />

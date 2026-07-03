@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/app-shell";
+import { timesheetsVisibleForRole } from "@/lib/company-access";
+import { useAuth } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { type DayEntry, type Timesheet } from "@/lib/timesheet-store";
-import { useMemo, useState } from "react";
+import { listCompanies, type DayEntry, type Timesheet } from "@/lib/timesheet-store";
+import { useEffect, useMemo, useState } from "react";
 
 export const Route = createFileRoute("/admin/calendar")({
   head: () => ({ meta: [{ title: "Admin — Kalender" }] }),
@@ -26,29 +28,51 @@ type MonthCell = {
 const WEEK_DAY_LABELS = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"];
 
 function AdminCalendar() {
+  const { role } = useAuth();
   const all = useTimesheets();
+  const [companiesList, setCompaniesList] = useState(listCompanies);
   const [worker, setWorker] = useState("all");
   const [company, setCompany] = useState("all");
   const [month, setMonth] = useState(() => monthKey(new Date()));
 
+  useEffect(() => {
+    const refresh = () => setCompaniesList(listCompanies());
+    window.addEventListener("timesheets-changed", refresh);
+    return () => window.removeEventListener("timesheets-changed", refresh);
+  }, []);
+
+  const visibleTimesheets = useMemo(
+    () => timesheetsVisibleForRole(all, role, companiesList),
+    [all, role, companiesList],
+  );
+
   const activeTimesheets = useMemo(
     () =>
-      all.filter(
+      visibleTimesheets.filter(
         (item) =>
           item.status !== "draft" &&
           !item.archived &&
           !item.workerInactive &&
           !item.workerConsentInactive,
       ),
-    [all],
+    [visibleTimesheets],
   );
 
   const workers = useMemo(
     () =>
-      [...new Set(activeTimesheets.map((item) => item.vikar).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b, "da-DK"),
-      ),
-    [activeTimesheets],
+      [
+        ...new Set(
+          activeTimesheets
+            .filter(
+              (item) =>
+                (company === "all" || item.brugervirksomhed === company) &&
+                plannedDays(item).length > 0,
+            )
+            .map((item) => item.vikar)
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b, "da-DK")),
+    [activeTimesheets, company],
   );
 
   const companies = useMemo(
@@ -75,11 +99,15 @@ function AdminCalendar() {
     [activeTimesheets, worker, company],
   );
 
+  useEffect(() => {
+    if (worker !== "all" && !workers.includes(worker)) setWorker("all");
+  }, [worker, workers]);
+
   const monthCells = useMemo(() => buildMonth(month, days), [month, days]);
   const currentMonthLabel = useMemo(() => formatMonth(month), [month]);
 
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Kalender</h1>

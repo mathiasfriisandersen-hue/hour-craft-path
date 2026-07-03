@@ -2,11 +2,15 @@ import { useState } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
-import { findByContactPersonAccessCode, findByWorkerAccessCode, getById } from "@/lib/timesheet-store";
+import {
+  findByContactPersonAccessCode,
+  findByWorkerAccessCode,
+  getById,
+} from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
-const ROLES: Role[] = ["vikar", "kontaktperson", "bruger", "admin"];
+const ROLES: Role[] = ["vikar", "kontaktperson", "bruger", "bruger2", "admin"];
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -31,7 +35,12 @@ export function LoginScreen() {
       role === "kontaktperson" ? findByContactPersonAccessCode(password) : undefined;
     const validDemoPassword = password === DEMO_PASSWORD;
 
-    if (!validDemoPassword && !validVikarPassword && !matchedVikarTimesheet && !matchedContactTimesheet) {
+    if (
+      !validDemoPassword &&
+      !validVikarPassword &&
+      !matchedVikarTimesheet &&
+      !matchedContactTimesheet
+    ) {
       setError("Forkert adgangskode");
       return;
     }
@@ -81,14 +90,14 @@ export function LoginScreen() {
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <label className="text-sm font-medium">Vælg rolle</label>
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
+            <div className="mt-2 flex flex-wrap gap-2">
               {ROLES.map((r) => (
                 <button
                   key={r}
                   type="button"
                   onClick={() => setRole(r)}
                   className={cn(
-                    "rounded-md border px-2 py-2 text-sm font-medium whitespace-nowrap transition-colors",
+                    "min-w-32 flex-1 rounded-md border px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
                     role === r
                       ? "border-primary bg-primary text-primary-foreground"
                       : "bg-background hover:bg-accent",

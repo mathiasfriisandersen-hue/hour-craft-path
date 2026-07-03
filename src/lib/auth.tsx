@@ -1,13 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { syncRemoteAppState } from "@/lib/timesheet-store";
 
-export type Role = "vikar" | "kontaktperson" | "admin" | "bruger";
+export type Role = "vikar" | "kontaktperson" | "admin" | "bruger" | "bruger2";
 
 export const ROLE_LABEL: Record<Role, string> = {
   vikar: "Vikar",
   kontaktperson: "Kontaktperson",
   admin: "Admin",
   bruger: "Bruger 1",
+  bruger2: "Bruger 2",
 };
 
 export const ROLE_HOME: Record<Role, string> = {
@@ -15,6 +16,7 @@ export const ROLE_HOME: Record<Role, string> = {
   kontaktperson: "/kontaktperson",
   admin: "/admin",
   bruger: "/admin",
+  bruger2: "/admin",
 };
 
 export const DEMO_PASSWORD = "0000";
@@ -41,7 +43,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         stored === "vikar" ||
         stored === "kontaktperson" ||
         stored === "admin" ||
-        stored === "bruger"
+        stored === "bruger" ||
+        stored === "bruger2"
       ) {
         setRole(stored);
       }

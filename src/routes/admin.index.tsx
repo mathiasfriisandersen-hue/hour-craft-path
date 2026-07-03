@@ -16,7 +16,9 @@ import {
   type Status,
 } from "@/lib/timesheet-store";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
-import { useAuth } from "@/lib/auth";
+import { timesheetsVisibleForRole } from "@/lib/company-access";
+import { useAuth, type Role } from "@/lib/auth";
+import { listCompanies } from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/admin/")({
   head: () => ({ meta: [{ title: "Admin — Overblik" }] }),
@@ -25,8 +27,23 @@ export const Route = createFileRoute("/admin/")({
 
 function AdminList() {
   const { role } = useAuth();
+  return (
+    <AppShell allow={["admin", "bruger", "bruger2"]}>
+      <AdminOverviewContent role={role ?? "bruger"} />
+    </AppShell>
+  );
+}
+
+export function AdminOverviewContent({
+  role,
+  previewUserId,
+}: {
+  role: Role;
+  previewUserId?: string;
+}) {
   const canManageArchive = role === "admin";
   const all = useTimesheets();
+  const [companies, setCompanies] = useState(listCompanies);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Status | "all" | "archived" | "inactive">("all");
   const [agreement, setAgreement] = useState("all");
@@ -35,12 +52,25 @@ function AdminList() {
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
 
   useEffect(() => {
+    const refresh = () => setCompanies(listCompanies());
+    window.addEventListener("timesheets-changed", refresh);
+    return () => window.removeEventListener("timesheets-changed", refresh);
+  }, []);
+
+  useEffect(() => {
     if (!canManageArchive && (status === "archived" || status === "inactive")) {
       setStatus("all");
     }
   }, [canManageArchive, status]);
 
-  const submitted = useMemo(() => all.filter((item) => item.status !== "draft"), [all]);
+  const visibleTimesheets = useMemo(
+    () => timesheetsVisibleForRole(all, role, companies),
+    [all, role, companies],
+  );
+  const submitted = useMemo(
+    () => visibleTimesheets.filter((item) => item.status !== "draft"),
+    [visibleTimesheets],
+  );
   const visibleSubmitted = useMemo(
     () =>
       submitted.filter(
@@ -106,7 +136,7 @@ function AdminList() {
   };
 
   return (
-    <AppShell allow={["admin", "bruger"]}>
+    <>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-wrap items-start gap-x-16 gap-y-4">
           <div>
@@ -117,20 +147,35 @@ function AdminList() {
                 : "Administrér indsendelser og kontrol."}
             </p>
           </div>
-          <Link to="/admin/workers" className="group block">
+          <a
+            href={previewUserId ? `/admin/users/${previewUserId}?view=workers` : "/admin/workers"}
+            className="group block"
+          >
             <h2 className="text-2xl font-semibold text-primary group-hover:underline">
               Vikaroversigt
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               Overblik over ledige vikarer og aktive vikarer
             </p>
-          </Link>
+          </a>
+          {previewUserId && (
+            <a href={`/admin/users/${previewUserId}?view=companies`} className="group block">
+              <h2 className="text-2xl font-semibold text-primary group-hover:underline">
+                Virksomheder
+              </h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Oversigt over brugerens virksomheder
+              </p>
+            </a>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {canManageArchive && (
             <Button
               variant={archiveMode ? "default" : "outline"}
-              onClick={archiveMode && selectedArchiveIds.length ? archiveSelected : toggleArchiveMode}
+              onClick={
+                archiveMode && selectedArchiveIds.length ? archiveSelected : toggleArchiveMode
+              }
               disabled={!submitted.length}
             >
               {archiveMode && selectedArchiveIds.length
@@ -149,7 +194,9 @@ function AdminList() {
         </div>
       </div>
 
-      <div className={`mb-6 grid grid-cols-2 gap-3 ${canManageArchive ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}>
+      <div
+        className={`mb-6 grid grid-cols-2 gap-3 ${canManageArchive ? "lg:grid-cols-5" : "lg:grid-cols-3"}`}
+      >
         {(["sent", "approved", "rejected"] as Status[]).map((value) => (
           <button
             key={value}
@@ -275,9 +322,7 @@ function AdminList() {
                     <div className="col-span-2">
                       <dt className="text-xs text-muted-foreground">Overenskomst</dt>
                       <dd className="truncate">{calc.agreementName || "—"}</dd>
-                      <dd className="text-xs text-muted-foreground">
-                        {calc.rateValidationStatus}
-                      </dd>
+                      <dd className="text-xs text-muted-foreground">{calc.rateValidationStatus}</dd>
                     </div>
                   </dl>
 
@@ -323,101 +368,101 @@ function AdminList() {
           </div>
 
           <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
-          <table className="w-full min-w-[820px] text-sm">
-            <thead className="bg-muted/50 text-left text-muted-foreground">
-              <tr>
-                {[
-                  canManageArchive && archiveMode ? "Arkiver" : "",
-                  "Vikar",
-                  "Virksomhed",
-                  "Uge",
-                  "Overenskomst",
-                  "Timer",
-                  "Status",
-                  "",
-                ].map((head, i) => (
-                  <th key={`${head}-${i}`} className="px-4 py-3 font-medium">
-                    {head}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((item) => {
-                const calc = calculateTimesheet(item);
-                const retentionWarning = timesheetRetentionWarning(item);
-                return (
-                  <tr key={item.id} className="border-t hover:bg-muted/20">
-                    <td className="px-4 py-3">
-                      {canManageArchive && archiveMode && (
-                        <input
-                          type="checkbox"
-                          checked={selectedArchiveIds.includes(item.id)}
-                          disabled={Boolean(item.archived)}
-                          onChange={(event) =>
-                            toggleArchiveSelection(item.id, event.target.checked)
-                          }
-                          aria-label={`Vælg timeseddel for ${item.vikar || "vikar"} til arkiv`}
-                        />
-                      )}
-                    </td>
-                    <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
-                    <td className="px-4 py-3">
-                      <div>{item.brugervirksomhed || "—"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {item.kontaktperson || "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>Uge {weekNumber(item.weekStart)}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatWeekRange(item.weekStart)}
-                      </div>
-                    </td>
-                    <td className="max-w-56 truncate px-4 py-3" title={calc.agreementName}>
-                      <div>{calc.agreementName || "—"}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {calc.rateValidationStatus}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 tabular-nums">{totalHours(item.days).toFixed(2)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={item.status} />
-                      {item.archived && (
-                        <div className="mt-1 text-xs text-muted-foreground">Arkiveret</div>
-                      )}
-                      {item.workerConsentInactive && (
-                        <div className="mt-1 text-xs text-muted-foreground">Inaktiv</div>
-                      )}
-                      {retentionWarning && (
-                        <div
-                          className={
-                            retentionWarning.level === "critical"
-                              ? "mt-1 text-xs text-status-rejected-fg"
-                              : "mt-1 text-xs text-status-sent-fg"
-                          }
-                        >
-                          {retentionWarning.text}
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="bg-muted/50 text-left text-muted-foreground">
+                <tr>
+                  {[
+                    canManageArchive && archiveMode ? "Arkiver" : "",
+                    "Vikar",
+                    "Virksomhed",
+                    "Uge",
+                    "Overenskomst",
+                    "Timer",
+                    "Status",
+                    "",
+                  ].map((head, i) => (
+                    <th key={`${head}-${i}`} className="px-4 py-3 font-medium">
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {list.map((item) => {
+                  const calc = calculateTimesheet(item);
+                  const retentionWarning = timesheetRetentionWarning(item);
+                  return (
+                    <tr key={item.id} className="border-t hover:bg-muted/20">
+                      <td className="px-4 py-3">
+                        {canManageArchive && archiveMode && (
+                          <input
+                            type="checkbox"
+                            checked={selectedArchiveIds.includes(item.id)}
+                            disabled={Boolean(item.archived)}
+                            onChange={(event) =>
+                              toggleArchiveSelection(item.id, event.target.checked)
+                            }
+                            aria-label={`Vælg timeseddel for ${item.vikar || "vikar"} til arkiv`}
+                          />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
+                      <td className="px-4 py-3">
+                        <div>{item.brugervirksomhed || "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.kontaktperson || "—"}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Link
-                        to="/admin/$id"
-                        params={{ id: item.id }}
-                        className="font-medium text-primary hover:underline"
-                      >
-                        Åbn →
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div>Uge {weekNumber(item.weekStart)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatWeekRange(item.weekStart)}
+                        </div>
+                      </td>
+                      <td className="max-w-56 truncate px-4 py-3" title={calc.agreementName}>
+                        <div>{calc.agreementName || "—"}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {calc.rateValidationStatus}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">{totalHours(item.days).toFixed(2)}</td>
+                      <td className="px-4 py-3">
+                        <StatusBadge status={item.status} />
+                        {item.archived && (
+                          <div className="mt-1 text-xs text-muted-foreground">Arkiveret</div>
+                        )}
+                        {item.workerConsentInactive && (
+                          <div className="mt-1 text-xs text-muted-foreground">Inaktiv</div>
+                        )}
+                        {retentionWarning && (
+                          <div
+                            className={
+                              retentionWarning.level === "critical"
+                                ? "mt-1 text-xs text-status-rejected-fg"
+                                : "mt-1 text-xs text-status-sent-fg"
+                            }
+                          >
+                            {retentionWarning.text}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <Link
+                          to="/admin/$id"
+                          params={{ id: item.id }}
+                          className="font-medium text-primary hover:underline"
+                        >
+                          Åbn →
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </>
       )}
-    </AppShell>
+    </>
   );
 }
