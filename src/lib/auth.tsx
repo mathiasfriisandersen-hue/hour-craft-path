@@ -15,8 +15,8 @@ export const ROLE_HOME: Record<Role, string> = {
   vikar: "/vikar",
   kontaktperson: "/kontaktperson",
   admin: "/admin",
-  bruger: "/admin",
-  bruger2: "/admin",
+  bruger: "/bruger1",
+  bruger2: "/bruger2",
 };
 
 export const DEMO_PASSWORD = "0000";

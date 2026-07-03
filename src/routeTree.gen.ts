@@ -12,12 +12,16 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
 import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
+import { Route as Bruger2IndexRouteImport } from './routes/bruger2.index'
+import { Route as Bruger1IndexRouteImport } from './routes/bruger1.index'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as VikarInviteRouteImport } from './routes/vikar.invite'
 import { Route as VikarConsentRouteImport } from './routes/vikar.consent'
 import { Route as VikarIdRouteImport } from './routes/vikar.$id'
 import { Route as KontaktpersonInviteRouteImport } from './routes/kontaktperson.invite'
 import { Route as KontaktpersonIdRouteImport } from './routes/kontaktperson.$id'
+import { Route as Bruger2WorkersRouteImport } from './routes/bruger2.workers'
+import { Route as Bruger1WorkersRouteImport } from './routes/bruger1.workers'
 import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminStatisticsRouteImport } from './routes/admin.statistics'
@@ -41,6 +45,16 @@ const VikarIndexRoute = VikarIndexRouteImport.update({
 const KontaktpersonIndexRoute = KontaktpersonIndexRouteImport.update({
   id: '/kontaktperson/',
   path: '/kontaktperson/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger2IndexRoute = Bruger2IndexRouteImport.update({
+  id: '/bruger2/',
+  path: '/bruger2/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger1IndexRoute = Bruger1IndexRouteImport.update({
+  id: '/bruger1/',
+  path: '/bruger1/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminIndexRoute = AdminIndexRouteImport.update({
@@ -71,6 +85,16 @@ const KontaktpersonInviteRoute = KontaktpersonInviteRouteImport.update({
 const KontaktpersonIdRoute = KontaktpersonIdRouteImport.update({
   id: '/kontaktperson/$id',
   path: '/kontaktperson/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger2WorkersRoute = Bruger2WorkersRouteImport.update({
+  id: '/bruger2/workers',
+  path: '/bruger2/workers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const Bruger1WorkersRoute = Bruger1WorkersRouteImport.update({
+  id: '/bruger1/workers',
+  path: '/bruger1/workers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminWorkersRoute = AdminWorkersRouteImport.update({
@@ -129,12 +153,16 @@ export interface FileRoutesByFullPath {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
+  '/bruger1/': typeof Bruger1IndexRoute
+  '/bruger2/': typeof Bruger2IndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
   '/admin/users/$id': typeof AdminUsersIdRoute
@@ -149,12 +177,16 @@ export interface FileRoutesByTo {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin': typeof AdminIndexRoute
+  '/bruger1': typeof Bruger1IndexRoute
+  '/bruger2': typeof Bruger2IndexRoute
   '/kontaktperson': typeof KontaktpersonIndexRoute
   '/vikar': typeof VikarIndexRoute
   '/admin/users/$id': typeof AdminUsersIdRoute
@@ -170,12 +202,16 @@ export interface FileRoutesById {
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
+  '/bruger1/workers': typeof Bruger1WorkersRoute
+  '/bruger2/workers': typeof Bruger2WorkersRoute
   '/kontaktperson/$id': typeof KontaktpersonIdRoute
   '/kontaktperson/invite': typeof KontaktpersonInviteRoute
   '/vikar/$id': typeof VikarIdRoute
   '/vikar/consent': typeof VikarConsentRoute
   '/vikar/invite': typeof VikarInviteRoute
   '/admin/': typeof AdminIndexRoute
+  '/bruger1/': typeof Bruger1IndexRoute
+  '/bruger2/': typeof Bruger2IndexRoute
   '/kontaktperson/': typeof KontaktpersonIndexRoute
   '/vikar/': typeof VikarIndexRoute
   '/admin/users/$id': typeof AdminUsersIdRoute
@@ -192,12 +228,16 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/workers'
+    | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
     | '/admin/'
+    | '/bruger1/'
+    | '/bruger2/'
     | '/kontaktperson/'
     | '/vikar/'
     | '/admin/users/$id'
@@ -212,12 +252,16 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/workers'
+    | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
     | '/admin'
+    | '/bruger1'
+    | '/bruger2'
     | '/kontaktperson'
     | '/vikar'
     | '/admin/users/$id'
@@ -232,12 +276,16 @@ export interface FileRouteTypes {
     | '/admin/statistics'
     | '/admin/users'
     | '/admin/workers'
+    | '/bruger1/workers'
+    | '/bruger2/workers'
     | '/kontaktperson/$id'
     | '/kontaktperson/invite'
     | '/vikar/$id'
     | '/vikar/consent'
     | '/vikar/invite'
     | '/admin/'
+    | '/bruger1/'
+    | '/bruger2/'
     | '/kontaktperson/'
     | '/vikar/'
     | '/admin/users/$id'
@@ -253,12 +301,16 @@ export interface RootRouteChildren {
   AdminStatisticsRoute: typeof AdminStatisticsRoute
   AdminUsersRoute: typeof AdminUsersRouteWithChildren
   AdminWorkersRoute: typeof AdminWorkersRoute
+  Bruger1WorkersRoute: typeof Bruger1WorkersRoute
+  Bruger2WorkersRoute: typeof Bruger2WorkersRoute
   KontaktpersonIdRoute: typeof KontaktpersonIdRoute
   KontaktpersonInviteRoute: typeof KontaktpersonInviteRoute
   VikarIdRoute: typeof VikarIdRoute
   VikarConsentRoute: typeof VikarConsentRoute
   VikarInviteRoute: typeof VikarInviteRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  Bruger1IndexRoute: typeof Bruger1IndexRoute
+  Bruger2IndexRoute: typeof Bruger2IndexRoute
   KontaktpersonIndexRoute: typeof KontaktpersonIndexRoute
   VikarIndexRoute: typeof VikarIndexRoute
 }
@@ -284,6 +336,20 @@ declare module '@tanstack/react-router' {
       path: '/kontaktperson'
       fullPath: '/kontaktperson/'
       preLoaderRoute: typeof KontaktpersonIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger2/': {
+      id: '/bruger2/'
+      path: '/bruger2'
+      fullPath: '/bruger2/'
+      preLoaderRoute: typeof Bruger2IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger1/': {
+      id: '/bruger1/'
+      path: '/bruger1'
+      fullPath: '/bruger1/'
+      preLoaderRoute: typeof Bruger1IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/': {
@@ -326,6 +392,20 @@ declare module '@tanstack/react-router' {
       path: '/kontaktperson/$id'
       fullPath: '/kontaktperson/$id'
       preLoaderRoute: typeof KontaktpersonIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger2/workers': {
+      id: '/bruger2/workers'
+      path: '/bruger2/workers'
+      fullPath: '/bruger2/workers'
+      preLoaderRoute: typeof Bruger2WorkersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/bruger1/workers': {
+      id: '/bruger1/workers'
+      path: '/bruger1/workers'
+      fullPath: '/bruger1/workers'
+      preLoaderRoute: typeof Bruger1WorkersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin/workers': {
@@ -416,12 +496,16 @@ const rootRouteChildren: RootRouteChildren = {
   AdminStatisticsRoute: AdminStatisticsRoute,
   AdminUsersRoute: AdminUsersRouteWithChildren,
   AdminWorkersRoute: AdminWorkersRoute,
+  Bruger1WorkersRoute: Bruger1WorkersRoute,
+  Bruger2WorkersRoute: Bruger2WorkersRoute,
   KontaktpersonIdRoute: KontaktpersonIdRoute,
   KontaktpersonInviteRoute: KontaktpersonInviteRoute,
   VikarIdRoute: VikarIdRoute,
   VikarConsentRoute: VikarConsentRoute,
   VikarInviteRoute: VikarInviteRoute,
   AdminIndexRoute: AdminIndexRoute,
+  Bruger1IndexRoute: Bruger1IndexRoute,
+  Bruger2IndexRoute: Bruger2IndexRoute,
   KontaktpersonIndexRoute: KontaktpersonIndexRoute,
   VikarIndexRoute: VikarIndexRoute,
 }

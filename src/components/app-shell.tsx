@@ -26,16 +26,23 @@ export function AppShell({
 
   const home = ROLE_HOME[role];
   const denied = allow && !allow.includes(role);
-  const adminNav = [
-    { to: "/admin", label: "Overblik" },
-    ...(role === "admin" ? [{ to: "/admin/rules", label: "Regelgrundlag" }] : []),
-    { to: "/admin/workers", label: "Ledige vikarer" },
-    { to: "/admin/companies", label: "Virksomheder" },
-    { to: "/admin/create-worker", label: "Opret vikar" },
-    { to: "/admin/calendar", label: "Kalender" },
-    ...(role === "admin" ? [{ to: "/admin/users", label: "Brugere" }] : []),
-    ...(role === "admin" ? [{ to: "/admin/statistics", label: "Statistik" }] : []),
-  ];
+  const adminBase = role === "bruger" ? "/bruger1" : role === "bruger2" ? "/bruger2" : "/admin";
+  const adminNav =
+    role === "admin"
+      ? [
+          { to: "/admin", label: "Overblik" },
+          { to: "/admin/rules", label: "Regelgrundlag" },
+          { to: "/admin/workers", label: "Ledige vikarer" },
+          { to: "/admin/companies", label: "Virksomheder" },
+          { to: "/admin/create-worker", label: "Opret vikar" },
+          { to: "/admin/calendar", label: "Kalender" },
+          { to: "/admin/users", label: "Brugere" },
+          { to: "/admin/statistics", label: "Statistik" },
+        ]
+      : [
+          { to: adminBase, label: "Overblik" },
+          { to: `${adminBase}/workers`, label: "Ledige vikarer" },
+        ];
   const nav =
     role === "admin" || role === "bruger" || role === "bruger2"
       ? adminNav

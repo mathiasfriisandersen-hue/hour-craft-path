@@ -17,7 +17,7 @@ import {
 } from "@/lib/timesheet-store";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { timesheetsVisibleForRole } from "@/lib/company-access";
-import { useAuth, type Role } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 import { listCompanies } from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/admin/")({
@@ -26,10 +26,9 @@ export const Route = createFileRoute("/admin/")({
 });
 
 function AdminList() {
-  const { role } = useAuth();
   return (
-    <AppShell allow={["admin", "bruger", "bruger2"]}>
-      <AdminOverviewContent role={role ?? "bruger"} />
+    <AppShell allow={["admin"]}>
+      <AdminOverviewContent role="admin" />
     </AppShell>
   );
 }
@@ -42,6 +41,7 @@ export function AdminOverviewContent({
   previewUserId?: string;
 }) {
   const canManageArchive = role === "admin";
+  const sectionBase = role === "bruger" ? "/bruger1" : role === "bruger2" ? "/bruger2" : "/admin";
   const all = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
   const [query, setQuery] = useState("");
@@ -148,7 +148,7 @@ export function AdminOverviewContent({
             </p>
           </div>
           <a
-            href={previewUserId ? `/admin/users/${previewUserId}?view=workers` : "/admin/workers"}
+            href={previewUserId ? `/admin/users/${previewUserId}?view=workers` : `${sectionBase}/workers`}
             className="group block"
           >
             <h2 className="text-2xl font-semibold text-primary group-hover:underline">
