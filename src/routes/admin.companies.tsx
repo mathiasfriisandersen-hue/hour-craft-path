@@ -40,10 +40,10 @@ function blankProject(): CompanyProject {
     workPeriod: "day",
     defaultStart: "07:00",
     defaultEnd: "15:00",
-    pauseStart: "",
-    pauseEnd: "",
-    pause2Start: "",
-    pause2End: "",
+    pauseStart: "09:00",
+    pauseEnd: "09:30",
+    pause2Start: "12:00",
+    pause2End: "12:30",
   };
 }
 
