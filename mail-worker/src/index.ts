@@ -150,6 +150,15 @@ function escapeHtml(value: string): string {
     .replaceAll('"', "&quot;");
 }
 
+function textToHtml(value: string): string {
+  const escaped = escapeHtml(value);
+  const linked = escaped.replace(
+    /https:\/\/[^\s<]+/g,
+    (url) => `<a href="${url}" style="color:#1f4e79;">${url}</a>`,
+  );
+  return `<div style="font-family:Arial,sans-serif;white-space:pre-wrap;line-height:1.45;color:#111827;">${linked}</div>`;
+}
+
 async function parsePayload(request: Request): Promise<TimesheetMailPayload | undefined> {
   try {
     return (await request.json()) as TimesheetMailPayload;
@@ -337,11 +346,7 @@ async function sendViaResend(payload: TimesheetMailPayload, env: Env) {
         ...(isEmail(payload.replyTo) ? { reply_to: payload.replyTo } : {}),
         subject: emailSubject,
         text: bodyText,
-        html:
-          bodyHtml ||
-          `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; line-height: 1.45;">${escapeHtml(
-            bodyText,
-          )}</pre>`,
+        html: bodyHtml || textToHtml(bodyText),
       }),
     });
 
