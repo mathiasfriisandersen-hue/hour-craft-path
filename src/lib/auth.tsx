@@ -22,6 +22,16 @@ export const ROLE_HOME: Record<Role, string> = {
 export const DEMO_PASSWORD = "0000";
 const STORAGE_KEY = "timeseddel.role";
 
+function isRole(value: string | null): value is Role {
+  return (
+    value === "vikar" ||
+    value === "kontaktperson" ||
+    value === "admin" ||
+    value === "bruger" ||
+    value === "bruger2"
+  );
+}
+
 type AuthCtx = {
   role: Role | null;
   login: (role: Role) => void;
@@ -37,11 +47,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      const storedRole = localStorage.getItem(STORAGE_KEY);
+      if (isRole(storedRole)) {
+        setRole(storedRole);
+      }
     } catch {
       /* ignore */
     }
+
     syncRemoteAppState()
       .catch(() => undefined)
       .finally(() => {
@@ -54,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = (r: Role) => {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.setItem(STORAGE_KEY, r);
     } catch {
       /* ignore */
     }
