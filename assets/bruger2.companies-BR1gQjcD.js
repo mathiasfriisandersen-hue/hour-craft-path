@@ -1,0 +1,1 @@
+import{r as e}from"./index-BitoC9l8.js";var t=e;export{t as component};
