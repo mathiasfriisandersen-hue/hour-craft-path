@@ -274,6 +274,8 @@ const TIMESHEET_KEY = "timesheets-v1";
 const RULE_KEY = "timesheet-rules-v1";
 const COMPANY_KEY = "timesheet-companies-v1";
 const APP_STATE_META_KEY = "timesheet-app-state-updated-at-v1";
+const DELETED_TIMESHEET_IDS_KEY = "timesheet-deleted-timesheet-ids-v1";
+const DELETED_COMPANY_IDS_KEY = "timesheet-deleted-company-ids-v1";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
 export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
@@ -842,6 +844,23 @@ function removeStorageItem(key: string): void {
   }
 }
 
+function readDeletedIds(key: string): Set<string> {
+  return new Set(safeParse<string[]>(key, []));
+}
+
+function rememberDeletedId(key: string, id: string): void {
+  if (!id) return;
+  const ids = readDeletedIds(key);
+  ids.add(id);
+  setStorageItem(key, JSON.stringify([...ids]));
+}
+
+function forgetDeletedId(key: string, id: string): void {
+  const ids = readDeletedIds(key);
+  if (!ids.delete(id)) return;
+  setStorageItem(key, JSON.stringify([...ids]));
+}
+
 function emit(): void {
   window.dispatchEvent(new Event("timesheets-changed"));
 }
@@ -939,6 +958,7 @@ export function upsert(t: Timesheet): Timesheet {
   const index = list.findIndex((item) => item.id === t.id);
   if (index >= 0) list[index] = updated;
   else list.push(updated);
+  forgetDeletedId(DELETED_TIMESHEET_IDS_KEY, updated.id);
   writeTimesheets(list);
   return updated;
 }
@@ -963,6 +983,7 @@ export function setWorkerInactive(workerKey: string, workerInactive: boolean): T
 }
 
 export function remove(id: string): void {
+  rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, id);
   writeTimesheets(readTimesheets().filter((item) => item.id !== id));
 }
 
@@ -1329,6 +1350,7 @@ export function saveCompany(company: Company): void {
   const index = list.findIndex((item) => item.id === updated.id);
   if (index >= 0) list[index] = updated;
   else list.push(updated);
+  forgetDeletedId(DELETED_COMPANY_IDS_KEY, updated.id);
   setStorageItem(COMPANY_KEY, JSON.stringify(list));
   markLocalUpdated();
   queueRemoteAppStatePersist();
@@ -1336,6 +1358,7 @@ export function saveCompany(company: Company): void {
 }
 
 export function removeCompany(id: string): void {
+  rememberDeletedId(DELETED_COMPANY_IDS_KEY, id);
   setStorageItem(
     COMPANY_KEY,
     JSON.stringify(listCompanies().filter((company) => company.id !== id)),
@@ -1372,9 +1395,13 @@ function currentAppState(): NormalizedAppState {
 }
 
 function mergeTimesheets(local: Timesheet[], remote: Timesheet[]): Timesheet[] {
+  const deletedIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
   const byId = new Map<string, Timesheet>();
-  for (const item of remote) byId.set(item.id, item);
+  for (const item of remote) {
+    if (!deletedIds.has(item.id)) byId.set(item.id, item);
+  }
   for (const item of local) {
+    if (deletedIds.has(item.id)) continue;
     const existing = byId.get(item.id);
     if (!existing || item.updatedAt >= existing.updatedAt) {
       byId.set(item.id, item);
@@ -1384,9 +1411,14 @@ function mergeTimesheets(local: Timesheet[], remote: Timesheet[]): Timesheet[] {
 }
 
 function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolean): Company[] {
+  const deletedIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
   const byId = new Map<string, Company>();
-  for (const item of preferLocal ? remote : local) byId.set(item.id, item);
-  for (const item of preferLocal ? local : remote) byId.set(item.id, item);
+  for (const item of preferLocal ? remote : local) {
+    if (!deletedIds.has(item.id)) byId.set(item.id, item);
+  }
+  for (const item of preferLocal ? local : remote) {
+    if (!deletedIds.has(item.id)) byId.set(item.id, item);
+  }
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
@@ -2967,6 +2999,10 @@ export function seedIfEmpty(): void {
   const demoCompanies = demoCompaniesForSeed(weekStart, demoWorkers);
   const existingTimesheets = readTimesheets();
   const existingCompanies = listCompanies();
+
+  if (localUpdatedAt() || existingTimesheets.length > 0 || existingCompanies.length > 0) {
+    return;
+  }
 
   const mergedTimesheets = [
     ...existingTimesheets.filter((item) => !item.id.startsWith("demo-timesheet-")),
