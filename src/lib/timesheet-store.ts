@@ -158,6 +158,8 @@ export type Timesheet = {
   vikar: string;
   vikarEmail: string;
   vikarPhone?: string;
+  vikarAddress?: string;
+  vikarCpr?: string;
   tradeSkills?: TradeSkill[];
   competencies?: string;
   brugervirksomhed: string;
@@ -385,6 +387,8 @@ type StoredTimesheet = Omit<
   lokalaftale?: boolean;
   vikarEmail?: string;
   vikarPhone?: string;
+  vikarAddress?: string;
+  vikarCpr?: string;
   tradeSkills?: TradeSkill[];
   competencies?: string;
   companyId?: string;
@@ -501,6 +505,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     ownerRole: normalizeOwnerRole(value.ownerRole),
     vikarEmail: value.vikarEmail ?? "",
     vikarPhone: normalizeWorkerPhone(value),
+    vikarAddress: value.vikarAddress ?? "",
+    vikarCpr: value.vikarCpr ?? "",
     tradeSkills: normalizeTradeSkills(value.tradeSkills),
     competencies: value.competencies ?? "",
     companyId: value.companyId ?? "",
@@ -976,6 +982,8 @@ export function createBlank(): Timesheet {
     vikar: "",
     vikarEmail: "",
     vikarPhone: "",
+    vikarAddress: "",
+    vikarCpr: "",
     tradeSkills: [],
     competencies: "",
     brugervirksomhed: "",

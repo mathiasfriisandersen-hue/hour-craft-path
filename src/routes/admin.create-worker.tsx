@@ -16,6 +16,8 @@ type FormState = {
   vikar: string;
   vikarEmail: string;
   vikarPhone: string;
+  vikarAddress: string;
+  vikarCpr: string;
   tradeSkills: TradeSkill[];
   competencies: string;
 };
@@ -25,6 +27,8 @@ function initialForm(): FormState {
     vikar: "",
     vikarEmail: "",
     vikarPhone: "",
+    vikarAddress: "",
+    vikarCpr: "",
     tradeSkills: [],
     competencies: "",
   };
@@ -62,6 +66,8 @@ export function CreateWorkerPage() {
       vikar: form.vikar.trim(),
       vikarEmail: form.vikarEmail.trim(),
       vikarPhone: form.vikarPhone.trim(),
+      vikarAddress: form.vikarAddress.trim(),
+      vikarCpr: form.vikarCpr.trim(),
       tradeSkills: form.tradeSkills,
       competencies: form.competencies.trim(),
       workerMustChangeAccessCode: false,
@@ -122,6 +128,15 @@ export function CreateWorkerPage() {
               onChange={(e) => update({ vikarPhone: e.target.value })}
             />
           </Field>
+          <Field label="Adresse">
+            <Input
+              value={form.vikarAddress}
+              onChange={(e) => update({ vikarAddress: e.target.value })}
+            />
+          </Field>
+          <Field label="CPR-nr.">
+            <Input value={form.vikarCpr} onChange={(e) => update({ vikarCpr: e.target.value })} />
+          </Field>
           <div>
             <TradeSkillPicker
               label="Vikarens fag *"
@@ -129,7 +144,7 @@ export function CreateWorkerPage() {
               onChange={(tradeSkills) => update({ tradeSkills })}
             />
           </div>
-          <Field label="Kompetencer">
+          <Field label="Kompetencer" className="md:col-span-2">
             <textarea
               className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={form.competencies}
@@ -148,9 +163,17 @@ export function CreateWorkerPage() {
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <label>
+    <label className={className}>
       <span className="mb-1.5 block text-sm font-medium">{label}</span>
       {children}
     </label>
