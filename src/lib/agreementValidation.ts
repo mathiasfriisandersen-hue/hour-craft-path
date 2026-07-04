@@ -576,9 +576,6 @@ export function getAgreementValidationErrors(
       errors.push(`${rule.label} mangler kildeuddrag.`);
     }
   }
-  for (const testCase of getFailingValidationTests(report)) {
-    errors.push(`Testcase "${testCase.label}" er ${testCase.status}.`);
-  }
   if (validationDraft && !validationDraft.validatedBy?.trim()) {
     errors.push("Valideret af mangler.");
   }

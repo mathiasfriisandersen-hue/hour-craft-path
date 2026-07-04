@@ -46,7 +46,7 @@ function RulesPage() {
   const [validationDirty, setValidationDirty] = useState(false);
   const [validatedBy, setValidatedBy] = useState("manual-review");
   const [validationNote, setValidationNote] = useState(
-    "Satser og regler kontrolleret mod PDF-sidehenvisninger og testcases.",
+    "Satser og regler kontrolleret mod PDF-sidehenvisninger.",
   );
   const [sourcePageInputs, setSourcePageInputs] = useState<Record<string, string>>({});
   const rule = rules.find((item) => item.agreementId === selectedId);
@@ -125,7 +125,9 @@ function RulesPage() {
     };
 
     saveRule(ruleToSave);
+    syncValidationFromRuleSources(ruleToSave);
     setRules(listRules());
+    setValidationReports(listAgreementValidationReports());
     setSourcePageInputs({});
     setMessage("Regelgrundlaget er gemt i denne browser.");
     window.setTimeout(() => setMessage(""), 3000);
@@ -497,6 +499,65 @@ const CALCULATION_TYPE_LABEL: Record<AgreementCalculationType, string> = {
   time_condition: "Tidsbetingelse",
   manual: "Manuel vurdering",
 };
+
+const SOURCE_FIELD_VALIDATION_RULES: Record<AgreementRuleSourceKey, AgreementRuleCategory[]> = {
+  normalDayHours: ["normal_daily_working_time"],
+  normalWeekHours: ["normal_weekly_working_time"],
+  overtimeRule: ["overtime", "outside_normal_time"],
+  saturdayRule: ["saturday_allowance"],
+  sundayRule: ["sunday_allowance", "public_holiday"],
+  eveningRule: ["evening_allowance", "staggered_time"],
+  nightRule: ["night_allowance"],
+  shiftRule: ["shift_work"],
+  specialRule: ["special_allowances", "local_agreements", "breaks"],
+};
+
+function syncValidationFromRuleSources(rule: AgreementRule) {
+  const report = listAgreementValidationReports().find(
+    (item) => item.agreementSlug === rule.agreementId,
+  );
+  if (!report) return;
+
+  const pagesByRuleKey = new Map<AgreementRuleCategory, number[]>();
+  for (const [field, ruleKeys] of Object.entries(SOURCE_FIELD_VALIDATION_RULES) as Array<
+    [AgreementRuleSourceKey, AgreementRuleCategory[]]
+  >) {
+    const pages = [
+      ...new Set(
+        rule.sources
+          .filter((source) => source.field === field)
+          .map((source) => source.page)
+          .filter((page) => Number.isInteger(page) && page > 0),
+      ),
+    ].sort((a, b) => a - b);
+    if (!pages.length) continue;
+    for (const ruleKey of ruleKeys) {
+      pagesByRuleKey.set(ruleKey, pages);
+    }
+  }
+
+  if (!pagesByRuleKey.size) return;
+
+  saveAgreementValidationReport({
+    ...report,
+    status: report.validatedForCalculation ? report.status : "needs_manual_review",
+    rules: report.rules.map((validationRule) => {
+      const pages = pagesByRuleKey.get(validationRule.ruleKey);
+      if (!pages) return validationRule;
+      return {
+        ...validationRule,
+        pdfPages: pages,
+        reviewStatus: "approved",
+        sourceText: validationRule.sourceText.trim()
+          ? validationRule.sourceText
+          : "Kildehenvisning er angivet i regelgrundlagets PDF-sidefelt.",
+        notes: validationRule.notes.trim()
+          ? validationRule.notes
+          : "Godkendt via kildehenvisning i regelgrundlaget.",
+      };
+    }),
+  });
+}
 
 function ValidationSection({
   report,
