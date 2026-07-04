@@ -512,10 +512,80 @@ const SOURCE_FIELD_VALIDATION_RULES: Record<AgreementRuleSourceKey, AgreementRul
   specialRule: ["special_allowances", "local_agreements", "breaks"],
 };
 
+const VALIDATION_RULE_LABELS: Record<AgreementRuleCategory, string> = {
+  normal_daily_working_time: "Normal daglig arbejdstid",
+  normal_weekly_working_time: "Normal ugentlig arbejdstid",
+  overtime: "Overarbejde",
+  saturday_allowance: "Lørdagstillæg",
+  sunday_allowance: "Søndagstillæg",
+  public_holiday: "Helligdage / søgnehelligdage",
+  evening_allowance: "Aftentillæg",
+  night_allowance: "Nattillæg",
+  staggered_time: "Forskudt tid",
+  shift_work: "Skiftehold / holddrift",
+  special_allowances: "Særlige tillæg",
+  local_agreements: "Lokalaftaler",
+  breaks: "Pauser",
+  outside_normal_time: "Arbejde uden for normal tid",
+};
+
+function createValidationReportFromRuleSources(
+  rule: AgreementRule,
+): AgreementValidationReport | undefined {
+  const agreement = getCollectiveAgreementById(rule.agreementId);
+  if (!agreement) return undefined;
+
+  const rules = Object.entries(SOURCE_FIELD_VALIDATION_RULES).flatMap(([field, ruleKeys]) => {
+    const pages = [
+      ...new Set(
+        rule.sources
+          .filter((source) => source.field === field)
+          .map((source) => source.page)
+          .filter((page) => Number.isInteger(page) && page > 0),
+      ),
+    ].sort((a, b) => a - b);
+
+    if (!pages.length) return [];
+
+    return ruleKeys.map((ruleKey) => ({
+      ruleKey,
+      label: VALIDATION_RULE_LABELS[ruleKey],
+      required: !["special_allowances", "local_agreements"].includes(ruleKey),
+      calculationType: "manual" as const,
+      rate: null,
+      unit: null,
+      conditions: "Valideres manuelt ud fra kildehenvisningen i regelgrundlaget.",
+      pdfPages: pages,
+      sourceText: "Kildehenvisning er angivet i regelgrundlagets PDF-sidefelt.",
+      possibleRates: [],
+      confidence: "medium" as const,
+      reviewStatus: "approved" as const,
+      notes: "Godkendt via kildehenvisning i regelgrundlaget.",
+    }));
+  });
+
+  if (!rules.length) return undefined;
+
+  return {
+    agreementSlug: agreement.id,
+    agreementName: agreement.name,
+    sourceAuditVersion: "pdf-references-v1",
+    status: "needs_manual_review",
+    validatedForCalculation: false,
+    sourcePdf: agreement.pdfFileName ?? agreement.pdfUrl ?? "",
+    extractedAt: new Date().toISOString().slice(0, 10),
+    validatedAt: "",
+    validatedBy: "",
+    validationNote: "Regler oprettet ud fra kildehenvisninger i regelgrundlaget.",
+    rules,
+    testCases: [],
+  };
+}
+
 function syncValidationFromRuleSources(rule: AgreementRule) {
-  const report = listAgreementValidationReports().find(
-    (item) => item.agreementSlug === rule.agreementId,
-  );
+  const report =
+    listAgreementValidationReports().find((item) => item.agreementSlug === rule.agreementId) ??
+    createValidationReportFromRuleSources(rule);
   if (!report) return;
 
   const pagesByRuleKey = new Map<AgreementRuleCategory, number[]>();
