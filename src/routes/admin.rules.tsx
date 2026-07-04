@@ -43,6 +43,7 @@ function RulesPage() {
   const [selectedId, setSelectedId] = useState(rules[0]?.agreementId ?? "");
   const [message, setMessage] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
+  const [validationDirty, setValidationDirty] = useState(false);
   const [validatedBy, setValidatedBy] = useState("manual-review");
   const [validationNote, setValidationNote] = useState(
     "Satser og regler kontrolleret mod PDF-sidehenvisninger og testcases.",
@@ -88,45 +89,47 @@ function RulesPage() {
     });
   };
   const save = () => {
-  if (!rule) return;
+    if (!rule) return;
 
-  const sourceFields = Object.keys(AGREEMENT_RULE_SOURCE_LABEL) as AgreementRuleSourceKey[];
+    const sourceFields = Object.keys(AGREEMENT_RULE_SOURCE_LABEL) as AgreementRuleSourceKey[];
 
-  const mergedSources = sourceFields.flatMap((field) => {
-    const existingSources = rule.sources.filter((source) => source.field === field);
-    const existing = existingSources[0];
-    const pageInputKey = `${selectedId}:${field}`;
-    const draftValue = sourcePageInputs[pageInputKey];
+    const mergedSources = sourceFields.flatMap((field) => {
+      const existingSources = rule.sources.filter((source) => source.field === field);
+      const existing = existingSources[0];
+      const pageInputKey = `${selectedId}:${field}`;
+      const draftValue = sourcePageInputs[pageInputKey];
 
-    const pages =
-      draftValue !== undefined ? parsePageInput(draftValue) : existingSources.map((source) => source.page);
+      const pages =
+        draftValue !== undefined
+          ? parsePageInput(draftValue)
+          : existingSources.map((source) => source.page);
 
-    const pdfUrl = existing?.pdfUrl ?? agreement?.pdfUrl ?? "";
-    const pdfFileName = existing?.pdfFileName ?? agreement?.pdfFileName ?? "";
+      const pdfUrl = existing?.pdfUrl ?? agreement?.pdfUrl ?? "";
+      const pdfFileName = existing?.pdfFileName ?? agreement?.pdfFileName ?? "";
 
-    if (pages.length === 0 || !pdfUrl.trim()) {
-      return [];
-    }
+      if (pages.length === 0 || !pdfUrl.trim()) {
+        return [];
+      }
 
-    return pages.map((page) => ({
-      field,
-      page,
-      pdfUrl: pdfUrl.trim(),
-      pdfFileName: pdfFileName.trim() || undefined,
-    }));
-  });
+      return pages.map((page) => ({
+        field,
+        page,
+        pdfUrl: pdfUrl.trim(),
+        pdfFileName: pdfFileName.trim() || undefined,
+      }));
+    });
 
-  const ruleToSave = {
-    ...rule,
-    sources: mergedSources,
+    const ruleToSave = {
+      ...rule,
+      sources: mergedSources,
+    };
+
+    saveRule(ruleToSave);
+    setRules(listRules());
+    setSourcePageInputs({});
+    setMessage("Regelgrundlaget er gemt i denne browser.");
+    window.setTimeout(() => setMessage(""), 3000);
   };
-
-  saveRule(ruleToSave);
-  setRules(listRules());
-  setSourcePageInputs({});
-  setMessage("Regelgrundlaget er gemt i denne browser.");
-  window.setTimeout(() => setMessage(""), 3000);
-};
   const updateValidationReport = (patch: Partial<AgreementValidationReport>) => {
     setValidationReports((current) =>
       current.map((item) =>
@@ -144,6 +147,7 @@ function RulesPage() {
     patch: Partial<AgreementValidationReport["rules"][number]>,
   ) => {
     if (!validationReport) return;
+    setValidationDirty(true);
     updateValidationReport({
       status: "needs_manual_review",
       validatedForCalculation: false,
@@ -154,8 +158,29 @@ function RulesPage() {
   };
   const saveValidation = () => {
     if (!validationReport) return;
-    const saved = saveAgreementValidationReport(validationReport);
+    const latestReport =
+      listAgreementValidationReports().find((item) => item.agreementSlug === selectedId) ??
+      validationReport;
+    const saved = saveAgreementValidationReport({
+      ...validationReport,
+      status:
+        !validationDirty && latestReport.validatedForCalculation
+          ? latestReport.status
+          : validationReport.status,
+      validatedForCalculation:
+        (!validationDirty && latestReport.validatedForCalculation) ||
+        validationReport.validatedForCalculation,
+      validatedAt:
+        !validationDirty && latestReport.validatedForCalculation
+          ? latestReport.validatedAt
+          : validationReport.validatedAt,
+      validatedBy:
+        !validationDirty && latestReport.validatedForCalculation
+          ? latestReport.validatedBy
+          : validationReport.validatedBy,
+    });
     setValidationReports(listAgreementValidationReports());
+    setValidationDirty(false);
     setValidationMessage(`${saved.agreementName}: review gemt i denne browser.`);
     window.setTimeout(() => setValidationMessage(""), 4000);
   };
@@ -171,6 +196,7 @@ function RulesPage() {
       setValidationMessage(`Kan ikke validere: ${result.errors.slice(0, 5).join(" ")}`);
       return;
     }
+    setValidationDirty(false);
     setValidationMessage(`${result.report.agreementName} er markeret som valideret til beregning.`);
   };
   const resetValidation = () => {
@@ -350,25 +376,25 @@ function RulesPage() {
                               pdfUrl: e.target.value,
                               pdfFileName: e.target.value.split("/").pop() ?? "",
                             })
-                          }               
+                          }
                         />
-                      <PdfPageInput
-  value={
-    sourcePageInputs[pageInputKey] ??
-    formatPdfSourcePageInput(sources.map((item) => item.page))
-  }
- placeholder="Side, fx 38-40 eller 39-40-41"
-  onCommit={(value) => {
-    setSourcePageInputs((current) => ({
-      ...current,
-      [pageInputKey]: value,
-    }));
+                        <PdfPageInput
+                          value={
+                            sourcePageInputs[pageInputKey] ??
+                            formatPdfSourcePageInput(sources.map((item) => item.page))
+                          }
+                          placeholder="Side, fx 38-40 eller 39-40-41"
+                          onCommit={(value) => {
+                            setSourcePageInputs((current) => ({
+                              ...current,
+                              [pageInputKey]: value,
+                            }));
 
-    updateSource(field, {
-      pages: parsePageInput(value),
-    });
-  }}
-/>
+                            updateSource(field, {
+                              pages: parsePageInput(value),
+                            });
+                          }}
+                        />
                         <div className="flex items-center justify-end">
                           {sources.length > 0 ? (
                             <div className="space-y-1 text-right">

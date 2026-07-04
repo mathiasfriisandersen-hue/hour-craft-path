@@ -228,6 +228,8 @@ export type CompanyProject = {
   pauseEnd: string;
   pause2Start: string;
   pause2End: string;
+  billingHourlyWage: number;
+  billingFactor: number;
 };
 
 export type LocalAgreement = {
@@ -454,6 +456,8 @@ function normalizeProject(project: Partial<CompanyProject>): CompanyProject {
     pauseEnd: project.pauseEnd ?? "",
     pause2Start: project.pause2Start ?? "",
     pause2End: project.pause2End ?? "",
+    billingHourlyWage: Number(project.billingHourlyWage) || 0,
+    billingFactor: Number(project.billingFactor) || 0,
   };
 }
 

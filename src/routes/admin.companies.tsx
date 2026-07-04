@@ -47,6 +47,8 @@ function blankProject(): CompanyProject {
     pauseEnd: "09:30",
     pause2Start: "12:00",
     pause2End: "12:30",
+    billingHourlyWage: 0,
+    billingFactor: 0,
   };
 }
 
@@ -431,6 +433,38 @@ function ProjectsSection({
                   onEndChange={(value) => updateProject(index, { pause2End: value })}
                 />
                 <div className="md:col-span-2">
+                  <span className="mb-1.5 block text-sm font-medium">Afregning</span>
+                  <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
+                    <Field label="Timeløn">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={project.billingHourlyWage || ""}
+                        onChange={(e) =>
+                          updateProject(index, { billingHourlyWage: Number(e.target.value) || 0 })
+                        }
+                      />
+                    </Field>
+                    <Field label="Faktor">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={project.billingFactor || ""}
+                        onChange={(e) =>
+                          updateProject(index, { billingFactor: Number(e.target.value) || 0 })
+                        }
+                      />
+                    </Field>
+                    <Field label="Total til kunden">
+                      <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                        {formatProjectBilling(project)}
+                      </div>
+                    </Field>
+                  </div>
+                </div>
+                <div className="md:col-span-2">
                   <TradeSkillPicker
                     label="Fag"
                     selected={project.tradeSkills}
@@ -551,6 +585,25 @@ function ProjectsSection({
 function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
   if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
   return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
+function formatProjectBilling(project: CompanyProject): string {
+  const hourlyWage = Number(project.billingHourlyWage) || 0;
+  const factor = Number(project.billingFactor) || 0;
+  const total = hourlyWage * factor;
+  if (!hourlyWage || !factor) return "—";
+  return `${formatNumber(hourlyWage)} * ${formatNumber(factor)} = ${formatDkk(total)}`;
+}
+
+function formatNumber(value: number): string {
+  return value.toLocaleString("da-DK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatDkk(value: number): string {
+  return `${formatNumber(value)} DKK`;
 }
 
 function workerProjectConflict(

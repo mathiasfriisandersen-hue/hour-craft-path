@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AppShell, InfoBanner, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/lib/auth";
 import {
   ABSENCE_LABEL,
   calculateTimesheet,
@@ -23,7 +24,6 @@ import {
   type Timesheet,
   WORK_TYPE_LABEL,
 } from "@/lib/timesheet-store";
-import { publicAgreementPdfHref } from "@/lib/collectiveAgreements";
 import {
   agreementRuleSourceHref,
   formatAgreementRulePages,
@@ -40,6 +40,7 @@ export const Route = createFileRoute("/admin/$id")({
 function AdminDetail() {
   const { id } = Route.useParams();
   const navigate = useNavigate();
+  const { role } = useAuth();
   const [t, setT] = useState<Timesheet | null>(null);
   const [rejecting, setRejecting] = useState(false);
   const [comment, setComment] = useState("");
@@ -63,6 +64,12 @@ function AdminDetail() {
   const rule = getRule(t.selectedAgreementId);
   const showDelayedMealBreak = isIndustriensAgreement(t.selectedAgreementId);
   const retentionWarning = timesheetRetentionWarning(t);
+  const hasSickAbsence = t.days.some((day) => day.absence === "sick");
+  const employeeHourlyWage = t.hourlyWage ?? 0;
+  const employeeBaseCost = employeeHourlyWage * calc.total;
+  const socialCostRate = 0.3888;
+  const socialCost = hasSickAbsence ? 0 : employeeBaseCost * socialCostRate;
+  const employeeTotalCost = employeeBaseCost + socialCost;
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
@@ -166,10 +173,12 @@ function AdminDetail() {
         </div>
       </div>
 
-      <InfoBanner tone="warning">
-        Systemet beregner kun samlet timetal, indtil overenskomstens PDF-kilde og satser er manuelt
-        valideret i regelgrundlaget.
-      </InfoBanner>
+      {!calc.canCalculateRatesAutomatically && (
+        <InfoBanner tone="warning">
+          Systemet beregner kun samlet timetal, indtil overenskomstens PDF-kilde og satser er
+          manuelt valideret i regelgrundlaget.
+        </InfoBanner>
+      )}
       {retentionWarning && (
         <div
           className={
@@ -226,7 +235,9 @@ function AdminDetail() {
 
         <section className="rounded-lg border bg-card p-5 md:p-6">
           <div className="mb-4 flex items-center justify-between gap-2">
-            <h2 className="font-semibold">Vejledende beregning</h2>
+            <h2 className="font-semibold">
+              {calc.canCalculateRatesAutomatically ? "Beregning" : "Vejledende beregning"}
+            </h2>
             <Link to="/admin/rules" className="text-xs font-medium text-primary hover:underline">
               Redigér regler
             </Link>
@@ -240,19 +251,6 @@ function AdminDetail() {
               value={calc.canCalculateRatesAutomatically ? "Tilladt" : "Ikke tilladt"}
             />
           </dl>
-          {calc.pdfUrl && (
-            <a
-              href={publicAgreementPdfHref(calc.pdfUrl)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-4 inline-flex text-sm font-medium text-primary hover:underline"
-            >
-              Åbn PDF-kilde →
-            </a>
-          )}
-          <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
-            {calc.validationNote}
-          </div>
           <div className="mt-4 border-t pt-4">
             <h3 className="mb-2 text-sm font-medium">Mulige tillægstimer</h3>
             <dl className="space-y-1 text-sm">
@@ -270,6 +268,22 @@ function AdminDetail() {
               <Row label="Skiftehold" value={`${calc.shift.toFixed(2)} t`} />
             </dl>
           </div>
+          {role === "admin" && (
+            <div className="mt-4 border-t pt-4">
+              <h3 className="mb-2 text-sm font-medium">Medarbejderomkostning</h3>
+              <dl className="space-y-1 text-sm">
+                <Row label="Timeløn" value={formatDkk(employeeHourlyWage)} />
+                <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
+                <Row label="Løn for registrerede timer" value={formatDkk(employeeBaseCost)} />
+                <Row
+                  label="Sociale omkostninger 38,88%"
+                  value={hasSickAbsence ? "0,00 DKK (sygdom registreret)" : formatDkk(socialCost)}
+                />
+                <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
+                <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
+              </dl>
+            </div>
+          )}
           {showDelayedMealBreak && (
             <div className="mt-4 border-t pt-4">
               <h3 className="mb-2 text-sm font-medium">Manuelle tillæg</h3>
@@ -279,16 +293,6 @@ function AdminDetail() {
                   value={delayedMealBreakCalculationText(calc.delayedMealBreakDays)}
                 />
               </dl>
-            </div>
-          )}
-          {calc.canCalculateRatesAutomatically && calc.missingRules.length > 0 && (
-            <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
-              <strong>Manuel kontrol kræves:</strong> {calc.missingRules.join(", ")}.
-            </div>
-          )}
-          {calc.manualValidationMessages.length > 0 && (
-            <div className="mt-4 rounded-md border border-status-sent-fg/30 bg-status-sent/30 px-3 py-2 text-xs text-status-sent-fg">
-              <strong>Regelmarkeringer:</strong> {calc.manualValidationMessages.join(" ")}
             </div>
           )}
         </section>
@@ -590,6 +594,29 @@ function Row({ label, value }: { label: string; value?: string }) {
       <dd className="text-right font-medium">{value || "—"}</dd>
     </div>
   );
+}
+
+function formatDkk(value: number) {
+  return `${value.toLocaleString("da-DK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} DKK`;
+}
+
+function formatAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
+  const allowanceHours = [
+    ["Overarbejde", calc.overtime],
+    ["Lørdag", calc.saturday],
+    ["Søndag", calc.sunday],
+    ["Helligdage", calc.publicHoliday],
+    ["Aften", calc.evening],
+    ["Nat", calc.night],
+    ["Skiftehold", calc.shift],
+  ]
+    .filter(([, hours]) => Number(hours) > 0)
+    .map(([label, hours]) => `${label}: ${Number(hours).toFixed(2)} t`);
+
+  return allowanceHours.length ? allowanceHours.join(" · ") : "Ingen";
 }
 
 function AdminTimeRange({
