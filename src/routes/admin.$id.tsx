@@ -12,6 +12,7 @@ import {
   delayedMealBreakCalculationText,
   formatWeekRange,
   getById,
+  listCompanies,
   getRule,
   isIndustriensAgreement,
   mailtoUrl,
@@ -70,6 +71,14 @@ function AdminDetail() {
   const socialCostRate = 0.3888;
   const socialCost = hasSickAbsence ? 0 : employeeBaseCost * socialCostRate;
   const employeeTotalCost = employeeBaseCost + socialCost;
+  const project = listCompanies()
+    .find((company) => company.id === t.companyId)
+    ?.projects.find((item) => item.id === t.projectId);
+  const customerHourlyWage = project?.billingHourlyWage ?? 0;
+  const customerBillingFactor = project?.billingFactor ?? 0;
+  const customerHourlyRate = customerHourlyWage * customerBillingFactor;
+  const customerBillingTotal = customerHourlyRate * calc.total;
+  const hasCustomerBilling = customerHourlyWage > 0 && customerBillingFactor > 0;
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
@@ -269,20 +278,52 @@ function AdminDetail() {
             </dl>
           </div>
           {role === "admin" && (
-            <div className="mt-4 border-t pt-4">
-              <h3 className="mb-2 text-sm font-medium">Medarbejderomkostning</h3>
-              <dl className="space-y-1 text-sm">
-                <Row label="Timeløn" value={formatDkk(employeeHourlyWage)} />
-                <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
-                <Row label="Løn for registrerede timer" value={formatDkk(employeeBaseCost)} />
-                <Row
-                  label="Sociale omkostninger 38,88%"
-                  value={hasSickAbsence ? "0,00 DKK (sygdom registreret)" : formatDkk(socialCost)}
-                />
-                <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
-                <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
-              </dl>
-            </div>
+            <>
+              <div className="mt-4 border-t pt-4">
+                <h3 className="mb-2 text-sm font-medium">Medarbejderomkostning</h3>
+                <dl className="space-y-1 text-sm">
+                  <Row label="Timeløn" value={formatDkk(employeeHourlyWage)} />
+                  <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
+                  <Row label="Løn for registrerede timer" value={formatDkk(employeeBaseCost)} />
+                  <Row
+                    label="Sociale omkostninger 38,88%"
+                    value={hasSickAbsence ? "0,00 DKK (sygdom registreret)" : formatDkk(socialCost)}
+                  />
+                  <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
+                  <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
+                </dl>
+              </div>
+              <div className="mt-4 border-t pt-4">
+                <h3 className="mb-2 text-sm font-medium">Afregning til kunden</h3>
+                <dl className="space-y-1 text-sm">
+                  <Row
+                    label="Afregningstimeløn"
+                    value={
+                      hasCustomerBilling ? formatDkk(customerHourlyWage) : "Ikke sat på projekt"
+                    }
+                  />
+                  <Row
+                    label="Faktor"
+                    value={
+                      hasCustomerBilling ? customerBillingFactor.toFixed(2) : "Ikke sat på projekt"
+                    }
+                  />
+                  <Row
+                    label="Pris pr. time"
+                    value={
+                      hasCustomerBilling ? formatDkk(customerHourlyRate) : "Ikke sat på projekt"
+                    }
+                  />
+                  <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
+                  <Row
+                    label="Samlet afregning"
+                    value={
+                      hasCustomerBilling ? formatDkk(customerBillingTotal) : "Ikke sat på projekt"
+                    }
+                  />
+                </dl>
+              </div>
+            </>
           )}
           {showDelayedMealBreak && (
             <div className="mt-4 border-t pt-4">
