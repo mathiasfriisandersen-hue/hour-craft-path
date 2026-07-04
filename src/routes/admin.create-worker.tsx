@@ -419,7 +419,7 @@ export function CreateWorkerPage() {
       nextErrors.push("Kontaktpersonens mail mangler eller er ugyldig");
     if (!form.selectedAgreementId) nextErrors.push("Overenskomst mangler");
     if (!Number.isFinite(Number(form.hourlyWage)) || Number(form.hourlyWage) <= 0)
-      nextErrors.push("Timeløn skal være et tal over 0");
+      nextErrors.push("Timeløn til afregning skal være et tal over 0");
     if (!form.defaultStart || !form.defaultEnd) nextErrors.push("Arbejdstider skal udfyldes");
     if (!Number.isFinite(Number(form.defaultPause)) || Number(form.defaultPause) < 0)
       nextErrors.push("Pause skal være et tal på 0 minutter eller mere");
@@ -737,7 +737,7 @@ export function CreateWorkerPage() {
               Timeløn · faktor · afregning til kunde
             </span>
             <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
-              <Field label={`Timeløn${hasCompanyDetails ? " *" : ""}`}>
+              <Field label={`Timeløn til afregning${hasCompanyDetails ? " *" : ""}`}>
                 <Input
                   type="number"
                   min={0}
