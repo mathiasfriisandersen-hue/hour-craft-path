@@ -245,14 +245,12 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
       const workerTimesheets = activeTimesheets.filter((timesheet) =>
         workerMatchesTimesheet(worker, timesheet),
       );
-      const hasActiveBooking =
-        assignments.length > 0 ||
-        workerTimesheets.some((timesheet) => isTimesheetBookingActive(today, timesheet));
       const currentTimesheets = workerTimesheets.filter((timesheet) =>
         isTimesheetShiftToday(today, timesheet),
       );
       const nextBookingDate = nextBookingStartForWorker(futureAssignments, workerTimesheets, today);
       const booking = latestBooking(assignments, workerTimesheets);
+      const hasActiveBooking = isBookingPeriodActive(today, booking);
       return {
         worker,
         assignments,
@@ -372,10 +370,13 @@ function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
   return Boolean(day?.start && day?.end);
 }
 
-function isTimesheetBookingActive(today: string, timesheet: Timesheet): boolean {
-  if (!timesheet.weekStart) return false;
-  const endDate = timesheet.projectEndDate || addDays(timesheet.weekStart, 6);
-  return timesheet.weekStart <= today && today <= endDate;
+function isBookingPeriodActive(
+  today: string,
+  booking: { startDate: string; endDate: string },
+): boolean {
+  return Boolean(
+    booking.startDate && booking.endDate && booking.startDate <= today && today <= booking.endDate,
+  );
 }
 
 function futureTimesheetShiftDates(timesheets: Timesheet[], today: string): string[] {
