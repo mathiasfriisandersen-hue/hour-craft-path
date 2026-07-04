@@ -119,7 +119,6 @@ function companyDetailsStarted(form: FormState): boolean {
     form.referenceNo,
     form.selectedAgreementId,
     form.hourlyWage,
-    form.billingHourlyWage,
     form.billingFactor,
   ].some((value) => String(value ?? "").trim());
 }
@@ -220,7 +219,7 @@ export function CreateWorkerPage() {
   const createWorkerOnlyMessage = hasCompanyDetails
     ? "Ved oprettelse af projekt skal du sende mail til vikar"
     : "";
-  const billingHourlyWage = Number(form.billingHourlyWage) || 0;
+  const billingHourlyWage = Number(form.hourlyWage) || 0;
   const billingFactor = Number(form.billingFactor) || 0;
   const billingTotal = billingHourlyWage * billingFactor;
 
@@ -309,6 +308,8 @@ export function CreateWorkerPage() {
       projectId: project.id,
       projectName: project.name,
       projectEndDate: project.endDate || form.projectEndDate,
+      hourlyWage:
+        form.hourlyWage || (project.billingHourlyWage ? String(project.billingHourlyWage) : ""),
       billingHourlyWage: project.billingHourlyWage ? String(project.billingHourlyWage) : "",
       billingFactor: project.billingFactor ? String(project.billingFactor) : "",
       kontaktperson: project.contactName || selectedCompany?.contactName || form.kontaktperson,
@@ -731,25 +732,18 @@ export function CreateWorkerPage() {
               ))}
             </select>
           </Field>
-          <Field label={`Timeløn${hasCompanyDetails ? " *" : ""}`}>
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={form.hourlyWage}
-              onChange={(e) => update({ hourlyWage: e.target.value })}
-            />
-          </Field>
           <div className="md:col-span-2">
-            <span className="mb-1.5 block text-sm font-medium">Afregning til kunden</span>
+            <span className="mb-1.5 block text-sm font-medium">
+              Timeløn · faktor · afregning til kunde
+            </span>
             <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
-              <Field label="Afregningstimeløn">
+              <Field label={`Timeløn${hasCompanyDetails ? " *" : ""}`}>
                 <Input
                   type="number"
                   min={0}
                   step="0.01"
-                  value={form.billingHourlyWage}
-                  onChange={(e) => update({ billingHourlyWage: e.target.value })}
+                  value={form.hourlyWage}
+                  onChange={(e) => update({ hourlyWage: e.target.value })}
                 />
               </Field>
               <Field label="Faktor">
@@ -761,7 +755,7 @@ export function CreateWorkerPage() {
                   onChange={(e) => update({ billingFactor: e.target.value })}
                 />
               </Field>
-              <Field label="Total til kunden">
+              <Field label="Afregning til kunde">
                 <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
                   {billingHourlyWage && billingFactor
                     ? `${formatDkk(billingHourlyWage)} * ${billingFactor.toFixed(
@@ -1189,7 +1183,7 @@ function availabilityProjectFromForm(
     pauseEnd: form.defaultPauseEnd || selectedProject?.pauseEnd || "",
     pause2Start: form.defaultPause2Start || selectedProject?.pause2Start || "",
     pause2End: form.defaultPause2End || selectedProject?.pause2End || "",
-    billingHourlyWage: Number(form.billingHourlyWage) || selectedProject?.billingHourlyWage || 0,
+    billingHourlyWage: Number(form.hourlyWage) || selectedProject?.billingHourlyWage || 0,
     billingFactor: Number(form.billingFactor) || selectedProject?.billingFactor || 0,
   };
 }
