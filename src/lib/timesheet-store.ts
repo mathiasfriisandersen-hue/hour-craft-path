@@ -1277,13 +1277,17 @@ export function listRules(): AgreementRule[] {
   const byAgreementId = new Map(stored.map((rule) => [rule.agreementId, rule]));
   const byLegacyName = new Map(stored.filter((rule) => rule.name).map((rule) => [rule.name, rule]));
   const now = new Date().toISOString();
+
   return defaultAgreementRules.map((rule) => {
     const storedRule =
       byAgreementId.get(rule.agreementId) ??
       byLegacyName.get(getCollectiveAgreementById(rule.agreementId)?.name);
+
     const normalized = normalizeAgreementRule(rule, storedRule);
+
     return {
       ...normalized,
+      sources: storedRule?.sources ?? normalized.sources,
       updatedAt: storedRule?.updatedAt ?? rule.updatedAt ?? now,
     };
   });
