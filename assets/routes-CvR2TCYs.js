@@ -1,1 +1,0 @@
-import{St as e}from"./sub-z-logo-C0UdYooQ.js";import{t}from"./app-shell-B8TsucG6.js";import{a as n,o as r,r as i}from"./auth-C2sVEqGo.js";var a=e();function o(){let{role:e,ready:o}=n();return!o||!e?(0,a.jsx)(t,{}):(0,a.jsx)(r,{to:i[e],replace:!0})}export{o as component};
