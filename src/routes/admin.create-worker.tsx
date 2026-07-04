@@ -495,7 +495,7 @@ export function CreateWorkerPage() {
     setSending(true);
     setMessage("Opretter timeseddel og sender invitation til vikaren…");
 
-    if (role === "admin" && selectedCompany && selectedProject) {
+    if (selectedCompany && selectedProject) {
       saveCompany({
         ...selectedCompany,
         projects: selectedCompany.projects.map((project) =>
@@ -740,40 +740,38 @@ export function CreateWorkerPage() {
               onChange={(e) => update({ hourlyWage: e.target.value })}
             />
           </Field>
-          {role === "admin" && (
-            <div className="md:col-span-2">
-              <span className="mb-1.5 block text-sm font-medium">Afregning til kunden</span>
-              <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
-                <Field label="Afregningstimeløn">
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.billingHourlyWage}
-                    onChange={(e) => update({ billingHourlyWage: e.target.value })}
-                  />
-                </Field>
-                <Field label="Faktor">
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={form.billingFactor}
-                    onChange={(e) => update({ billingFactor: e.target.value })}
-                  />
-                </Field>
-                <Field label="Total til kunden">
-                  <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
-                    {billingHourlyWage && billingFactor
-                      ? `${formatDkk(billingHourlyWage)} * ${billingFactor.toFixed(
-                          2,
-                        )} = ${formatDkk(billingTotal)}`
-                      : "Udfyld timeløn og faktor"}
-                  </div>
-                </Field>
-              </div>
+          <div className="md:col-span-2">
+            <span className="mb-1.5 block text-sm font-medium">Afregning til kunden</span>
+            <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
+              <Field label="Afregningstimeløn">
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.billingHourlyWage}
+                  onChange={(e) => update({ billingHourlyWage: e.target.value })}
+                />
+              </Field>
+              <Field label="Faktor">
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={form.billingFactor}
+                  onChange={(e) => update({ billingFactor: e.target.value })}
+                />
+              </Field>
+              <Field label="Total til kunden">
+                <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                  {billingHourlyWage && billingFactor
+                    ? `${formatDkk(billingHourlyWage)} * ${billingFactor.toFixed(
+                        2,
+                      )} = ${formatDkk(billingTotal)}`
+                    : "Udfyld timeløn og faktor"}
+                </div>
+              </Field>
             </div>
-          )}
+          </div>
           <Field label="Startdato *">
             <Input
               type="date"
