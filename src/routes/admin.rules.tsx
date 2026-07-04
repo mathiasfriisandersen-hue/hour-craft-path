@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell, InfoBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +47,7 @@ function RulesPage() {
   const [validationNote, setValidationNote] = useState(
     "Satser og regler kontrolleret mod PDF-sidehenvisninger og testcases.",
   );
+  const [sourcePageInputs, setSourcePageInputs] = useState<Record<string, string>>({});
   const rule = rules.find((item) => item.agreementId === selectedId);
   const agreement = rule ? getCollectiveAgreementById(rule.agreementId) : undefined;
   const validationReport = validationReports.find((item) => item.agreementSlug === selectedId);
@@ -87,12 +88,45 @@ function RulesPage() {
     });
   };
   const save = () => {
-    if (!rule) return;
-    saveRule(rule);
-    setRules(listRules());
-    setMessage("Regelgrundlaget er gemt i denne browser.");
-    window.setTimeout(() => setMessage(""), 3000);
+  if (!rule) return;
+
+  const sourceFields = Object.keys(AGREEMENT_RULE_SOURCE_LABEL) as AgreementRuleSourceKey[];
+
+  const mergedSources = sourceFields.flatMap((field) => {
+    const existingSources = rule.sources.filter((source) => source.field === field);
+    const existing = existingSources[0];
+    const pageInputKey = `${selectedId}:${field}`;
+    const draftValue = sourcePageInputs[pageInputKey];
+
+    const pages =
+      draftValue !== undefined ? parsePageInput(draftValue) : existingSources.map((source) => source.page);
+
+    const pdfUrl = existing?.pdfUrl ?? agreement?.pdfUrl ?? "";
+    const pdfFileName = existing?.pdfFileName ?? agreement?.pdfFileName ?? "";
+
+    if (pages.length === 0 || !pdfUrl.trim()) {
+      return [];
+    }
+
+    return pages.map((page) => ({
+      field,
+      page,
+      pdfUrl: pdfUrl.trim(),
+      pdfFileName: pdfFileName.trim() || undefined,
+    }));
+  });
+
+  const ruleToSave = {
+    ...rule,
+    sources: mergedSources,
   };
+
+  saveRule(ruleToSave);
+  setRules(listRules());
+  setSourcePageInputs({});
+  setMessage("Regelgrundlaget er gemt i denne browser.");
+  window.setTimeout(() => setMessage(""), 3000);
+};
   const updateValidationReport = (patch: Partial<AgreementValidationReport>) => {
     setValidationReports((current) =>
       current.map((item) =>
@@ -299,6 +333,7 @@ function RulesPage() {
                   (field) => {
                     const sources = rule.sources.filter((item) => item.field === field);
                     const source = sources[0];
+                    const pageInputKey = `${selectedId}:${field}`;
                     return (
                       <div
                         key={field}
@@ -315,17 +350,25 @@ function RulesPage() {
                               pdfUrl: e.target.value,
                               pdfFileName: e.target.value.split("/").pop() ?? "",
                             })
-                          }
+                          }               
                         />
-                        <Input
-                          value={formatAgreementRulePages(sources.map((item) => item.page))}
-                          placeholder="Side, fx 38-40"
-                          onChange={(e) =>
-                            updateSource(field, {
-                              pages: parsePageInput(e.target.value),
-                            })
-                          }
-                        />
+                      <PdfPageInput
+  value={
+    sourcePageInputs[pageInputKey] ??
+    formatPdfSourcePageInput(sources.map((item) => item.page))
+  }
+ placeholder="Side, fx 38-40 eller 39-40-41"
+  onCommit={(value) => {
+    setSourcePageInputs((current) => ({
+      ...current,
+      [pageInputKey]: value,
+    }));
+
+    updateSource(field, {
+      pages: parsePageInput(value),
+    });
+  }}
+/>
                         <div className="flex items-center justify-end">
                           {sources.length > 0 ? (
                             <div className="space-y-1 text-right">
@@ -589,14 +632,14 @@ function ValidationSection({
 
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[180px_1fr]">
               <Field label="PDF-sider">
-                <Input
+                <PdfPageInput
                   value={formatAgreementRulePages(rule.pdfPages)}
-                  placeholder="Fx 38-41"
-                  onChange={(event) =>
+                  placeholder="Fx 38-41 eller 39-40-41"
+                  onCommit={(value) => {
                     onRuleChange(rule.ruleKey, {
-                      pdfPages: parsePageInput(event.target.value),
-                    })
-                  }
+                      pdfPages: parsePageInput(value),
+                    });
+                  }}
                 />
               </Field>
               <div>
@@ -733,25 +776,87 @@ function validationPdfPageHref(sourcePdf: string, page: number) {
   const pdfUrl = sourcePdf.startsWith("/") ? sourcePdf : `/overenskomster/${sourcePdf}`;
   return `${publicAgreementPdfHref(pdfUrl)}#page=${page}`;
 }
+function formatPdfSourcePageInput(pages: number[]) {
+  return [...new Set(pages)]
+    .filter((page) => Number.isInteger(page) && page > 0)
+    .sort((a, b) => a - b)
+    .join("-");
+}
+
+function PdfPageInput({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  onCommit: (value: string) => void;
+}) {
+  const [draftValue, setDraftValue] = useState(value);
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setDraftValue(value);
+    }
+  }, [value, isFocused]);
+
+  return (
+    <input
+      type="text"
+      value={draftValue}
+      placeholder={placeholder}
+      inputMode="text"
+      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      onFocus={() => setIsFocused(true)}
+      onChange={(event) => {
+        setDraftValue(event.currentTarget.value);
+      }}
+      onBlur={(event) => {
+        const finalValue = event.currentTarget.value;
+
+        setIsFocused(false);
+        setDraftValue(finalValue);
+        onCommit(finalValue);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
 
 function parsePageInput(value: string) {
   const pages = value
+    .replace(/\btil\b/gi, "-")
     .split(",")
     .flatMap((part) => {
       const trimmed = part.trim();
+
       if (!trimmed) return [];
-      const range = trimmed.match(/^(\d+)\s*-\s*(\d+)$/);
-      if (range) {
-        const from = Number(range[1]);
-        const to = Number(range[2]);
-        const start = Math.min(from, to);
-        const end = Math.max(from, to);
-        return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+
+      if (/[-–]\s*$/.test(trimmed)) {
+        return [];
       }
-      const page = Number(trimmed);
-      return Number.isFinite(page) && page > 0 ? [page] : [];
+
+      const hyphenPages = trimmed
+        .split(/[-–]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      if (hyphenPages.length > 1 && hyphenPages.every((item) => /^\d+$/.test(item))) {
+        return hyphenPages.map(Number);
+      }
+
+      if (/^\d+$/.test(trimmed)) {
+        return [Number(trimmed)];
+      }
+
+      return [];
     })
     .filter((page) => Number.isInteger(page) && page > 0);
 
-  return [...new Set(pages)];
+  return [...new Set(pages)].sort((a, b) => a - b);
 }
