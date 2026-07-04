@@ -10,11 +10,13 @@ import { useTimesheets } from "@/lib/use-timesheets";
 import {
   createBlank,
   createTimesheetForWorker,
+  formatDkk,
   generateOneTimeCode,
   knownWorkersFromTimesheets,
   listCompanies,
   listKnownContacts,
   listKnownWorkers,
+  saveCompany,
   TRADE_SKILLS,
   upsert,
   workerReferenceKeys,
@@ -39,6 +41,8 @@ type FormState = Omit<
   "hourlyWage" | "defaultPause" | "workerAccessCode" | "weekPlan"
 > & {
   hourlyWage: string;
+  billingHourlyWage: string;
+  billingFactor: string;
   defaultPause: string;
   defaultPauseStart: string;
   defaultPauseEnd: string;
@@ -115,6 +119,8 @@ function companyDetailsStarted(form: FormState): boolean {
     form.referenceNo,
     form.selectedAgreementId,
     form.hourlyWage,
+    form.billingHourlyWage,
+    form.billingFactor,
   ].some((value) => String(value ?? "").trim());
 }
 
@@ -156,6 +162,8 @@ function initialForm(): FormState {
     referenceNo: "",
     selectedAgreementId: "",
     hourlyWage: "",
+    billingHourlyWage: "",
+    billingFactor: "",
     defaultStart: "07:00",
     defaultEnd: "15:00",
     defaultPause: "60",
@@ -212,6 +220,9 @@ export function CreateWorkerPage() {
   const createWorkerOnlyMessage = hasCompanyDetails
     ? "Ved oprettelse af projekt skal du sende mail til vikar"
     : "";
+  const billingHourlyWage = Number(form.billingHourlyWage) || 0;
+  const billingFactor = Number(form.billingFactor) || 0;
+  const billingTotal = billingHourlyWage * billingFactor;
 
   const updateWeekDay = (index: number, patch: Partial<WorkerDayForm>) => {
     setForm((current) => ({
@@ -264,6 +275,8 @@ export function CreateWorkerPage() {
       projectId: "",
       projectName: "",
       projectEndDate: "",
+      billingHourlyWage: "",
+      billingFactor: "",
       ...(company
         ? {
             arbejdssted: company.address,
@@ -279,7 +292,13 @@ export function CreateWorkerPage() {
   const selectProject = (projectId: string) => {
     const project = companyProjects.find((item) => item.id === projectId);
     if (!project) {
-      update({ projectId: "", projectName: "", projectEndDate: "" });
+      update({
+        projectId: "",
+        projectName: "",
+        projectEndDate: "",
+        billingHourlyWage: "",
+        billingFactor: "",
+      });
       return;
     }
     const pauseMinutes = totalPauseMinutes(
@@ -290,6 +309,8 @@ export function CreateWorkerPage() {
       projectId: project.id,
       projectName: project.name,
       projectEndDate: project.endDate || form.projectEndDate,
+      billingHourlyWage: project.billingHourlyWage ? String(project.billingHourlyWage) : "",
+      billingFactor: project.billingFactor ? String(project.billingFactor) : "",
       kontaktperson: project.contactName || selectedCompany?.contactName || form.kontaktperson,
       kontaktpersonPhone:
         project.contactPhone || selectedCompany?.contactPhone || form.kontaktpersonPhone,
@@ -473,6 +494,21 @@ export function CreateWorkerPage() {
 
     setSending(true);
     setMessage("Opretter timeseddel og sender invitation til vikaren…");
+
+    if (role === "admin" && selectedCompany && selectedProject) {
+      saveCompany({
+        ...selectedCompany,
+        projects: selectedCompany.projects.map((project) =>
+          project.id === selectedProject.id
+            ? {
+                ...project,
+                billingHourlyWage,
+                billingFactor,
+              }
+            : project,
+        ),
+      });
+    }
 
     const workWindow = defaultWorkWindow(form);
     const defaultPauseMinutes =
@@ -704,6 +740,40 @@ export function CreateWorkerPage() {
               onChange={(e) => update({ hourlyWage: e.target.value })}
             />
           </Field>
+          {role === "admin" && (
+            <div className="md:col-span-2">
+              <span className="mb-1.5 block text-sm font-medium">Afregning til kunden</span>
+              <div className="grid grid-cols-1 gap-3 rounded-md border p-3 md:grid-cols-3">
+                <Field label="Afregningstimeløn">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.billingHourlyWage}
+                    onChange={(e) => update({ billingHourlyWage: e.target.value })}
+                  />
+                </Field>
+                <Field label="Faktor">
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={form.billingFactor}
+                    onChange={(e) => update({ billingFactor: e.target.value })}
+                  />
+                </Field>
+                <Field label="Total til kunden">
+                  <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
+                    {billingHourlyWage && billingFactor
+                      ? `${formatDkk(billingHourlyWage)} * ${billingFactor.toFixed(
+                          2,
+                        )} = ${formatDkk(billingTotal)}`
+                      : "Udfyld timeløn og faktor"}
+                  </div>
+                </Field>
+              </div>
+            </div>
+          )}
           <Field label="Startdato *">
             <Input
               type="date"
@@ -1121,6 +1191,8 @@ function availabilityProjectFromForm(
     pauseEnd: form.defaultPauseEnd || selectedProject?.pauseEnd || "",
     pause2Start: form.defaultPause2Start || selectedProject?.pause2Start || "",
     pause2End: form.defaultPause2End || selectedProject?.pause2End || "",
+    billingHourlyWage: Number(form.billingHourlyWage) || selectedProject?.billingHourlyWage || 0,
+    billingFactor: Number(form.billingFactor) || selectedProject?.billingFactor || 0,
   };
 }
 
@@ -1212,6 +1284,8 @@ function timesheetPeriod(timesheet: Timesheet): CompanyProject {
     pauseEnd: "",
     pause2Start: "",
     pause2End: "",
+    billingHourlyWage: 0,
+    billingFactor: 0,
   };
 }
 
