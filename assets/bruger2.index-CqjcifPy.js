@@ -1,1 +1,0 @@
-import{gt as e}from"./sub-z-logo-CS675MaE.js";import{t}from"./app-shell-BJ7bqmJ9.js";import{l as n}from"./index-fuBQQHd4.js";var r=e();function i(){return(0,r.jsx)(t,{allow:[`bruger2`],children:(0,r.jsx)(n,{role:`bruger2`})})}export{i as component};
