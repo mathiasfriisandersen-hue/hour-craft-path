@@ -1,0 +1,1 @@
+import{xt as e}from"./sub-z-logo-CC9RJcnM.js";import{t}from"./app-shell-CGv-I9s9.js";import{a as n,o as r,r as i}from"./auth-DHc0jhSq.js";var a=e();function o(){let{role:e,ready:o}=n();return!o||!e?(0,a.jsx)(t,{}):(0,a.jsx)(r,{to:i[e],replace:!0})}export{o as component};
