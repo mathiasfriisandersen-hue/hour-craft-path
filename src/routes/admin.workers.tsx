@@ -60,12 +60,12 @@ export function WorkerOverviewContent({
     return () => window.removeEventListener("timesheets-changed", refresh);
   }, []);
 
-  const rows = useMemo(
-    () => buildWorkerRows(timesheets, companies),
-    [timesheets, companies],
-  );
-  const working = rows.filter((row) => row.currentTimesheets.length);
-  const available = rows.filter((row) => !row.currentTimesheets.length).sort(compareAvailableWorkerRows);
+  const rows = useMemo(() => buildWorkerRows(timesheets, companies), [timesheets, companies]);
+
+  const working = rows.filter((row) => row.assignments.length > 0);
+  const available = rows
+    .filter((row) => row.assignments.length === 0)
+    .sort(compareAvailableWorkerRows);
 
   return (
     <>
