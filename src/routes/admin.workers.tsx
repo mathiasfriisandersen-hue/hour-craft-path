@@ -29,6 +29,7 @@ type WorkerRow = {
   worker: KnownWorker;
   assignments: Assignment[];
   currentTimesheets: Timesheet[];
+  hasActiveBooking: boolean;
   nextBookingStart: string;
   bookingStart: string;
   bookingEnd: string;
@@ -62,10 +63,8 @@ export function WorkerOverviewContent({
 
   const rows = useMemo(() => buildWorkerRows(timesheets, companies), [timesheets, companies]);
 
-  const working = rows.filter((row) => row.assignments.length > 0);
-  const available = rows
-    .filter((row) => row.assignments.length === 0)
-    .sort(compareAvailableWorkerRows);
+  const working = rows.filter((row) => row.hasActiveBooking);
+  const available = rows.filter((row) => !row.hasActiveBooking).sort(compareAvailableWorkerRows);
 
   return (
     <>
@@ -246,6 +245,9 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
       const workerTimesheets = activeTimesheets.filter((timesheet) =>
         workerMatchesTimesheet(worker, timesheet),
       );
+      const hasActiveBooking =
+        assignments.length > 0 ||
+        workerTimesheets.some((timesheet) => isTimesheetBookingActive(today, timesheet));
       const currentTimesheets = workerTimesheets.filter((timesheet) =>
         isTimesheetShiftToday(today, timesheet),
       );
@@ -255,6 +257,7 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
         worker,
         assignments,
         currentTimesheets,
+        hasActiveBooking,
         nextBookingStart: nextBookingDate,
         bookingStart: booking.startDate,
         bookingEnd: booking.endDate,
@@ -367,6 +370,12 @@ function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
 
   const day = timesheet.days[dayIndex];
   return Boolean(day?.start && day?.end);
+}
+
+function isTimesheetBookingActive(today: string, timesheet: Timesheet): boolean {
+  if (!timesheet.weekStart) return false;
+  const endDate = timesheet.projectEndDate || addDays(timesheet.weekStart, 6);
+  return timesheet.weekStart <= today && today <= endDate;
 }
 
 function futureTimesheetShiftDates(timesheets: Timesheet[], today: string): string[] {
