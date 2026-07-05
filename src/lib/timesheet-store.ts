@@ -1008,6 +1008,48 @@ export function setWorkerInactive(workerKey: string, workerInactive: boolean): T
   return updated.filter((item) => knownWorkerKey(item) === key);
 }
 
+export function removeWorkerFromSystem(worker: Pick<Timesheet, "vikar" | "vikarCode" | "vikarEmail">): void {
+  const nameKey = personLookupKey(worker.vikar);
+  const codeKey = personLookupKey(worker.vikarCode ?? "");
+  const emailKey = personLookupKey(worker.vikarEmail);
+
+  const matchesWorker = (item: Timesheet) => {
+    if (nameKey && personLookupKey(item.vikar) === nameKey) return true;
+    if (codeKey && personLookupKey(item.vikarCode ?? "") === codeKey) return true;
+    return Boolean(!nameKey && !codeKey && emailKey && personLookupKey(item.vikarEmail) === emailKey);
+  };
+
+  const nextTimesheets = readTimesheets().filter((item) => {
+    const shouldRemove = matchesWorker(item);
+    if (shouldRemove) rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, item.id);
+    return !shouldRemove;
+  });
+
+  const projectReferenceMatchesWorker = (reference: string) => {
+    const referenceKey = personLookupKey(reference);
+    if (!referenceKey) return false;
+    if (nameKey && referenceKey === nameKey) return true;
+    if (codeKey && referenceKey === codeKey) return true;
+    return Boolean(!nameKey && !codeKey && emailKey && referenceKey === emailKey);
+  };
+
+  const nextCompanies = listCompanies().map((company) => ({
+    ...company,
+    projects: company.projects.map((project) => ({
+      ...project,
+      workerEmails: project.workerEmails.filter(
+        (reference) => !projectReferenceMatchesWorker(reference),
+      ),
+    })),
+  }));
+
+  writeTimesheets(nextTimesheets);
+  setStorageItem(COMPANY_KEY, JSON.stringify(nextCompanies));
+  markLocalUpdated();
+  queueRemoteAppStatePersist();
+  emit();
+}
+
 export function remove(id: string): void {
   rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, id);
   writeTimesheets(readTimesheets().filter((item) => item.id !== id));

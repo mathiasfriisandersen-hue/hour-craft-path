@@ -16,6 +16,7 @@ import {
   getRule,
   isIndustriensAgreement,
   mailtoUrl,
+  removeWorkerFromSystem,
   setArchived,
   setWorkerInactive,
   timesheetRetentionWarning,
@@ -94,6 +95,12 @@ function AdminDetail() {
   };
 
   const updateWorkerInactive = (workerInactive: boolean) => {
+    if (workerInactive) {
+      removeWorkerFromSystem(t);
+      navigate({ to: "/admin" });
+      return;
+    }
+
     const updated = setWorkerInactive(t.vikar, workerInactive);
     const current = updated.find((item) => item.id === t.id);
     if (current) setT(current);
