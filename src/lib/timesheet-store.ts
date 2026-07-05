@@ -1147,10 +1147,9 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     normalizeWorkerPhone(input) ||
     listKnownWorkers().find((worker) => {
       const references = workerReferenceKeys(worker);
-      return (
-        references.includes(personLookupKey(input.vikar)) ||
-        references.includes(personLookupKey(input.vikarEmail))
-      );
+      const nameKey = personLookupKey(input.vikar);
+      if (nameKey) return references.includes(nameKey);
+      return references.includes(personLookupKey(input.vikarEmail));
     })?.phone ||
     "";
   const days = Array.from({ length: 7 }, (_, index) => {
@@ -1516,6 +1515,20 @@ export async function syncRemoteAppState(): Promise<void> {
     const remoteCompanies = Array.isArray(body.state.companies)
       ? body.state.companies.map((item) => normalizeCompany(item))
       : [];
+
+    if (remoteUpdatedAt && (!localState.updatedAt || remoteUpdatedAt > localState.updatedAt)) {
+      applyAppState(
+        {
+          version: 1,
+          updatedAt: remoteUpdatedAt,
+          timesheets: remoteTimesheets,
+          companies: remoteCompanies,
+        },
+        remoteUpdatedAt,
+      );
+      return;
+    }
+
     const mergedTimesheets = mergeTimesheets(localState.timesheets, remoteTimesheets);
     const mergedCompanies = mergeCompanies(localState.companies, remoteCompanies, preferLocal);
     const mergedUpdatedAt =
@@ -3391,7 +3404,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
       selectedAgreementId: worker.agreementId,
       tradeSkills: [worker.tradeSkill],
       competencies: worker.competencies,
-      workerEmails: [worker.email],
+      workerEmails: [worker.name],
       workPeriod:
         worker.workForm === "night" ? "night" : worker.workForm === "evening" ? "evening" : "day",
       defaultStart:
