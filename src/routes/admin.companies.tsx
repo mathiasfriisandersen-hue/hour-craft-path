@@ -7,16 +7,23 @@ import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { companiesVisibleForRole, companyOwnerForRole } from "@/lib/company-access";
 import { useAuth } from "@/lib/auth";
 import { sendProjectConfirmationEmail } from "@/lib/timesheet-mail";
+import { createShortWorkerInviteUrl } from "@/lib/worker-invite";
 import {
+  createTimesheetForWorker,
+  generateOneTimeCode,
+  listAll,
   listCompanies,
   listKnownWorkers,
   removeCompany,
   saveCompany,
   seedIfEmpty,
   TRADE_SKILLS,
+  upsert,
   workerReferenceKeys,
   type Company,
   type CompanyProject,
+  type KnownWorker,
+  type Timesheet,
   type TradeSkill,
   type WorkPeriod,
 } from "@/lib/timesheet-store";
@@ -262,6 +269,7 @@ function ProjectsSection({
     setSendingProjectId(project.id);
     setProjectMailMessage("Sender projektbekræftelse…");
     try {
+      saveCompany(company);
       const workers = project.workerEmails
         .map((reference) =>
           knownWorkers.find((worker) =>
@@ -274,7 +282,15 @@ function ProjectsSection({
         await sendProjectConfirmationEmail({ company, project });
       } else {
         for (const worker of workers) {
-          await sendProjectConfirmationEmail({ company, project, worker });
+          const timesheet = ensureProjectTimesheet(company, project, worker);
+          const workerInviteUrl = await createShortWorkerInviteUrl(timesheet);
+          await sendProjectConfirmationEmail({
+            company,
+            project,
+            worker,
+            workerInviteUrl,
+            workerAccessCode: timesheet.workerAccessCode,
+          });
         }
       }
       setProjectMailMessage("Projektbekræftelse sendt.");
@@ -624,6 +640,77 @@ function workerProjectConflict(
     }
   }
   return "";
+}
+
+function ensureProjectTimesheet(
+  company: Company,
+  project: CompanyProject,
+  worker: KnownWorker,
+): Timesheet {
+  const references = workerReferenceKeys(worker);
+  const existing = listAll().find((timesheet) => {
+    const workerMatch = [timesheet.vikar, timesheet.vikarEmail]
+      .map((item) => item.trim().toLowerCase())
+      .some((item) => references.includes(item));
+    const projectMatch =
+      timesheet.projectId === project.id ||
+      (timesheet.brugervirksomhed === company.name &&
+        timesheet.projectName === project.name &&
+        timesheet.projectEndDate === project.endDate);
+    return workerMatch && projectMatch;
+  });
+
+  if (existing) {
+    return upsert({
+      ...existing,
+      workerLanguage: existing.workerLanguage || worker.language,
+      workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
+      workerMustChangeAccessCode:
+        existing.workerMustChangeAccessCode || !existing.workerAccessCode,
+    });
+  }
+
+  return upsert(
+    createTimesheetForWorker({
+      vikar: worker.name,
+      vikarCode: worker.code,
+      vikarEmail: worker.email,
+      vikarPhone: worker.phone,
+      workerLanguage: worker.language,
+      tradeSkills: project.tradeSkills.length ? project.tradeSkills : worker.tradeSkills,
+      competencies: project.competencies || worker.competencies,
+      brugervirksomhed: company.name,
+      companyId: company.id,
+      projectId: project.id,
+      projectName: project.name,
+      projectEndDate: project.endDate,
+      arbejdssted: company.address,
+      kontaktperson: project.contactName || company.contactName,
+      kontaktpersonPhone: project.contactPhone || company.contactPhone,
+      kontaktpersonEmail: project.contactEmail || company.contactEmail,
+      referenceNo: project.referenceNo,
+      selectedAgreementId: project.selectedAgreementId || company.selectedAgreementId || "",
+      hourlyWage: 0,
+      defaultStart: project.defaultStart,
+      defaultEnd: project.defaultEnd,
+      defaultPause: 0,
+      defaultPauseStart: project.pauseStart,
+      defaultPauseEnd: project.pauseEnd,
+      defaultPause2Start: project.pause2Start,
+      defaultPause2End: project.pause2End,
+      defaultDayWorkStart: project.workPeriod === "day" ? project.defaultStart : "",
+      defaultDayWorkEnd: project.workPeriod === "day" ? project.defaultEnd : "",
+      defaultEveningWorkStart: project.workPeriod === "evening" ? project.defaultStart : "",
+      defaultEveningWorkEnd: project.workPeriod === "evening" ? project.defaultEnd : "",
+      defaultNightWorkStart: project.workPeriod === "night" ? project.defaultStart : "",
+      defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
+      shiftWorkApplies: false,
+      startDate: project.startDate,
+      workerAccessCode: generateOneTimeCode(),
+      contactPersonAccessCode: generateOneTimeCode(),
+      ownerRole: company.ownerRole,
+    }),
+  );
 }
 
 function formatDate(value: string): string {

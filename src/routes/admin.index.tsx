@@ -10,6 +10,7 @@ import {
   setArchived,
   STATUS_LABEL,
   timesheetRetentionWarning,
+  timesheetsToCodeCsv,
   timesheetsToCsv,
   totalHours,
   weekNumber,
@@ -111,6 +112,16 @@ export function AdminOverviewContent({
     URL.revokeObjectURL(url);
   };
 
+  const exportCodeCsv = () => {
+    const blob = new Blob([timesheetsToCodeCsv(list)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `timesedler-med-kode-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const counts = (value: Status) =>
     submitted.filter((item) => !item.archived && item.status === value).length;
   const archivedCount = submitted.filter((item) => item.archived).length;
@@ -192,6 +203,9 @@ export function AdminOverviewContent({
           )}
           <Button variant="outline" onClick={exportCsv} disabled={!list.length}>
             Eksportér CSV
+          </Button>
+          <Button variant="outline" onClick={exportCodeCsv} disabled={!list.length}>
+            Eksportér CSV med kode
           </Button>
         </div>
       </div>
@@ -314,6 +328,10 @@ export function AdminOverviewContent({
 
                   <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div>
+                      <dt className="text-xs text-muted-foreground">Kode</dt>
+                      <dd>{item.vikarCode || "—"}</dd>
+                    </div>
+                    <div>
                       <dt className="text-xs text-muted-foreground">Timer</dt>
                       <dd className="tabular-nums">{totalHours(item.days).toFixed(2)}</dd>
                     </div>
@@ -370,12 +388,13 @@ export function AdminOverviewContent({
           </div>
 
           <div className="hidden overflow-x-auto rounded-lg border bg-card md:block">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[900px] text-sm">
               <thead className="bg-muted/50 text-left text-muted-foreground">
                 <tr>
                   {[
                     canManageArchive && archiveMode ? "Arkiver" : "",
                     "Vikar",
+                    "Kode",
                     "Virksomhed",
                     "Uge",
                     "Overenskomst",
@@ -409,6 +428,7 @@ export function AdminOverviewContent({
                         )}
                       </td>
                       <td className="px-4 py-3 font-medium">{item.vikar || "—"}</td>
+                      <td className="px-4 py-3">{item.vikarCode || "—"}</td>
                       <td className="px-4 py-3">
                         <div>{item.brugervirksomhed || "—"}</div>
                         <div className="text-xs text-muted-foreground">

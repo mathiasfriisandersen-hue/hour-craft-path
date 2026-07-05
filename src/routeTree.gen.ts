@@ -30,6 +30,7 @@ import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminStatisticsRouteImport } from './routes/admin.statistics'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
+import { Route as AdminInvoicePayrollRouteImport } from './routes/admin.invoice-payroll'
 import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
@@ -141,6 +142,11 @@ const AdminRulesRoute = AdminRulesRouteImport.update({
   path: '/admin/rules',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminInvoicePayrollRoute = AdminInvoicePayrollRouteImport.update({
+  id: '/admin/invoice-payroll',
+  path: '/admin/invoice-payroll',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminCreateWorkerRoute = AdminCreateWorkerRouteImport.update({
   id: '/admin/create-worker',
   path: '/admin/create-worker',
@@ -173,6 +179,7 @@ export interface FileRoutesByFullPath {
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
+  '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
@@ -201,6 +208,7 @@ export interface FileRoutesByTo {
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
+  '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
@@ -230,6 +238,7 @@ export interface FileRoutesById {
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
+  '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
@@ -260,6 +269,7 @@ export interface FileRouteTypes {
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
+    | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
     | '/admin/users'
@@ -288,6 +298,7 @@ export interface FileRouteTypes {
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
+    | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
     | '/admin/users'
@@ -316,6 +327,7 @@ export interface FileRouteTypes {
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
+    | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
     | '/admin/users'
@@ -345,6 +357,7 @@ export interface RootRouteChildren {
   AdminCalendarRoute: typeof AdminCalendarRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
   AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
+  AdminInvoicePayrollRoute: typeof AdminInvoicePayrollRoute
   AdminRulesRoute: typeof AdminRulesRoute
   AdminStatisticsRoute: typeof AdminStatisticsRoute
   AdminUsersRoute: typeof AdminUsersRouteWithChildren
@@ -516,6 +529,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRulesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/invoice-payroll': {
+      id: '/admin/invoice-payroll'
+      path: '/admin/invoice-payroll'
+      fullPath: '/admin/invoice-payroll'
+      preLoaderRoute: typeof AdminInvoicePayrollRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/create-worker': {
       id: '/admin/create-worker'
       path: '/admin/create-worker'
@@ -572,6 +592,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminCalendarRoute: AdminCalendarRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
   AdminCreateWorkerRoute: AdminCreateWorkerRoute,
+  AdminInvoicePayrollRoute: AdminInvoicePayrollRoute,
   AdminRulesRoute: AdminRulesRoute,
   AdminStatisticsRoute: AdminStatisticsRoute,
   AdminUsersRoute: AdminUsersRouteWithChildren,

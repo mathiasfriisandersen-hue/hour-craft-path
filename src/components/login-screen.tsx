@@ -45,15 +45,21 @@ export function LoginScreen() {
       return;
     }
     setError(null);
-    login(role);
     if (validVikarPassword && vikarTimesheet) {
+      login("vikar", {
+        workerIdentity: { name: vikarTimesheet.vikar, email: vikarTimesheet.vikarEmail },
+      });
       navigate({ to: "/vikar/$id", params: { id: vikarTimesheet.id }, replace: true });
       return;
     }
     if (matchedVikarTimesheet) {
+      login("vikar", {
+        workerIdentity: { name: matchedVikarTimesheet.vikar, email: matchedVikarTimesheet.vikarEmail },
+      });
       navigate({ to: "/vikar/$id", params: { id: matchedVikarTimesheet.id }, replace: true });
       return;
     }
+    login(role);
     if (matchedContactTimesheet) {
       navigate({
         to: "/kontaktperson/$id",

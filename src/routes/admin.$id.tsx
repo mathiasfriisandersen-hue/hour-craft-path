@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { AppShell, InfoBanner, StatusBadge } from "@/components/app-shell";
+import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
@@ -48,6 +48,7 @@ function AdminDetail() {
   const [mailMessage, setMailMessage] = useState("");
   const [sendingMail, setSendingMail] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState(false);
+  const [showRuleDetails, setShowRuleDetails] = useState(false);
 
   useEffect(() => {
     const found = getById(id);
@@ -182,12 +183,6 @@ function AdminDetail() {
         </div>
       </div>
 
-      {!calc.canCalculateRatesAutomatically && (
-        <InfoBanner tone="warning">
-          Systemet beregner kun samlet timetal, indtil overenskomstens PDF-kilde og satser er
-          manuelt valideret i regelgrundlaget.
-        </InfoBanner>
-      )}
       {retentionWarning && (
         <div
           className={
@@ -527,51 +522,64 @@ function AdminDetail() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-lg border bg-card p-5 md:p-6">
-        <h2 className="mb-3 font-semibold">Regelgrundlag og tillæg</h2>
-        {!calc.canCalculateRatesAutomatically && (
-          <p className="mb-4 text-sm text-muted-foreground">
-            Tillæg og satser vises ikke som beregning, før overenskomsten er markeret som valideret.
-          </p>
-        )}
-        <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
-          <Rule
-            label="Overarbejde"
-            value={rule?.overtimeRule}
-            sources={sourcesFor(rule?.sources, "overtimeRule")}
-          />
-          <Rule
-            label="Lørdag"
-            value={rule?.saturdayRule}
-            sources={sourcesFor(rule?.sources, "saturdayRule")}
-          />
-          <Rule
-            label="Søndag"
-            value={rule?.sundayRule}
-            sources={sourcesFor(rule?.sources, "sundayRule")}
-          />
-          <Rule
-            label="Aften"
-            value={rule?.eveningRule}
-            sources={sourcesFor(rule?.sources, "eveningRule")}
-          />
-          <Rule
-            label="Nat"
-            value={rule?.nightRule}
-            sources={sourcesFor(rule?.sources, "nightRule")}
-          />
-          <Rule
-            label="Skiftehold"
-            value={rule?.shiftRule}
-            sources={sourcesFor(rule?.sources, "shiftRule")}
-          />
-          <Rule
-            label="Særlige tillæg"
-            value={rule?.specialRule}
-            sources={sourcesFor(rule?.sources, "specialRule")}
-          />
-        </div>
-      </section>
+      <div className="mt-6">
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={showRuleDetails}
+          onClick={() => setShowRuleDetails((current) => !current)}
+        >
+          Regelgrundlag og tillæg
+        </Button>
+      </div>
+
+      {showRuleDetails && (
+        <section className="mt-3 rounded-lg border bg-card p-5 md:p-6">
+          {!calc.canCalculateRatesAutomatically && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Tillæg og satser vises ikke som beregning, før overenskomsten er markeret som
+              valideret.
+            </p>
+          )}
+          <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+            <Rule
+              label="Overarbejde"
+              value={rule?.overtimeRule}
+              sources={sourcesFor(rule?.sources, "overtimeRule")}
+            />
+            <Rule
+              label="Lørdag"
+              value={rule?.saturdayRule}
+              sources={sourcesFor(rule?.sources, "saturdayRule")}
+            />
+            <Rule
+              label="Søndag"
+              value={rule?.sundayRule}
+              sources={sourcesFor(rule?.sources, "sundayRule")}
+            />
+            <Rule
+              label="Aften"
+              value={rule?.eveningRule}
+              sources={sourcesFor(rule?.sources, "eveningRule")}
+            />
+            <Rule
+              label="Nat"
+              value={rule?.nightRule}
+              sources={sourcesFor(rule?.sources, "nightRule")}
+            />
+            <Rule
+              label="Skiftehold"
+              value={rule?.shiftRule}
+              sources={sourcesFor(rule?.sources, "shiftRule")}
+            />
+            <Rule
+              label="Særlige tillæg"
+              value={rule?.specialRule}
+              sources={sourcesFor(rule?.sources, "specialRule")}
+            />
+          </div>
+        </section>
+      )}
 
       {t.rejectionComment && (
         <div className="mt-6 rounded-md border border-status-rejected-fg/30 bg-status-rejected/40 px-4 py-3 text-sm text-status-rejected-fg">

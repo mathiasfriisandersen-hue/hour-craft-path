@@ -49,6 +49,7 @@ type StoredTimesheet = {
   vikar?: string;
   vikarEmail?: string;
   vikarPhone?: string;
+  workerLanguage?: WorkerLanguage;
   kontaktperson?: string;
   kontaktpersonPhone?: string;
   kontaktpersonEmail?: string;
@@ -66,6 +67,8 @@ type StoredTimesheet = {
   workerConsentRenewalSentAt?: string;
   workerConsentRenewedAt?: string;
 };
+
+type WorkerLanguage = "da" | "en" | "pl";
 
 const RESEND_EMAILS_URL = "https://api.resend.com/emails";
 const MAX_TEXT_LENGTH = 60_000;
@@ -280,11 +283,59 @@ function appBaseUrl(env: Env): string {
   return (env.APP_BASE_URL || allowedOrigins(env)[0] || "").replace(/\/$/, "");
 }
 
-function workerConsentRenewalSubject(): string {
+function normalizeWorkerLanguage(value: unknown): WorkerLanguage {
+  return value === "en" || value === "pl" ? value : "da";
+}
+
+function workerConsentRenewalSubject(language: WorkerLanguage): string {
+  if (language === "en") return "Renew your consent to job offers from Sub-Z";
+  if (language === "pl") return "Odnów zgodę na oferty pracy od Sub-Z";
   return "Forny samtykke til jobhenvendelser fra Sub-Z";
 }
 
-function workerConsentRenewalBody(workerName: string, consentUrl: string): string {
+function workerConsentRenewalBody(
+  workerName: string,
+  consentUrl: string,
+  language: WorkerLanguage,
+): string {
+  if (language === "en") {
+    return [
+      `Hi ${workerName || "worker"}`,
+      "",
+      "We are contacting you because your consent for Sub-Z to contact you about relevant job opportunities must be renewed.",
+      "",
+      "If you still want to be registered with Sub-Z and receive job opportunities, confirm your consent here:",
+      "",
+      consentUrl,
+      "",
+      "When you confirm, your consent will be renewed and you can again receive relevant job opportunities from Sub-Z.",
+      "",
+      "If you do not want to renew your consent, you do not need to do anything.",
+      "",
+      "Best regards",
+      "Sub-Z ApS",
+    ].join("\n");
+  }
+
+  if (language === "pl") {
+    return [
+      `Cześć ${workerName || "pracowniku"}`,
+      "",
+      "Kontaktujemy się, ponieważ Twoja zgoda na kontakt ze strony Sub-Z w sprawie odpowiednich ofert pracy musi zostać odnowiona.",
+      "",
+      "Jeśli nadal chcesz być zarejestrowany w Sub-Z i otrzymywać oferty pracy, potwierdź zgodę tutaj:",
+      "",
+      consentUrl,
+      "",
+      "Po potwierdzeniu zgoda zostanie odnowiona i będziesz ponownie otrzymywać odpowiednie oferty pracy od Sub-Z.",
+      "",
+      "Jeśli nie chcesz odnawiać zgody, nie musisz nic robić.",
+      "",
+      "Z poważaniem",
+      "Sub-Z ApS",
+    ].join("\n");
+  }
+
   return [
     `Hej ${workerName || "vikar"}`,
     "",
@@ -446,10 +497,11 @@ async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized
         env,
       );
       const consentUrl = `${baseUrl}/vikar/consent?i=${encodeURIComponent(consent.token)}`;
+      const language = normalizeWorkerLanguage(worker.workerLanguage);
       await sendSingleEmail(
         worker.vikarEmail || "",
-        workerConsentRenewalSubject(),
-        workerConsentRenewalBody(worker.vikar || "vikar", consentUrl),
+        workerConsentRenewalSubject(language),
+        workerConsentRenewalBody(worker.vikar || "vikar", consentUrl, language),
         env,
       );
       for (const item of group) {

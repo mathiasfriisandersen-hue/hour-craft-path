@@ -189,6 +189,7 @@ function WorkerDetails({ row }: { row: WorkerRow }) {
   return (
     <dl className="mt-4 border-t pt-3 text-sm">
       <DetailRow label="Vikar" value={row.worker.name || "—"} />
+      <DetailRow label="Kode" value={row.worker.code || "—"} />
       <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
       <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
       {hasActiveBooking ? (
@@ -231,10 +232,10 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
   const today = localISODate(new Date());
   const activeTimesheets = timesheets.filter(
     (item) =>
-      item.status !== "draft" &&
       !item.archived &&
       !item.workerInactive &&
-      !item.workerConsentInactive,
+      !item.workerConsentInactive &&
+      (item.status !== "draft" || hasPlannedBooking(item)),
   );
   const knownWorkers = knownWorkersForOverview(timesheets, companies);
 
@@ -249,8 +250,8 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
         isTimesheetShiftToday(today, timesheet),
       );
       const nextBookingDate = nextBookingStartForWorker(futureAssignments, workerTimesheets, today);
-      const booking = latestBooking(assignments, workerTimesheets);
-      const hasActiveBooking = isBookingPeriodActive(today, booking);
+      const booking = currentOrNextBooking(assignments, workerTimesheets, today);
+      const hasActiveBooking = Boolean(booking.startDate && booking.endDate);
       return {
         worker,
         assignments,
@@ -275,8 +276,10 @@ function knownWorkersForOverview(timesheets: Timesheet[], companies: Company[]):
         workers.push({
           key,
           name: reference.trim(),
+          code: "",
           email: reference.includes("@") ? reference.trim() : "",
           phone: "",
+          language: "da",
           tradeSkills: project.tradeSkills,
           competencies: project.competencies,
           inactive: false,
@@ -296,8 +299,8 @@ function activeProjectAssignments(
   const assignments: Assignment[] = [];
   for (const company of companies) {
     for (const project of company.projects) {
-      if (!isActiveProject(project, today)) continue;
-      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase()))) continue;
+      if (!isProjectBookingRelevant(project, today)) continue;
+      if (!projectHasWorker(project, references)) continue;
       assignments.push({
         companyName: company.name,
         projectName: project.name,
@@ -320,7 +323,7 @@ function futureProjectAssignments(
   for (const company of companies) {
     for (const project of company.projects) {
       if (!project.startDate || project.startDate <= today) continue;
-      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase()))) continue;
+      if (!projectHasWorker(project, references)) continue;
 
       assignments.push({
         companyName: company.name,
@@ -354,10 +357,20 @@ function workerMatchesTimesheet(worker: KnownWorker, timesheet: Timesheet): bool
     .some((item) => references.includes(item));
 }
 
-function isActiveProject(project: CompanyProject, today: string): boolean {
+function hasPlannedBooking(timesheet: Timesheet): boolean {
   return Boolean(
-    project.startDate && project.endDate && project.startDate <= today && today <= project.endDate,
+    (timesheet.brugervirksomhed || timesheet.projectId || timesheet.projectName) &&
+      timesheet.weekStart &&
+      (timesheet.projectEndDate || timesheet.days.some((day) => day.start && day.end)),
   );
+}
+
+function isProjectBookingRelevant(project: CompanyProject, today: string): boolean {
+  return Boolean(project.startDate && project.endDate && project.endDate >= today);
+}
+
+function projectHasWorker(project: CompanyProject, workerReferences: string[]): boolean {
+  return project.workerEmails.some((item) => workerReferences.includes(item.trim().toLowerCase()));
 }
 
 function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
@@ -368,15 +381,6 @@ function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
 
   const day = timesheet.days[dayIndex];
   return Boolean(day?.start && day?.end);
-}
-
-function isBookingPeriodActive(
-  today: string,
-  booking: { startDate: string; endDate: string },
-): boolean {
-  return Boolean(
-    booking.startDate && booking.endDate && booking.startDate <= today && today <= booking.endDate,
-  );
 }
 
 function futureTimesheetShiftDates(timesheets: Timesheet[], today: string): string[] {
@@ -405,9 +409,10 @@ function addDays(isoDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function latestBooking(
+function currentOrNextBooking(
   assignments: Assignment[],
   timesheets: Timesheet[],
+  today: string,
 ): { startDate: string; endDate: string } {
   const periods = [
     ...assignments.map((assignment) => ({
@@ -419,8 +424,24 @@ function latestBooking(
       endDate: timesheet.projectEndDate || addDays(timesheet.weekStart, 6),
     })),
   ].filter((period) => period.startDate && period.endDate);
+
+  const currentPeriod = periods
+    .filter((period) => period.startDate <= today && today <= period.endDate)
+    .sort((a, b) => b.startDate.localeCompare(a.startDate))
+    .at(0);
+  if (currentPeriod) return currentPeriod;
+
+  const nextPeriod = periods
+    .filter((period) => period.startDate > today)
+    .sort((a, b) => a.startDate.localeCompare(b.startDate))
+    .at(0);
+  if (nextPeriod) return nextPeriod;
+
   return (
-    periods.sort((a, b) => b.startDate.localeCompare(a.startDate)).at(0) ?? {
+    periods
+      .filter((period) => period.endDate >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))
+      .at(0) ?? {
       startDate: "",
       endDate: "",
     }

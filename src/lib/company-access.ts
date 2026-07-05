@@ -35,6 +35,7 @@ export function timesheetsVisibleForRole(
   );
 
   return timesheets.filter((timesheet) => {
+    if (timesheet.ownerRole) return timesheet.ownerRole === role;
     if (timesheet.companyId) return visibleCompanyIds.has(timesheet.companyId);
     return visibleCompanyNames.has(timesheet.brugervirksomhed.trim().toLowerCase());
   });

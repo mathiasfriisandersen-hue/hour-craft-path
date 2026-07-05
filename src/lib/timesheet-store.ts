@@ -21,6 +21,7 @@ import { addDaysToISODate, getDanishAgreementHolidayName } from "./danishHoliday
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
+export type WorkerLanguage = "da" | "en" | "pl";
 
 export const STATUS_LABEL: Record<Status, string> = {
   draft: "Kladde",
@@ -37,6 +38,12 @@ export const STATUS_CLASS: Record<Status, string> = {
 };
 
 export const OVERENSKOMSTER = collectiveAgreements.map((agreement) => agreement.name);
+
+export const WORKER_LANGUAGES: Array<{ value: WorkerLanguage; label: string }> = [
+  { value: "da", label: "Dansk" },
+  { value: "en", label: "Engelsk" },
+  { value: "pl", label: "Polsk" },
+];
 
 export const WEEKDAYS = [
   "Mandag",
@@ -156,10 +163,12 @@ export type Timesheet = {
   id: string;
   ownerRole?: "bruger" | "bruger2";
   vikar: string;
+  vikarCode?: string;
   vikarEmail: string;
   vikarPhone?: string;
   vikarAddress?: string;
   vikarCpr?: string;
+  workerLanguage?: WorkerLanguage;
   tradeSkills?: TradeSkill[];
   competencies?: string;
   brugervirksomhed: string;
@@ -191,6 +200,9 @@ export type Timesheet = {
   workerConsentInactive?: boolean;
   workerConsentRenewalSentAt?: string;
   workerConsentRenewedAt?: string;
+  invoiceDueDate?: string;
+  payrollDeadline?: string;
+  invoiceNumber?: string;
   rejectionComment?: string;
   createdAt: string;
   updatedAt: string;
@@ -388,9 +400,11 @@ type StoredTimesheet = Omit<
   overenskomst?: string;
   lokalaftale?: boolean;
   vikarEmail?: string;
+  vikarCode?: string;
   vikarPhone?: string;
   vikarAddress?: string;
   vikarCpr?: string;
+  workerLanguage?: WorkerLanguage;
   tradeSkills?: TradeSkill[];
   competencies?: string;
   companyId?: string;
@@ -408,6 +422,9 @@ type StoredTimesheet = Omit<
   workerConsentInactive?: boolean;
   workerConsentRenewalSentAt?: string;
   workerConsentRenewedAt?: string;
+  invoiceDueDate?: string;
+  payrollDeadline?: string;
+  invoiceNumber?: string;
   notes?: string;
 };
 
@@ -429,6 +446,10 @@ function normalizeWorkPeriod(value: unknown): WorkPeriod {
 
 function normalizeOwnerRole(value: unknown): "bruger" | "bruger2" | undefined {
   return value === "bruger" || value === "bruger2" ? value : undefined;
+}
+
+function normalizeWorkerLanguage(value: unknown): WorkerLanguage {
+  return value === "en" || value === "pl" ? value : "da";
 }
 
 function defaultTimesForWorkPeriod(workPeriod: WorkPeriod): { start: string; end: string } {
@@ -505,10 +526,12 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   return {
     ...value,
     ownerRole: normalizeOwnerRole(value.ownerRole),
+    vikarCode: value.vikarCode ?? "",
     vikarEmail: value.vikarEmail ?? "",
     vikarPhone: normalizeWorkerPhone(value),
     vikarAddress: value.vikarAddress ?? "",
     vikarCpr: value.vikarCpr ?? "",
+    workerLanguage: normalizeWorkerLanguage(value.workerLanguage),
     tradeSkills: normalizeTradeSkills(value.tradeSkills),
     competencies: value.competencies ?? "",
     companyId: value.companyId ?? "",
@@ -533,6 +556,9 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     workerConsentInactive: value.workerConsentInactive ?? false,
     workerConsentRenewalSentAt: value.workerConsentRenewalSentAt ?? "",
     workerConsentRenewedAt: value.workerConsentRenewedAt ?? "",
+    invoiceDueDate: value.invoiceDueDate ?? "",
+    payrollDeadline: value.payrollDeadline ?? "",
+    invoiceNumber: value.invoiceNumber ?? "",
     days,
     createdAt: value.createdAt ?? now,
     updatedAt: value.updatedAt ?? now,
@@ -1001,10 +1027,12 @@ export function createBlank(): Timesheet {
     id: crypto.randomUUID(),
     ownerRole: undefined,
     vikar: "",
+    vikarCode: "",
     vikarEmail: "",
     vikarPhone: "",
     vikarAddress: "",
     vikarCpr: "",
+    workerLanguage: "da",
     tradeSkills: [],
     competencies: "",
     brugervirksomhed: "",
@@ -1042,8 +1070,10 @@ export function createBlank(): Timesheet {
 
 export type CreateWorkerTimesheetInput = {
   vikar: string;
+  vikarCode?: string;
   vikarEmail: string;
   vikarPhone?: string;
+  workerLanguage?: WorkerLanguage;
   tradeSkills?: TradeSkill[];
   competencies?: string;
   brugervirksomhed: string;
@@ -1176,8 +1206,10 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     ...base,
     ownerRole: input.ownerRole,
     vikar: input.vikar.trim(),
+    vikarCode: input.vikarCode?.trim() ?? "",
     vikarEmail: input.vikarEmail.trim(),
     vikarPhone: workerPhone,
+    workerLanguage: normalizeWorkerLanguage(input.workerLanguage),
     tradeSkills: normalizeTradeSkills(input.tradeSkills),
     competencies: input.competencies?.trim() ?? "",
     brugervirksomhed: input.brugervirksomhed.trim(),
@@ -1517,8 +1549,10 @@ export async function syncRemoteAppState(): Promise<void> {
 export type KnownWorker = {
   key: string;
   name: string;
+  code: string;
   email: string;
   phone: string;
+  language: WorkerLanguage;
   tradeSkills: TradeSkill[];
   competencies: string;
   inactive: boolean;
@@ -1573,8 +1607,10 @@ export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker
     const worker = {
       key: existing?.key || key,
       name: timesheet.vikar || existing?.name || timesheet.vikarEmail,
+      code: timesheet.vikarCode || existing?.code || "",
       email: timesheet.vikarEmail || existing?.email || "",
       phone: timesheet.vikarPhone || existing?.phone || "",
+      language: normalizeWorkerLanguage(timesheet.workerLanguage || existing?.language),
       tradeSkills,
       competencies,
       inactive,
@@ -2108,12 +2144,42 @@ export function contactPersonEmailBody(t: Timesheet, options: MailTextOptions = 
   ].join("\n");
 }
 
-export function workerSubmissionReceiptSubject(t: Timesheet): string {
-  return `Timeseddel sendt til godkendelse – uge ${weekNumber(t.weekStart)}`;
-}
-
-export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptions = {}): string {
+export function contactPersonEmailHtml(t: Timesheet, options: MailTextOptions = {}): string {
   const calc = calculateTimesheet(t);
+  const dayRows = WEEKDAYS.map((name, index) => {
+    const day = t.days[index];
+    const date = addDaysToISODate(t.weekStart, index);
+    const registration =
+      day.absence !== "none"
+        ? ABSENCE_LABEL[day.absence]
+        : day.start && day.end
+          ? `${day.start}–${day.end}, pause ${day.pause} min, ${dayHours(day).toFixed(2)} t`
+          : "Ingen registrering";
+    const delayedMealBreakDetail =
+      isIndustriensAgreement(t.selectedAgreementId) &&
+      day.absence === "none" &&
+      delayedMealBreakTriggered(day)
+        ? "Udsat spisepause 30+ min efter besked fra virksomheden"
+        : "";
+    const details = [
+      day.taskType,
+      day.workType !== "normal" ? WORK_TYPE_LABEL[day.workType] : "",
+      explicitShiftWork(day) ? "Skiftehold markeret" : "",
+      delayedMealBreakDetail,
+      day.comment,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return `<tr>
+      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;color:#4b5563;white-space:nowrap;">${htmlEscape(
+        `${name} ${formatDateLabel(date)}`,
+      )}</td>
+      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;color:#111827;">${htmlEscape(
+        `${registration}${details ? ` (${details})` : ""}`,
+      )}</td>
+    </tr>`;
+  }).join("");
+
   const manualAllowanceLines: string[] = [];
   if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
     manualAllowanceLines.push(delayedMealBreakSummaryText(calc.delayedMealBreakDays));
@@ -2122,19 +2188,219 @@ export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptio
     manualAllowanceLines.push("Ingen manuelle tillæg registreret.");
   }
 
-  const dayLines = WEEKDAYS.map((name, index) => {
+  const safeInviteUrl = options.contactInviteUrl ? htmlEscape(options.contactInviteUrl) : "";
+  const loginBlock = options.contactInviteUrl
+    ? `<h2 style="margin:24px 0 10px;font-size:16px;color:#111827;">Login</h2>
+      <p style="margin:0 0 16px;line-height:1.5;">Åbn timesedlen via knappen herunder for at gennemgå og godkende den.</p>
+      <p style="margin:0 0 18px;">
+        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">Åbn timeseddel</a>
+      </p>
+      <p style="margin:0 0 6px;color:#4b5563;font-size:13px;line-height:1.5;">Hvis knappen ikke virker, kan du kopiere dette link:</p>
+      <p style="margin:0 0 18px;font-size:13px;line-height:1.5;word-break:break-all;"><a href="${safeInviteUrl}" style="color:#1f4e79;">${safeInviteUrl}</a></p>
+      ${
+        t.contactPersonMustChangeAccessCode
+          ? `<p style="margin:0 0 6px;line-height:1.5;">Log ind første gang med denne engangskode:</p>
+      <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
+        t.contactPersonAccessCode || "—",
+      )}</p>
+      <p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">Efter første login bliver du bedt om at ændre adgangskoden.</p>`
+          : `<p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">Brug din personlige adgangskode, hvis du allerede har valgt en.</p>`
+      }`
+    : "";
+
+  return `<!doctype html>
+<html lang="da">
+  <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:720px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+      <p style="margin:0 0 16px;">Hej ${htmlEscape(t.kontaktperson || "kontaktperson")}</p>
+      <p style="margin:0 0 14px;line-height:1.5;">Du modtager hermed timeseddel for ${htmlEscape(
+        t.vikar || "vikaren",
+      )} hos ${htmlEscape(t.brugervirksomhed || "brugervirksomheden")} for uge ${weekNumber(
+        t.weekStart,
+      )}.</p>
+      <p style="margin:0 0 14px;line-height:1.5;">Vil du venligst gennemgå registreringerne og godkende timesedlen senest tirsdag efter fremsendelsen.</p>
+      <p style="margin:0 0 18px;line-height:1.5;">Hvis der er fejl eller indsigelser, skal de sendes skriftligt inden samme frist med angivelse af, hvilke registreringer der bestrides, og hvorfor.</p>
+      ${loginBlock}
+      <h1 style="margin:24px 0 14px;font-size:20px;color:#111827;">Timeseddel til godkendelse</h1>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Oplysninger</h2>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:22px;">
+        <tbody>
+          ${htmlRow("Vikar", t.vikar || "—")}
+          ${htmlRow("Brugervirksomhed", t.brugervirksomhed || "—")}
+          ${htmlRow("Kontaktperson", t.kontaktperson || "—")}
+          ${htmlRow("Kontaktperson telefon", t.kontaktpersonPhone || "—")}
+          ${htmlRow("Reference", t.referenceNo || "—")}
+          ${htmlRow("Arbejdssted", t.arbejdssted || "—")}
+          ${htmlRow("Uge og dato", `Uge ${weekNumber(t.weekStart)} (${formatDateLabel(t.weekStart)} – ${formatDateLabel(addDaysToISODate(t.weekStart, 6))})`)}
+        </tbody>
+      </table>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Registreringer</h2>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:22px;">
+        <tbody>${dayRows}</tbody>
+      </table>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Samlet timetal</h2>
+      <p style="margin:0 0 22px;font-size:18px;font-weight:700;">${calc.total.toFixed(2)} timer</p>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Manuelle tillæg</h2>
+      <p style="margin:0 0 22px;line-height:1.5;">${htmlEscape(manualAllowanceLines.join(" · "))}</p>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Noter</h2>
+      <p style="margin:0 0 22px;line-height:1.5;">${htmlEscape(t.notes || "—")}</p>
+      <h2 style="margin:0 0 10px;font-size:16px;color:#111827;">Godkendelse og indsigelser</h2>
+      <p style="margin:0 0 12px;line-height:1.5;">Timesedlen skal godkendes eller bestrides skriftligt senest tirsdag efter fremsendelsen.</p>
+      <p style="margin:0 0 22px;line-height:1.5;">Hvis der ikke modtages godkendelse eller skriftlig indsigelse inden fristen, anses timesedlen som godkendt i henhold til de aftalte forretningsbetingelser.</p>
+      ${options.footerMessage ? `<p style="margin:0 0 22px;line-height:1.5;">${htmlEscape(options.footerMessage)}</p>` : ""}
+      <p style="margin:0;line-height:1.5;">Med venlig hilsen<br />Sub-Z<br />40601253<br />timesheet@send.mathiasfriisandersen.dk</p>
+    </div>
+  </body>
+</html>`;
+}
+
+export function workerSubmissionReceiptSubject(t: Timesheet): string {
+  const week = weekNumber(t.weekStart);
+  if (t.workerLanguage === "en") return `Timesheet sent for approval – week ${week}`;
+  if (t.workerLanguage === "pl")
+    return `Karta czasu pracy wysłana do zatwierdzenia – tydzień ${week}`;
+  return `Timeseddel sendt til godkendelse – uge ${week}`;
+}
+
+export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptions = {}): string {
+  const language = normalizeWorkerLanguage(t.workerLanguage);
+  const calc = calculateTimesheet(t);
+  const manualAllowanceLines: string[] = [];
+  if (isIndustriensAgreement(t.selectedAgreementId) && calc.delayedMealBreakDays > 0) {
+    manualAllowanceLines.push(delayedMealBreakSummaryText(calc.delayedMealBreakDays));
+  }
+  if (manualAllowanceLines.length === 0) {
+    manualAllowanceLines.push(
+      language === "en"
+        ? "No manual allowances registered."
+        : language === "pl"
+          ? "Brak zarejestrowanych dodatków ręcznych."
+          : "Ingen manuelle tillæg registreret.",
+    );
+  }
+
+  const weekdayLabels =
+    language === "en"
+      ? ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      : language === "pl"
+        ? ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"]
+        : WEEKDAYS;
+  const absenceLabels: Record<AbsenceType, string> =
+    language === "en"
+      ? { none: "", sick: "Sick", vacation: "Vacation", dayoff: "Day off" }
+      : language === "pl"
+        ? { none: "", sick: "Choroba", vacation: "Urlop", dayoff: "Dzień wolny" }
+        : ABSENCE_LABEL;
+
+  const dayLines = weekdayLabels.map((name, index) => {
     const day = t.days[index];
     const date = addDaysToISODate(t.weekStart, index);
     if (day.absence !== "none") {
-      return `${name} ${formatDateLabel(date)}: ${ABSENCE_LABEL[day.absence]}`;
+      return `${name} ${formatDateLabel(date)}: ${absenceLabels[day.absence]}`;
     }
     if (!day.start || !day.end) {
-      return `${name} ${formatDateLabel(date)}: Ingen registrering`;
+      return `${name} ${formatDateLabel(date)}: ${
+        language === "en" ? "No registration" : language === "pl" ? "Brak rejestracji" : "Ingen registrering"
+      }`;
     }
-    return `${name} ${formatDateLabel(date)}: ${day.start}–${day.end}, pause ${
+    const pause = language === "pl" ? "przerwa" : "pause";
+    const hours = language === "en" ? "hours" : language === "pl" ? "godz." : "timer";
+    return `${name} ${formatDateLabel(date)}: ${day.start}–${day.end}, ${pause} ${
       day.pause
-    } min. – ${dayHours(day).toFixed(2)} timer`;
+    } min. – ${dayHours(day).toFixed(2)} ${hours}`;
   });
+
+  if (language === "en") {
+    return [
+      `Hi ${t.vikar || "worker"}`,
+      "",
+      "Thank you for your submission.",
+      "",
+      `Your timesheet for week ${weekNumber(t.weekStart)} has been sent for approval to ${
+        t.kontaktperson || "the contact person"
+      } at ${t.brugervirksomhed || "the company"}.`,
+      "",
+      "INFORMATION",
+      `Worker: ${t.vikar || "—"}`,
+      `Company: ${t.brugervirksomhed || "—"}`,
+      `Contact person: ${t.kontaktperson || "—"}`,
+      `Phone: ${t.kontaktpersonPhone || "—"}`,
+      `Reference: ${t.referenceNo || "—"}`,
+      `Workplace: ${t.arbejdssted || "—"}`,
+      `Period: Week ${weekNumber(t.weekStart)} – ${formatDateLabel(t.weekStart)} to ${formatDateLabel(
+        addDaysToISODate(t.weekStart, 6),
+      )}`,
+      "",
+      "REGISTERED HOURS",
+      ...dayLines,
+      "",
+      "TOTAL HOURS",
+      `${calc.total.toFixed(2)} hours`,
+      "",
+      "MANUAL ALLOWANCES",
+      ...manualAllowanceLines,
+      "",
+      "NOTES FROM WORKER",
+      t.notes || "—",
+      "",
+      "STATUS",
+      "The timesheet has been sent to the contact person for approval.",
+      "",
+      ...(options.footerMessage ? [options.footerMessage, ""] : []),
+      "If you have questions about the registration, please contact us as soon as possible.",
+      "",
+      "Best regards",
+      "Sub-Z",
+      "40601253",
+      "timesheet@send.mathiasfriisandersen.dk",
+    ].join("\n");
+  }
+
+  if (language === "pl") {
+    return [
+      `Cześć ${t.vikar || "pracowniku"}`,
+      "",
+      "Dziękujemy za przesłanie karty czasu pracy.",
+      "",
+      `Twoja karta czasu pracy za tydzień ${weekNumber(t.weekStart)} została wysłana do zatwierdzenia do ${
+        t.kontaktperson || "osoby kontaktowej"
+      } w ${t.brugervirksomhed || "firmie"}.`,
+      "",
+      "INFORMACJE",
+      `Pracownik: ${t.vikar || "—"}`,
+      `Firma: ${t.brugervirksomhed || "—"}`,
+      `Osoba kontaktowa: ${t.kontaktperson || "—"}`,
+      `Telefon: ${t.kontaktpersonPhone || "—"}`,
+      `Referencja: ${t.referenceNo || "—"}`,
+      `Miejsce pracy: ${t.arbejdssted || "—"}`,
+      `Okres: tydzień ${weekNumber(t.weekStart)} – ${formatDateLabel(t.weekStart)} do ${formatDateLabel(
+        addDaysToISODate(t.weekStart, 6),
+      )}`,
+      "",
+      "ZAREJESTROWANE GODZINY",
+      ...dayLines,
+      "",
+      "ŁĄCZNA LICZBA GODZIN",
+      `${calc.total.toFixed(2)} godz.`,
+      "",
+      "DODATKI RĘCZNE",
+      ...manualAllowanceLines,
+      "",
+      "NOTATKI OD PRACOWNIKA",
+      t.notes || "—",
+      "",
+      "STATUS",
+      "Karta czasu pracy została wysłana do osoby kontaktowej w celu zatwierdzenia.",
+      "",
+      ...(options.footerMessage ? [options.footerMessage, ""] : []),
+      "W razie pytań dotyczących rejestracji skontaktuj się z nami jak najszybciej.",
+      "",
+      "Z poważaniem",
+      "Sub-Z",
+      "40601253",
+      "timesheet@send.mathiasfriisandersen.dk",
+    ].join("\n");
+  }
 
   return [
     `Hej ${t.vikar || "vikar"}`,
@@ -2182,12 +2448,87 @@ export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptio
 }
 
 export function workerInviteEmailSubject(t: Timesheet): string {
+  if (t.workerLanguage === "en")
+    return `Timesheet created – ${t.brugervirksomhed} – week ${weekNumber(t.weekStart)}`;
+  if (t.workerLanguage === "pl")
+    return `Utworzono kartę czasu pracy – ${t.brugervirksomhed} – tydzień ${weekNumber(t.weekStart)}`;
   return `Timeseddel oprettet – ${t.brugervirksomhed} – uge ${weekNumber(t.weekStart)}`;
 }
 
 export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
+  const language = normalizeWorkerLanguage(t.workerLanguage);
   const calc = calculateTimesheet(t);
   const defaultWorkday = t.days.find((day) => day.start && day.end);
+
+  if (language === "en") {
+    return [
+      `Hi ${t.vikar || "worker"}`,
+      "",
+      "Sub-Z has created a timesheet for you with the following information:",
+      "",
+      "ASSIGNMENT INFORMATION",
+      `Worker name: ${t.vikar}`,
+      `Worker email: ${t.vikarEmail}`,
+      `Company: ${t.brugervirksomhed}`,
+      `Workplace address: ${t.arbejdssted}`,
+      `Contact person: ${t.kontaktperson}`,
+      `Contact phone: ${t.kontaktpersonPhone || "—"}`,
+      `Contact email: ${t.kontaktpersonEmail}`,
+      `Reference no.: ${t.referenceNo || "—"}`,
+      `Collective agreement: ${calc.agreementName || "—"}`,
+      `Work time: ${defaultWorkday?.start || "07:00"}–${defaultWorkday?.end || "15:30"}, break ${
+        defaultWorkday?.pause || 60
+      } min`,
+      `Start date/week: Week ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
+      "",
+      "LOGIN",
+      "Open the link below and log in the first time with this one-time code:",
+      "",
+      t.workerAccessCode || "—",
+      "",
+      "After your first login, you will be asked to change the password.",
+      "The invitation link is valid for 7 days from creation.",
+      "",
+      "Open the timesheet using the button/link in the email.",
+      "",
+      "When you have completed or checked the hours, submit the timesheet for approval.",
+    ].join("\n");
+  }
+
+  if (language === "pl") {
+    return [
+      `Cześć ${t.vikar || "pracowniku"}`,
+      "",
+      "Sub-Z utworzył dla Ciebie kartę czasu pracy z następującymi informacjami:",
+      "",
+      "INFORMACJE O ZLECENIU",
+      `Imię i nazwisko pracownika: ${t.vikar}`,
+      `E-mail pracownika: ${t.vikarEmail}`,
+      `Firma: ${t.brugervirksomhed}`,
+      `Adres/miejsce pracy: ${t.arbejdssted}`,
+      `Osoba kontaktowa: ${t.kontaktperson}`,
+      `Telefon kontaktowy: ${t.kontaktpersonPhone || "—"}`,
+      `E-mail kontaktowy: ${t.kontaktpersonEmail}`,
+      `Nr referencyjny: ${t.referenceNo || "—"}`,
+      `Układ zbiorowy: ${calc.agreementName || "—"}`,
+      `Czas pracy: ${defaultWorkday?.start || "07:00"}–${defaultWorkday?.end || "15:30"}, przerwa ${
+        defaultWorkday?.pause || 60
+      } min`,
+      `Data startu/tydzień: tydzień ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
+      "",
+      "LOGOWANIE",
+      "Otwórz poniższy link i przy pierwszym logowaniu użyj tego kodu jednorazowego:",
+      "",
+      t.workerAccessCode || "—",
+      "",
+      "Po pierwszym logowaniu zostaniesz poproszony o zmianę hasła.",
+      "Link zaproszenia jest ważny przez 7 dni od utworzenia.",
+      "",
+      "Otwórz kartę czasu pracy za pomocą przycisku/linku w wiadomości.",
+      "",
+      "Po uzupełnieniu lub sprawdzeniu godzin wyślij kartę czasu pracy do zatwierdzenia.",
+    ].join("\n");
+  }
 
   return [
     `Hej ${t.vikar || "vikar"}`,
@@ -2239,46 +2580,122 @@ function htmlRow(label: string, value: string): string {
 }
 
 export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
+  const language = normalizeWorkerLanguage(t.workerLanguage);
   const calc = calculateTimesheet(t);
   const defaultWorkday = t.days.find((day) => day.start && day.end);
-  const safeName = htmlEscape(t.vikar || "vikar");
+  const safeName = htmlEscape(t.vikar || (language === "en" ? "worker" : language === "pl" ? "pracowniku" : "vikar"));
   const safeInviteUrl = htmlEscape(inviteUrl);
+  const copy =
+    language === "en"
+      ? {
+          htmlLang: "en",
+          greeting: "Hi",
+          intro:
+            "Sub-Z has created a timesheet for you. Use the button below to open the timesheet.",
+          button: "Open timesheet",
+          loginIntro: "Log in the first time with this one-time code:",
+          validity:
+            "After your first login, you will be asked to change the password. The invitation link is valid for 7 days from creation.",
+          footer:
+            "When you have completed or checked the hours, submit the timesheet for approval.",
+          workerName: "Worker name",
+          company: "Company",
+          workplace: "Workplace",
+          contact: "Contact person",
+          contactPhone: "Contact phone",
+          reference: "Reference no.",
+          agreement: "Collective agreement",
+          wage: "Hourly wage",
+          workTime: "Work time",
+          startWeek: "Start date/week",
+          pause: "break",
+          week: "Week",
+        }
+      : language === "pl"
+        ? {
+            htmlLang: "pl",
+            greeting: "Cześć",
+            intro:
+              "Sub-Z utworzył dla Ciebie kartę czasu pracy. Użyj przycisku poniżej, aby ją otworzyć.",
+            button: "Otwórz kartę czasu pracy",
+            loginIntro: "Przy pierwszym logowaniu użyj tego kodu jednorazowego:",
+            validity:
+              "Po pierwszym logowaniu zostaniesz poproszony o zmianę hasła. Link zaproszenia jest ważny przez 7 dni od utworzenia.",
+            footer:
+              "Po uzupełnieniu lub sprawdzeniu godzin wyślij kartę czasu pracy do zatwierdzenia.",
+            workerName: "Pracownik",
+            company: "Firma",
+            workplace: "Miejsce pracy",
+            contact: "Osoba kontaktowa",
+            contactPhone: "Telefon kontaktowy",
+            reference: "Nr referencyjny",
+            agreement: "Układ zbiorowy",
+            wage: "Stawka godzinowa",
+            workTime: "Czas pracy",
+            startWeek: "Data startu/tydzień",
+            pause: "przerwa",
+            week: "Tydzień",
+          }
+        : {
+            htmlLang: "da",
+            greeting: "Hej",
+            intro:
+              "Sub-Z har oprettet en timeseddel til dig. Brug knappen herunder til at åbne timesedlen.",
+            button: "Åbn timeseddel",
+            loginIntro: "Log ind første gang med denne engangskode:",
+            validity:
+              "Efter første login bliver du bedt om at ændre adgangskoden. Invitationslinket er gyldigt i 7 dage fra oprettelse.",
+            footer:
+              "Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.",
+            workerName: "Vikarnavn",
+            company: "Brugervirksomhed",
+            workplace: "Arbejdssted",
+            contact: "Kontaktperson",
+            contactPhone: "Kontaktperson telefon",
+            reference: "Reference nr.",
+            agreement: "Overenskomst",
+            wage: "Timeløn",
+            workTime: "Arbejdstid",
+            startWeek: "Startdato/uge",
+            pause: "pause",
+            week: "Uge",
+          };
 
   return `<!doctype html>
-<html lang="da">
+<html lang="${copy.htmlLang}">
   <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
     <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
-      <p style="margin:0 0 16px;">Hej ${safeName}</p>
-      <p style="margin:0 0 18px;line-height:1.5;">Sub-Z har oprettet en timeseddel til dig. Brug knappen herunder til at åbne timesedlen.</p>
+      <p style="margin:0 0 16px;">${copy.greeting} ${safeName}</p>
+      <p style="margin:0 0 18px;line-height:1.5;">${htmlEscape(copy.intro)}</p>
       <p style="margin:0 0 24px;">
-        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">Åbn timeseddel</a>
+        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">${htmlEscape(copy.button)}</a>
       </p>
       <p style="margin:0 0 8px;font-weight:700;">Login</p>
-      <p style="margin:0 0 6px;line-height:1.5;">Log ind første gang med denne engangskode:</p>
+      <p style="margin:0 0 6px;line-height:1.5;">${htmlEscape(copy.loginIntro)}</p>
       <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
         t.workerAccessCode || "—",
       )}</p>
-      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">Efter første login bliver du bedt om at ændre adgangskoden. Invitationslinket er gyldigt i 7 dage fra oprettelse.</p>
+      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">${htmlEscape(copy.validity)}</p>
       <table style="border-collapse:collapse;width:100%;font-size:14px;">
         <tbody>
-          ${htmlRow("Vikarnavn", t.vikar)}
-          ${htmlRow("Brugervirksomhed", t.brugervirksomhed)}
-          ${htmlRow("Arbejdssted", t.arbejdssted)}
-          ${htmlRow("Kontaktperson", t.kontaktperson)}
-          ${htmlRow("Kontaktperson telefon", t.kontaktpersonPhone || "—")}
-          ${htmlRow("Reference nr.", t.referenceNo || "—")}
-          ${htmlRow("Overenskomst", calc.agreementName || "—")}
-          ${htmlRow("Timeløn", t.hourlyWage ? formatDkk(t.hourlyWage) : "—")}
+          ${htmlRow(copy.workerName, t.vikar)}
+          ${htmlRow(copy.company, t.brugervirksomhed)}
+          ${htmlRow(copy.workplace, t.arbejdssted)}
+          ${htmlRow(copy.contact, t.kontaktperson)}
+          ${htmlRow(copy.contactPhone, t.kontaktpersonPhone || "—")}
+          ${htmlRow(copy.reference, t.referenceNo || "—")}
+          ${htmlRow(copy.agreement, calc.agreementName || "—")}
+          ${htmlRow(copy.wage, t.hourlyWage ? formatDkk(t.hourlyWage) : "—")}
           ${htmlRow(
-            "Arbejdstid",
-            `${defaultWorkday?.start || "—"}–${defaultWorkday?.end || "—"}, pause ${
+            copy.workTime,
+            `${defaultWorkday?.start || "—"}–${defaultWorkday?.end || "—"}, ${copy.pause} ${
               defaultWorkday?.pause || 0
             } min`,
           )}
-          ${htmlRow("Startdato/uge", `Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`)}
+          ${htmlRow(copy.startWeek, `${copy.week} ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`)}
         </tbody>
       </table>
-      <p style="margin:22px 0 0;color:#4b5563;line-height:1.5;">Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.</p>
+      <p style="margin:22px 0 0;color:#4b5563;line-height:1.5;">${htmlEscape(copy.footer)}</p>
     </div>
   </body>
 </html>`;
@@ -2312,6 +2729,43 @@ export function timesheetsToCsv(list: Timesheet[]): string {
       const calc = calculateTimesheet(t);
       return [
         t.vikar,
+        t.brugervirksomhed,
+        t.kontaktperson,
+        t.referenceNo,
+        weekNumber(t.weekStart),
+        formatWeekRange(t.weekStart),
+        calc.agreementId,
+        calc.agreementName,
+        calc.rateValidationStatus,
+        t.localAgreementApplies ? "Ja" : "Nej",
+        STATUS_LABEL[t.status],
+        totalHours(t.days).toFixed(2),
+      ];
+    }),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\n")}`;
+}
+
+export function timesheetsToCodeCsv(list: Timesheet[]): string {
+  const rows = [
+    [
+      "Kode",
+      "Virksomhed",
+      "Kontaktperson",
+      "Reference",
+      "Uge",
+      "Periode",
+      "Overenskomst-ID",
+      "Overenskomst",
+      "PDF-status",
+      "Lokalaftale",
+      "Status",
+      "Timer",
+    ],
+    ...list.map((t) => {
+      const calc = calculateTimesheet(t);
+      return [
+        t.vikarCode || "",
         t.brugervirksomhed,
         t.kontaktperson,
         t.referenceNo,

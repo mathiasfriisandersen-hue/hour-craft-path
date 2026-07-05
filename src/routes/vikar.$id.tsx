@@ -9,7 +9,6 @@ import {
   formatWeekRange,
   getById,
   isIndustriensAgreement,
-  mailtoUrl,
   listCompanies,
   upsert,
   validate,
@@ -114,10 +113,7 @@ function VikarEdit() {
           : "Timesedlen er markeret som sendt. Mailsystemet er ikke konfigureret endnu, så din mailapp åbnes som fallback.",
       );
     } catch {
-      setMessage(
-        "Mailsystemet kunne ikke sende lige nu. Timesedlen er markeret som sendt, og mailkladde åbnes som fallback.",
-      );
-      window.location.href = mailtoUrl(saved);
+      setMessage("Timesedlen er markeret som sendt, men mailsystemet kunne ikke sende lige nu.");
     } finally {
       setSendingMail(false);
     }
@@ -346,6 +342,23 @@ function VikarEdit() {
                       onEndChange={(value) => updateDayPauseRange(index, { pause2End: value })}
                     />
                   </Field>
+                  <label
+                    className={cn(
+                      "col-span-2 inline-flex min-h-9 items-center gap-2 rounded-md border border-input px-2 text-sm",
+                      locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-accent",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 shrink-0 accent-primary"
+                      checked={day.absence === "sick"}
+                      disabled={locked}
+                      onChange={(e) =>
+                        updateDay(index, { absence: e.target.checked ? "sick" : "none" })
+                      }
+                    />
+                    <span>Syg</span>
+                  </label>
                   {showDelayedMealBreak && (
                     <label
                       className={cn(
@@ -394,6 +407,7 @@ function VikarEdit() {
                   "Pause 1",
                   "Pause 2",
                   ...(showDelayedMealBreak ? ["Udskudt spisepause"] : []),
+                  "Syg",
                 ].map((head) => (
                   <th key={head} className="px-3 py-2 font-medium">
                     {head}
@@ -497,6 +511,27 @@ function VikarEdit() {
                         </label>
                       </td>
                     )}
+                    <td className="px-3 py-2">
+                      <label
+                        className={cn(
+                          "inline-flex min-h-8 items-center gap-2 rounded-md border border-input px-2 text-sm",
+                          locked
+                            ? "cursor-not-allowed opacity-60"
+                            : "cursor-pointer hover:bg-accent",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-primary"
+                          checked={day.absence === "sick"}
+                          disabled={locked}
+                          onChange={(e) =>
+                            updateDay(index, { absence: e.target.checked ? "sick" : "none" })
+                          }
+                        />
+                        <span>Syg</span>
+                      </label>
+                    </td>
                   </tr>
                 );
               })}

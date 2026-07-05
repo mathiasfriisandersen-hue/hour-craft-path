@@ -38,6 +38,7 @@ export function AppShell({
           { to: "/admin/calendar", label: "Kalender" },
           { to: "/admin/users", label: "Brugere" },
           { to: "/admin/statistics", label: "Statistik" },
+          { to: "/admin/invoice-payroll", label: "Faktura & løn" },
         ]
       : [
           { to: adminBase, label: "Overblik" },

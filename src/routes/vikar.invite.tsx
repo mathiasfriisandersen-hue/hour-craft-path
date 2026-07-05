@@ -116,7 +116,9 @@ function VikarInvitePage() {
       workerAccessCode: newCode,
       workerMustChangeAccessCode: false,
     });
-    login("vikar");
+    login("vikar", {
+      workerIdentity: { name: saved.vikar, email: saved.vikarEmail },
+    });
     navigate({ to: "/vikar/$id", params: { id: saved.id }, replace: true });
   };
 

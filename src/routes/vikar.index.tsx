@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell, StatusBadge } from "@/components/app-shell";
+import { useAuth } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import { formatWeekRange, remove, totalHours, weekNumber } from "@/lib/timesheet-store";
 
@@ -9,7 +10,21 @@ export const Route = createFileRoute("/vikar/")({
 });
 
 function VikarList() {
-  const list = useTimesheets();
+  const all = useTimesheets();
+  const { workerIdentity } = useAuth();
+  const workerNameKey = personKey(workerIdentity?.name ?? "");
+  const workerEmailKey = personKey(workerIdentity?.email ?? "");
+  const list =
+    workerNameKey || workerEmailKey
+      ? all.filter((timesheet) => {
+          const timesheetNameKey = personKey(timesheet.vikar);
+          const timesheetEmailKey = personKey(timesheet.vikarEmail);
+          return Boolean(
+            (workerNameKey && timesheetNameKey === workerNameKey) ||
+              (workerEmailKey && timesheetEmailKey === workerEmailKey),
+          );
+        })
+      : all;
 
   return (
     <AppShell allow={["vikar"]}>
@@ -139,4 +154,8 @@ function VikarList() {
       </div>
     </AppShell>
   );
+}
+
+function personKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }

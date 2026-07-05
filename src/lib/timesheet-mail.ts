@@ -1,5 +1,6 @@
 import {
   contactPersonEmailBody,
+  contactPersonEmailHtml,
   emailBody,
   emailSubject,
   formatWeekRange,
@@ -16,6 +17,7 @@ import {
   type CompanyProject,
   type KnownWorker,
   type Timesheet,
+  type WorkerLanguage,
 } from "./timesheet-store";
 import { getCollectiveAgreementById } from "./collectiveAgreements";
 import { addDaysToISODate } from "./danishHolidays";
@@ -89,6 +91,10 @@ export async function sendTimesheetEmail(
       replyTo: contactTimesheet.vikarEmail,
       subject: emailSubject(contactTimesheet),
       text: contactPersonEmailBody(contactTimesheet, {
+        footerMessage: options.contactFooterMessage,
+        contactInviteUrl,
+      }),
+      html: contactPersonEmailHtml(contactTimesheet, {
         footerMessage: options.contactFooterMessage,
         contactInviteUrl,
       }),
@@ -298,11 +304,59 @@ export async function sendContactPersonInviteEmail(
   return "api";
 }
 
-function workerConsentRenewalSubject(): string {
+function normalizeWorkerLanguage(value: unknown): WorkerLanguage {
+  return value === "en" || value === "pl" ? value : "da";
+}
+
+function workerConsentRenewalSubject(language: WorkerLanguage = "da"): string {
+  if (language === "en") return "Renew your consent to job offers from Sub-Z";
+  if (language === "pl") return "Odnów zgodę na oferty pracy od Sub-Z";
   return "Forny samtykke til jobhenvendelser fra Sub-Z";
 }
 
-function workerConsentRenewalBody(workerName: string, consentUrl: string): string {
+function workerConsentRenewalBody(
+  workerName: string,
+  consentUrl: string,
+  language: WorkerLanguage = "da",
+): string {
+  if (language === "en") {
+    return [
+      `Hi ${workerName || "worker"}`,
+      "",
+      "We are contacting you because your consent for Sub-Z to contact you about relevant job opportunities must be renewed.",
+      "",
+      "If you still want to be registered with Sub-Z and receive job opportunities, confirm your consent here:",
+      "",
+      consentUrl,
+      "",
+      "When you confirm, your consent will be renewed and you can again receive relevant job opportunities from Sub-Z.",
+      "",
+      "If you do not want to renew your consent, you do not need to do anything.",
+      "",
+      "Best regards",
+      "Sub-Z ApS",
+    ].join("\n");
+  }
+
+  if (language === "pl") {
+    return [
+      `Cześć ${workerName || "pracowniku"}`,
+      "",
+      "Kontaktujemy się, ponieważ Twoja zgoda na kontakt ze strony Sub-Z w sprawie odpowiednich ofert pracy musi zostać odnowiona.",
+      "",
+      "Jeśli nadal chcesz być zarejestrowany w Sub-Z i otrzymywać oferty pracy, potwierdź zgodę tutaj:",
+      "",
+      consentUrl,
+      "",
+      "Po potwierdzeniu zgoda zostanie odnowiona i będziesz ponownie otrzymywać odpowiednie oferty pracy od Sub-Z.",
+      "",
+      "Jeśli nie chcesz odnawiać zgody, nie musisz nic robić.",
+      "",
+      "Z poważaniem",
+      "Sub-Z ApS",
+    ].join("\n");
+  }
+
   return [
     `Hej ${workerName || "vikar"}`,
     "",
@@ -325,10 +379,12 @@ export async function sendWorkerConsentRenewalEmail(
   workerName: string,
   workerEmail: string,
   consentUrl: string,
+  workerLanguage: WorkerLanguage = "da",
 ): Promise<TimesheetMailResult> {
   const mailApiUrl = await timesheetMailApiUrl();
-  const subject = workerConsentRenewalSubject();
-  const text = workerConsentRenewalBody(workerName, consentUrl);
+  const language = normalizeWorkerLanguage(workerLanguage);
+  const subject = workerConsentRenewalSubject(language);
+  const text = workerConsentRenewalBody(workerName, consentUrl, language);
 
   if (!mailApiUrl) {
     window.location.href = `mailto:${workerEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
@@ -360,6 +416,8 @@ type ProjectConfirmationInput = {
   company: Company;
   project: CompanyProject;
   worker?: KnownWorker;
+  workerInviteUrl?: string;
+  workerAccessCode?: string;
 };
 
 const PROJECT_MAIL_SENDER_NAME = "Sub-Z";
@@ -384,6 +442,19 @@ function projectDate(value: string): string {
   if (!value) return "—";
   const [year, month, day] = value.split("-");
   return year && month && day ? `${day}/${month}/${year}` : value;
+}
+
+function projectWorkerLanguage(worker?: KnownWorker): WorkerLanguage {
+  return normalizeWorkerLanguage(worker?.language);
+}
+
+function projectWorkerSubject({ company, project, worker }: ProjectConfirmationInput): string {
+  if (!worker) return "";
+  const projectName = project.name || company.name;
+  const language = projectWorkerLanguage(worker);
+  if (language === "en") return `Project start – ${worker.name} – ${projectName}`;
+  if (language === "pl") return `Rozpoczęcie projektu – ${worker.name} – ${projectName}`;
+  return `Projektopstart – ${worker.name} – ${projectName}`;
 }
 
 function projectMailLines({ company, project, worker }: ProjectConfirmationInput): string[] {
@@ -454,18 +525,364 @@ function projectMailLines({ company, project, worker }: ProjectConfirmationInput
   ];
 }
 
+function projectMailHtml({ company, project, worker }: ProjectConfirmationInput): string {
+  const contactName = project.contactName || company.contactName || "kontaktperson";
+  const intro = worker
+    ? `Vi bekræfter hermed, at ${worker.name} starter hos ${company.name} på projektet ${project.name || "—"}.`
+    : `Vi bekræfter hermed opstart af projektet ${project.name || "—"} hos ${company.name}.`;
+  const detailsTitle = worker
+    ? "Medarbejderen er oprettet med følgende oplysninger:"
+    : "Projektet er oprettet med følgende oplysninger:";
+  const footerText = worker
+    ? "Medarbejderen bruger disse oplysninger som udgangspunkt ved registrering af timer. Hvis den faktiske arbejdstid afviger, kan medarbejderen rette timerne på timesedlen."
+    : "De tilknyttede vikarer vil bruge disse oplysninger som udgangspunkt ved registrering af timer. Hvis arbejdstiden ændrer sig, kan vikaren stadig rette sine faktiske timer på timesedlen.";
+
+  return `<!doctype html>
+<html lang="da">
+  <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+      <p style="margin:0 0 16px;">Hej ${htmlEscape(contactName)}</p>
+      <p style="margin:0 0 18px;line-height:1.5;">${htmlEscape(intro)}</p>
+      <p style="margin:0 0 10px;font-weight:700;">${htmlEscape(detailsTitle)}</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:22px;">
+        <tbody>
+          ${worker ? htmlRow("Medarbejder", worker.name) : htmlRow("Projekt", project.name || "—")}
+          ${worker ? htmlRow("Telefon", worker.phone || "—") : ""}
+          ${worker ? htmlRow("Mail", worker.email) : ""}
+          ${htmlRow("Opstartsdato", projectDate(project.startDate))}
+          ${htmlRow("Projektafslutning", projectDate(project.endDate))}
+          ${htmlRow("Reference nr.", project.referenceNo || "—")}
+          ${htmlRow("Overenskomst", projectAgreementName(company, project))}
+          ${htmlRow("Fagområde", projectTradeSkills(project))}
+          ${htmlRow("Kompetencer", projectCompetencies(project, worker))}
+          ${htmlRow("Arbejdstid", `${project.defaultStart || "—"} – ${project.defaultEnd || "—"}`)}
+          ${htmlRow("Pause 1", `${project.pauseStart || "—"} – ${project.pauseEnd || "—"}`)}
+          ${htmlRow("Pause 2", `${project.pause2Start || "—"} – ${project.pause2End || "—"}`)}
+        </tbody>
+      </table>
+      <p style="margin:0 0 16px;line-height:1.5;">${htmlEscape(footerText)}</p>
+      <p style="margin:0 0 16px;line-height:1.5;">Når en timeseddel er indsendt, modtager du den til gennemgang og godkendelse.</p>
+      <p style="margin:0 0 22px;line-height:1.5;">Giv gerne besked, hvis der er fejl i oplysningerne inden opstart.</p>
+      <p style="margin:0;line-height:1.5;">Venlig hilsen<br />${htmlEscape(PROJECT_MAIL_SENDER_NAME)}<br />${htmlEscape(
+        PROJECT_MAIL_COMPANY_NAME,
+      )}<br />${htmlEscape(PROJECT_MAIL_PHONE)}<br />${htmlEscape(PROJECT_MAIL_EMAIL)}</p>
+    </div>
+  </body>
+</html>`;
+}
+
+function projectWorkerMailLines({
+  company,
+  project,
+  worker,
+  workerInviteUrl,
+  workerAccessCode,
+}: ProjectConfirmationInput): string[] {
+  if (!worker) return [];
+  const language = projectWorkerLanguage(worker);
+
+  if (language === "en") {
+    return [
+      `Hi ${worker.name}`,
+      "",
+      `You have been assigned to the project ${project.name || "—"} at ${company.name}.`,
+      "",
+      "You have been created with the following information:",
+      "",
+      `Worker: ${worker.name}`,
+      `Phone: ${worker.phone || "—"}`,
+      `Email: ${worker.email}`,
+      `Start date: ${projectDate(project.startDate)}`,
+      `Project end: ${projectDate(project.endDate)}`,
+      `Reference no.: ${project.referenceNo || "—"}`,
+      `Collective agreement: ${projectAgreementName(company, project)}`,
+      `Trade area: ${projectTradeSkills(project)}`,
+      `Competencies: ${projectCompetencies(project, worker)}`,
+      "",
+      "Work time:",
+      `${project.defaultStart || "—"} – ${project.defaultEnd || "—"}`,
+      "",
+      "Breaks:",
+      `Break 1: ${project.pauseStart || "—"} – ${project.pauseEnd || "—"}`,
+      `Break 2: ${project.pause2Start || "—"} – ${project.pause2End || "—"}`,
+      "",
+      "Use this information as the starting point when registering your hours. If your actual work time differs, you can edit the hours on the timesheet.",
+      "",
+      ...(workerInviteUrl
+        ? [
+            "LOGIN",
+            "Open the link below to log in to your timesheet:",
+            "",
+            workerInviteUrl,
+            "",
+            `One-time code: ${workerAccessCode || "—"}`,
+            "",
+            "The link is valid for 7 days from creation.",
+            "",
+            "You will be asked to use the one-time code and choose your own password.",
+            "",
+          ]
+        : []),
+      "Please let us know if any of the information is incorrect before start.",
+      "",
+      "Best regards",
+      PROJECT_MAIL_SENDER_NAME,
+      PROJECT_MAIL_COMPANY_NAME,
+      PROJECT_MAIL_PHONE,
+      PROJECT_MAIL_EMAIL,
+    ];
+  }
+
+  if (language === "pl") {
+    return [
+      `Cześć ${worker.name}`,
+      "",
+      `Zostałeś przypisany do projektu ${project.name || "—"} w firmie ${company.name}.`,
+      "",
+      "Utworzono Cię z następującymi informacjami:",
+      "",
+      `Pracownik: ${worker.name}`,
+      `Telefon: ${worker.phone || "—"}`,
+      `E-mail: ${worker.email}`,
+      `Data rozpoczęcia: ${projectDate(project.startDate)}`,
+      `Zakończenie projektu: ${projectDate(project.endDate)}`,
+      `Nr referencyjny: ${project.referenceNo || "—"}`,
+      `Układ zbiorowy: ${projectAgreementName(company, project)}`,
+      `Obszar zawodowy: ${projectTradeSkills(project)}`,
+      `Kompetencje: ${projectCompetencies(project, worker)}`,
+      "",
+      "Czas pracy:",
+      `${project.defaultStart || "—"} – ${project.defaultEnd || "—"}`,
+      "",
+      "Przerwy:",
+      `Przerwa 1: ${project.pauseStart || "—"} – ${project.pauseEnd || "—"}`,
+      `Przerwa 2: ${project.pause2Start || "—"} – ${project.pause2End || "—"}`,
+      "",
+      "Użyj tych informacji jako punktu wyjścia przy rejestracji godzin. Jeśli rzeczywisty czas pracy jest inny, możesz poprawić godziny na karcie czasu pracy.",
+      "",
+      ...(workerInviteUrl
+        ? [
+            "LOGOWANIE",
+            "Otwórz poniższy link, aby zalogować się do karty czasu pracy:",
+            "",
+            workerInviteUrl,
+            "",
+            `Kod jednorazowy: ${workerAccessCode || "—"}`,
+            "",
+            "Link jest ważny przez 7 dni od utworzenia.",
+            "",
+            "Zostaniesz poproszony o użycie kodu jednorazowego i wybranie własnego hasła.",
+            "",
+          ]
+        : []),
+      "Daj nam znać przed rozpoczęciem, jeśli informacje są nieprawidłowe.",
+      "",
+      "Z poważaniem",
+      PROJECT_MAIL_SENDER_NAME,
+      PROJECT_MAIL_COMPANY_NAME,
+      PROJECT_MAIL_PHONE,
+      PROJECT_MAIL_EMAIL,
+    ];
+  }
+
+  return [
+    `Hej ${worker.name}`,
+    "",
+    `Du er tilknyttet projektet ${project.name || "—"} hos ${company.name}.`,
+    "",
+    "Du er oprettet med følgende oplysninger:",
+    "",
+    `Medarbejder: ${worker.name}`,
+    `Telefon: ${worker.phone || "—"}`,
+    `Mail: ${worker.email}`,
+    `Opstartsdato: ${projectDate(project.startDate)}`,
+    `Projektafslutning: ${projectDate(project.endDate)}`,
+    `Reference nr.: ${project.referenceNo || "—"}`,
+    `Overenskomst: ${projectAgreementName(company, project)}`,
+    `Fagområde: ${projectTradeSkills(project)}`,
+    `Kompetencer: ${projectCompetencies(project, worker)}`,
+    "",
+    "Arbejdstid:",
+    `${project.defaultStart || "—"} – ${project.defaultEnd || "—"}`,
+    "",
+    "Pauser:",
+    `Pause 1: ${project.pauseStart || "—"} – ${project.pauseEnd || "—"}`,
+    `Pause 2: ${project.pause2Start || "—"} – ${project.pause2End || "—"}`,
+    "",
+    "Brug oplysningerne som udgangspunkt ved registrering af timer. Hvis den faktiske arbejdstid afviger, kan du rette timerne på timesedlen.",
+    "",
+    ...(workerInviteUrl
+      ? [
+          "LOGIN",
+          "Åbn linket herunder for at logge ind på din timeseddel:",
+          "",
+          workerInviteUrl,
+          "",
+          `Engangskode: ${workerAccessCode || "—"}`,
+          "",
+          "Linket er gyldigt i 7 dage fra oprettelse.",
+          "",
+          "Du bliver bedt om at bruge engangskoden og vælge din egen adgangskode.",
+          "",
+        ]
+      : []),
+    "Giv gerne besked, hvis der er fejl i oplysningerne inden opstart.",
+    "",
+    "Venlig hilsen",
+    PROJECT_MAIL_SENDER_NAME,
+    PROJECT_MAIL_COMPANY_NAME,
+    PROJECT_MAIL_PHONE,
+    PROJECT_MAIL_EMAIL,
+  ];
+}
+
+function projectWorkerMailHtml({
+  company,
+  project,
+  worker,
+  workerInviteUrl,
+  workerAccessCode,
+}: ProjectConfirmationInput): string {
+  if (!worker || !workerInviteUrl) return "";
+
+  const language = projectWorkerLanguage(worker);
+  const safeInviteUrl = htmlEscape(workerInviteUrl);
+  const copy =
+    language === "en"
+      ? {
+          htmlLang: "en",
+          greeting: "Hi",
+          intro: `You have been assigned to the project ${project.name || "—"} at ${company.name}.`,
+          button: "Open timesheet",
+          oneTimeCode: "One-time code",
+          validityLabel: "Validity",
+          validity: "The link is valid for 7 days from creation.",
+          loginHelp:
+            "You will be asked to use the one-time code and choose your own password.",
+          worker: "Worker",
+          phone: "Phone",
+          email: "Email",
+          startDate: "Start date",
+          endDate: "Project end",
+          reference: "Reference no.",
+          agreement: "Collective agreement",
+          tradeArea: "Trade area",
+          competencies: "Competencies",
+          workTime: "Work time",
+          break1: "Break 1",
+          break2: "Break 2",
+          footer:
+            "If your actual work time differs, you can edit the hours on the timesheet.",
+        }
+      : language === "pl"
+        ? {
+            htmlLang: "pl",
+            greeting: "Cześć",
+            intro: `Zostałeś przypisany do projektu ${project.name || "—"} w firmie ${company.name}.`,
+            button: "Otwórz kartę czasu pracy",
+            oneTimeCode: "Kod jednorazowy",
+            validityLabel: "Ważność",
+            validity: "Link jest ważny przez 7 dni od utworzenia.",
+            loginHelp:
+              "Zostaniesz poproszony o użycie kodu jednorazowego i wybranie własnego hasła.",
+            worker: "Pracownik",
+            phone: "Telefon",
+            email: "E-mail",
+            startDate: "Data rozpoczęcia",
+            endDate: "Zakończenie projektu",
+            reference: "Nr referencyjny",
+            agreement: "Układ zbiorowy",
+            tradeArea: "Obszar zawodowy",
+            competencies: "Kompetencje",
+            workTime: "Czas pracy",
+            break1: "Przerwa 1",
+            break2: "Przerwa 2",
+            footer:
+              "Jeśli rzeczywisty czas pracy jest inny, możesz poprawić godziny na karcie czasu pracy.",
+          }
+        : {
+            htmlLang: "da",
+            greeting: "Hej",
+            intro: `Du er tilknyttet projektet ${project.name || "—"} hos ${company.name}.`,
+            button: "Åbn timeseddel",
+            oneTimeCode: "Engangskode",
+            validityLabel: "Gyldighed",
+            validity: "Linket er gyldigt i 7 dage fra oprettelse.",
+            loginHelp:
+              "Du bliver bedt om at bruge engangskoden og vælge din egen adgangskode.",
+            worker: "Medarbejder",
+            phone: "Telefon",
+            email: "Mail",
+            startDate: "Opstartsdato",
+            endDate: "Projektafslutning",
+            reference: "Reference nr.",
+            agreement: "Overenskomst",
+            tradeArea: "Fagområde",
+            competencies: "Kompetencer",
+            workTime: "Arbejdstid",
+            break1: "Pause 1",
+            break2: "Pause 2",
+            footer:
+              "Hvis den faktiske arbejdstid afviger, kan du rette timerne på timesedlen.",
+          };
+
+  return `<!doctype html>
+<html lang="${copy.htmlLang}">
+  <body style="margin:0;background:#f8fafc;padding:24px;font-family:Arial,sans-serif;color:#111827;">
+    <div style="max-width:680px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;">
+      <p style="margin:0 0 16px;">${copy.greeting} ${htmlEscape(worker.name)}</p>
+      <p style="margin:0 0 18px;line-height:1.5;">${htmlEscape(copy.intro)}</p>
+      <p style="margin:0 0 20px;">
+        <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;border-radius:8px;padding:12px 18px;font-weight:700;">${htmlEscape(copy.button)}</a>
+      </p>
+      <p style="margin:0 0 8px;font-weight:700;">Login</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;margin-bottom:18px;">
+        <tbody>
+          ${htmlRow(copy.oneTimeCode, workerAccessCode || "—")}
+          ${htmlRow(copy.validityLabel, copy.validity)}
+        </tbody>
+      </table>
+      <p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">${htmlEscape(copy.loginHelp)}</p>
+      <table style="border-collapse:collapse;width:100%;font-size:14px;">
+        <tbody>
+          ${htmlRow(copy.worker, worker.name)}
+          ${htmlRow(copy.phone, worker.phone || "—")}
+          ${htmlRow(copy.email, worker.email)}
+          ${htmlRow(copy.startDate, projectDate(project.startDate))}
+          ${htmlRow(copy.endDate, projectDate(project.endDate))}
+          ${htmlRow(copy.reference, project.referenceNo || "—")}
+          ${htmlRow(copy.agreement, projectAgreementName(company, project))}
+          ${htmlRow(copy.tradeArea, projectTradeSkills(project))}
+          ${htmlRow(copy.competencies, projectCompetencies(project, worker))}
+          ${htmlRow(copy.workTime, `${project.defaultStart || "—"} – ${project.defaultEnd || "—"}`)}
+          ${htmlRow(copy.break1, `${project.pauseStart || "—"} – ${project.pauseEnd || "—"}`)}
+          ${htmlRow(copy.break2, `${project.pause2Start || "—"} – ${project.pause2End || "—"}`)}
+        </tbody>
+      </table>
+      <p style="margin:22px 0 0;color:#4b5563;line-height:1.5;">${htmlEscape(copy.footer)}</p>
+    </div>
+  </body>
+</html>`;
+}
+
 export async function sendProjectConfirmationEmail(
   input: ProjectConfirmationInput,
 ): Promise<TimesheetMailResult> {
   const mailApiUrl = await timesheetMailApiUrl();
   const contactEmail = input.project.contactEmail || input.company.contactEmail;
+  const workerEmail = input.worker?.email?.trim() ?? "";
   const subject = input.worker
     ? `Projektopstart – ${input.worker.name} – ${input.project.name || input.company.name}`
     : `Projektopstart – ${input.project.name || input.company.name}`;
   const text = projectMailLines(input).join("\n");
+  const html = projectMailHtml(input);
+  const workerText = projectWorkerMailLines(input).join("\n");
+  const workerHtml = projectWorkerMailHtml(input);
+  const workerSubject = input.worker ? projectWorkerSubject(input) : subject;
 
   if (!mailApiUrl) {
-    window.location.href = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`;
+    const cc = workerEmail ? `&cc=${encodeURIComponent(workerEmail)}` : "";
+    window.location.href = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}${cc}&body=${encodeURIComponent(text)}`;
     return "mailto";
   }
 
@@ -479,6 +896,11 @@ export async function sendProjectConfirmationEmail(
       replyTo: PROJECT_MAIL_EMAIL,
       subject,
       text,
+      html,
+      workerEmail,
+      workerSubject,
+      workerText,
+      workerHtml,
       sendAdminCopy: true,
     }),
   });

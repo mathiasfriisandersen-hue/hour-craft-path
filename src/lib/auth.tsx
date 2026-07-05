@@ -34,7 +34,8 @@ function isRole(value: string | null): value is Role {
 
 type AuthCtx = {
   role: Role | null;
-  login: (role: Role) => void;
+  workerIdentity: { name: string; email: string } | null;
+  login: (role: Role, options?: { workerIdentity?: { name: string; email: string } }) => void;
   logout: () => void;
   ready: boolean;
 };
@@ -43,6 +44,9 @@ const Ctx = createContext<AuthCtx | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
+  const [workerIdentity, setWorkerIdentity] = useState<{ name: string; email: string } | null>(
+    null,
+  );
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -52,6 +56,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedRole = localStorage.getItem(STORAGE_KEY);
       if (isRole(storedRole)) {
         setRole(storedRole);
+      }
+      const storedWorkerIdentity = localStorage.getItem(`${STORAGE_KEY}.worker`);
+      if (storedWorkerIdentity) {
+        const parsed = JSON.parse(storedWorkerIdentity) as { name?: string; email?: string };
+        setWorkerIdentity({ name: parsed.name ?? "", email: parsed.email ?? "" });
       }
     } catch {
       /* ignore */
@@ -67,9 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const login = (r: Role) => {
+  const login = (r: Role, options: { workerIdentity?: { name: string; email: string } } = {}) => {
     try {
       localStorage.setItem(STORAGE_KEY, r);
+      if (r === "vikar" && options.workerIdentity) {
+        localStorage.setItem(`${STORAGE_KEY}.worker`, JSON.stringify(options.workerIdentity));
+        setWorkerIdentity(options.workerIdentity);
+      } else {
+        localStorage.removeItem(`${STORAGE_KEY}.worker`);
+        setWorkerIdentity(null);
+      }
     } catch {
       /* ignore */
     }
@@ -81,13 +97,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(`${STORAGE_KEY}.worker`);
     } catch {
       /* ignore */
     }
     setRole(null);
+    setWorkerIdentity(null);
   };
 
-  return <Ctx.Provider value={{ role, login, logout, ready }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ role, workerIdentity, login, logout, ready }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth(): AuthCtx {

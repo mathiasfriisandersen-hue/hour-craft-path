@@ -5,7 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { companyOwnerForRole } from "@/lib/company-access";
 import { useAuth } from "@/lib/auth";
-import { createBlank, TRADE_SKILLS, upsert, type TradeSkill } from "@/lib/timesheet-store";
+import {
+  createBlank,
+  TRADE_SKILLS,
+  upsert,
+  WORKER_LANGUAGES,
+  type TradeSkill,
+  type WorkerLanguage,
+} from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/admin/create-worker")({
   head: () => ({ meta: [{ title: "Admin — Opret vikar" }] }),
@@ -14,10 +21,12 @@ export const Route = createFileRoute("/admin/create-worker")({
 
 type FormState = {
   vikar: string;
+  vikarCode: string;
   vikarEmail: string;
   vikarPhone: string;
   vikarAddress: string;
   vikarCpr: string;
+  workerLanguage: WorkerLanguage;
   tradeSkills: TradeSkill[];
   competencies: string;
 };
@@ -25,10 +34,12 @@ type FormState = {
 function initialForm(): FormState {
   return {
     vikar: "",
+    vikarCode: "",
     vikarEmail: "",
     vikarPhone: "",
     vikarAddress: "",
     vikarCpr: "",
+    workerLanguage: "da",
     tradeSkills: [],
     competencies: "",
   };
@@ -64,10 +75,12 @@ export function CreateWorkerPage() {
       ...createBlank(),
       ownerRole,
       vikar: form.vikar.trim(),
+      vikarCode: form.vikarCode.trim(),
       vikarEmail: form.vikarEmail.trim(),
       vikarPhone: form.vikarPhone.trim(),
       vikarAddress: form.vikarAddress.trim(),
       vikarCpr: form.vikarCpr.trim(),
+      workerLanguage: form.workerLanguage,
       tradeSkills: form.tradeSkills,
       competencies: form.competencies.trim(),
       workerMustChangeAccessCode: false,
@@ -122,6 +135,9 @@ export function CreateWorkerPage() {
               onChange={(e) => update({ vikarEmail: e.target.value })}
             />
           </Field>
+          <Field label="Kode">
+            <Input value={form.vikarCode} onChange={(e) => update({ vikarCode: e.target.value })} />
+          </Field>
           <Field label="Vikarens telefon">
             <Input
               value={form.vikarPhone}
@@ -136,6 +152,19 @@ export function CreateWorkerPage() {
           </Field>
           <Field label="CPR-nr.">
             <Input value={form.vikarCpr} onChange={(e) => update({ vikarCpr: e.target.value })} />
+          </Field>
+          <Field label="Sprog">
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={form.workerLanguage}
+              onChange={(e) => update({ workerLanguage: e.target.value as WorkerLanguage })}
+            >
+              {WORKER_LANGUAGES.map((language) => (
+                <option key={language.value} value={language.value}>
+                  {language.label}
+                </option>
+              ))}
+            </select>
           </Field>
           <div>
             <TradeSkillPicker
