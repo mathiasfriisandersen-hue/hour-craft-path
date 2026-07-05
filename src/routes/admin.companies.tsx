@@ -19,7 +19,6 @@ import {
   seedIfEmpty,
   TRADE_SKILLS,
   upsert,
-  workerReferenceKeys,
   type Company,
   type CompanyProject,
   type KnownWorker,
@@ -271,11 +270,7 @@ function ProjectsSection({
     try {
       saveCompany(company);
       const workers = project.workerEmails
-        .map((reference) =>
-          knownWorkers.find((worker) =>
-            workerReferenceKeys(worker).includes(reference.toLowerCase()),
-          ),
-        )
+        .map((reference) => findWorkerByProjectReference(knownWorkers, reference))
         .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker));
 
       if (workers.length === 0) {
@@ -516,11 +511,11 @@ function ProjectsSection({
                             company.id,
                             project,
                             worker,
+                            knownWorkers,
                           );
                           const disabled = Boolean(conflict);
-                          const workerReferences = workerReferenceKeys(worker);
                           const isAttached = project.workerEmails.some((reference) =>
-                            workerReferences.includes(reference.toLowerCase()),
+                            projectReferenceMatchesWorker(reference, worker, knownWorkers),
                           );
                           return (
                             <label
@@ -537,7 +532,11 @@ function ProjectsSection({
                                     ? [...new Set([...project.workerEmails, worker.key])]
                                     : project.workerEmails.filter(
                                         (reference) =>
-                                          !workerReferences.includes(reference.toLowerCase()),
+                                          !projectReferenceMatchesWorker(
+                                            reference,
+                                            worker,
+                                            knownWorkers,
+                                          ),
                                       );
                                   updateProject(index, { workerEmails });
                                 }}
@@ -627,13 +626,19 @@ function workerProjectConflict(
   currentCompanyId: string,
   currentProject: CompanyProject,
   worker: ReturnType<typeof listKnownWorkers>[number],
+  knownWorkers: ReturnType<typeof listKnownWorkers>,
 ): string {
   if (!currentProject.startDate || !currentProject.endDate) return "";
-  const references = workerReferenceKeys(worker);
   for (const company of companies) {
     for (const project of company.projects) {
       if (company.id === currentCompanyId && project.id === currentProject.id) continue;
-      if (!project.workerEmails.some((item) => references.includes(item.toLowerCase()))) continue;
+      if (
+        !project.workerEmails.some((reference) =>
+          projectReferenceMatchesWorker(reference, worker, knownWorkers),
+        )
+      ) {
+        continue;
+      }
       if (projectDatesOverlap(currentProject, project)) {
         return `${company.name} / ${project.name || "unavngivet projekt"} (${formatDate(project.startDate)} – ${formatDate(project.endDate)})`;
       }
@@ -642,16 +647,51 @@ function workerProjectConflict(
   return "";
 }
 
+function findWorkerByProjectReference(
+  knownWorkers: ReturnType<typeof listKnownWorkers>,
+  reference: string,
+): ReturnType<typeof listKnownWorkers>[number] | undefined {
+  const referenceKey = normalizeReference(reference);
+  if (!referenceKey) return undefined;
+
+  const directMatch = knownWorkers.find((worker) => {
+    const workerNameKey = normalizeReference(worker.name || worker.key);
+    const workerCodeKey = normalizeReference(worker.code);
+    return referenceKey === workerNameKey || referenceKey === workerCodeKey;
+  });
+  if (directMatch) return directMatch;
+
+  const emailMatches = knownWorkers.filter(
+    (worker) => normalizeReference(worker.email) === referenceKey,
+  );
+  return emailMatches.length === 1 ? emailMatches[0] : undefined;
+}
+
+function projectReferenceMatchesWorker(
+  reference: string,
+  worker: KnownWorker,
+  knownWorkers: ReturnType<typeof listKnownWorkers>,
+): boolean {
+  const referenceKey = normalizeReference(reference);
+  if (!referenceKey) return false;
+
+  const workerNameKey = normalizeReference(worker.name || worker.key);
+  const workerCodeKey = normalizeReference(worker.code);
+  if (referenceKey === workerNameKey || referenceKey === workerCodeKey) return true;
+
+  const emailMatches = knownWorkers.filter(
+    (candidate) => normalizeReference(candidate.email) === referenceKey,
+  );
+  return emailMatches.length === 1 && emailMatches[0]?.key === worker.key;
+}
+
 function ensureProjectTimesheet(
   company: Company,
   project: CompanyProject,
   worker: KnownWorker,
 ): Timesheet {
-  const references = workerReferenceKeys(worker);
   const existing = listAll().find((timesheet) => {
-    const workerMatch = [timesheet.vikar, timesheet.vikarEmail]
-      .map((item) => item.trim().toLowerCase())
-      .some((item) => references.includes(item));
+    const workerMatch = projectWorkerMatchesTimesheet(worker, timesheet);
     const projectMatch =
       timesheet.projectId === project.id ||
       (timesheet.brugervirksomhed === company.name &&
@@ -711,6 +751,24 @@ function ensureProjectTimesheet(
       ownerRole: company.ownerRole,
     }),
   );
+}
+
+function projectWorkerMatchesTimesheet(worker: KnownWorker, timesheet: Timesheet): boolean {
+  const workerNameKey = normalizeReference(worker.name || worker.key);
+  const timesheetNameKey = normalizeReference(timesheet.vikar);
+  if (workerNameKey && timesheetNameKey) return workerNameKey === timesheetNameKey;
+
+  const workerCodeKey = normalizeReference(worker.code);
+  const timesheetCodeKey = normalizeReference(timesheet.vikarCode ?? "");
+  if (workerCodeKey && timesheetCodeKey) return workerCodeKey === timesheetCodeKey;
+
+  const workerEmailKey = normalizeReference(worker.email);
+  const timesheetEmailKey = normalizeReference(timesheet.vikarEmail);
+  return Boolean(workerEmailKey && timesheetEmailKey && workerEmailKey === timesheetEmailKey);
+}
+
+function normalizeReference(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatDate(value: string): string {

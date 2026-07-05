@@ -241,17 +241,18 @@ function buildWorkerRows(timesheets: Timesheet[], companies: Company[]): WorkerR
 
   return knownWorkers
     .map((worker) => {
-      const assignments = activeProjectAssignments(worker, companies, today);
+      const assignments = currentProjectAssignments(worker, companies, today);
       const futureAssignments = futureProjectAssignments(worker, companies, today);
+      const displayAssignments = [...assignments, ...futureAssignments];
       const workerTimesheets = activeTimesheets.filter((timesheet) =>
         workerMatchesTimesheet(worker, timesheet),
       );
       const currentTimesheets = workerTimesheets.filter((timesheet) =>
-        isTimesheetShiftToday(today, timesheet),
+        isTimesheetBookingActiveToday(today, timesheet),
       );
       const nextBookingDate = nextBookingStartForWorker(futureAssignments, workerTimesheets, today);
-      const booking = currentOrNextBooking(assignments, workerTimesheets, today);
-      const hasActiveBooking = Boolean(booking.startDate && booking.endDate);
+      const booking = currentOrNextBooking(displayAssignments, workerTimesheets, today);
+      const hasActiveBooking = assignments.length > 0 || currentTimesheets.length > 0;
       return {
         worker,
         assignments,
@@ -290,17 +291,16 @@ function knownWorkersForOverview(timesheets: Timesheet[], companies: Company[]):
   return workers.filter((worker) => !worker.inactive);
 }
 
-function activeProjectAssignments(
+function currentProjectAssignments(
   worker: KnownWorker,
   companies: Company[],
   today: string,
 ): Assignment[] {
-  const references = workerReferenceKeys(worker);
   const assignments: Assignment[] = [];
   for (const company of companies) {
     for (const project of company.projects) {
-      if (!isProjectBookingRelevant(project, today)) continue;
-      if (!projectHasWorker(project, references)) continue;
+      if (!isProjectBookingActiveToday(project, today)) continue;
+      if (!projectHasWorker(project, worker)) continue;
       assignments.push({
         companyName: company.name,
         projectName: project.name,
@@ -317,13 +317,12 @@ function futureProjectAssignments(
   companies: Company[],
   today: string,
 ): Assignment[] {
-  const references = workerReferenceKeys(worker);
   const assignments: Assignment[] = [];
 
   for (const company of companies) {
     for (const project of company.projects) {
       if (!project.startDate || project.startDate <= today) continue;
-      if (!projectHasWorker(project, references)) continue;
+      if (!projectHasWorker(project, worker)) continue;
 
       assignments.push({
         companyName: company.name,
@@ -351,10 +350,17 @@ function nextBookingStartForWorker(
 }
 
 function workerMatchesTimesheet(worker: KnownWorker, timesheet: Timesheet): boolean {
-  const references = workerReferenceKeys(worker);
-  return [timesheet.vikar, timesheet.vikarEmail]
-    .map((item) => item.trim().toLowerCase())
-    .some((item) => references.includes(item));
+  const workerNameKey = normalizeReference(worker.name || worker.key);
+  const timesheetNameKey = normalizeReference(timesheet.vikar);
+  if (workerNameKey && timesheetNameKey) return workerNameKey === timesheetNameKey;
+
+  const workerCodeKey = normalizeReference(worker.code);
+  const timesheetCodeKey = normalizeReference(timesheet.vikarCode ?? "");
+  if (workerCodeKey && timesheetCodeKey) return workerCodeKey === timesheetCodeKey;
+
+  const workerEmailKey = normalizeReference(worker.email);
+  const timesheetEmailKey = normalizeReference(timesheet.vikarEmail);
+  return Boolean(workerEmailKey && timesheetEmailKey && workerEmailKey === timesheetEmailKey);
 }
 
 function hasPlannedBooking(timesheet: Timesheet): boolean {
@@ -365,22 +371,37 @@ function hasPlannedBooking(timesheet: Timesheet): boolean {
   );
 }
 
-function isProjectBookingRelevant(project: CompanyProject, today: string): boolean {
-  return Boolean(project.startDate && project.endDate && project.endDate >= today);
+function isProjectBookingActiveToday(project: CompanyProject, today: string): boolean {
+  return Boolean(
+    project.startDate && project.endDate && project.startDate <= today && today <= project.endDate,
+  );
 }
 
-function projectHasWorker(project: CompanyProject, workerReferences: string[]): boolean {
-  return project.workerEmails.some((item) => workerReferences.includes(item.trim().toLowerCase()));
+function projectHasWorker(project: CompanyProject, worker: KnownWorker): boolean {
+  const projectReferences = project.workerEmails.map((item) => normalizeReference(item));
+  const workerNameKey = normalizeReference(worker.name || worker.key);
+  const workerCodeKey = normalizeReference(worker.code);
+
+  if (workerNameKey && projectReferences.includes(workerNameKey)) return true;
+  if (workerCodeKey && projectReferences.includes(workerCodeKey)) return true;
+
+  const workerEmailKey = normalizeReference(worker.email);
+  return Boolean(
+    !workerNameKey &&
+      !workerCodeKey &&
+      workerEmailKey &&
+      projectReferences.includes(workerEmailKey),
+  );
 }
 
-function isTimesheetShiftToday(today: string, timesheet: Timesheet): boolean {
+function normalizeReference(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isTimesheetBookingActiveToday(today: string, timesheet: Timesheet): boolean {
   if (!timesheet.weekStart) return false;
-
-  const dayIndex = daysBetween(timesheet.weekStart, today);
-  if (dayIndex < 0 || dayIndex >= timesheet.days.length) return false;
-
-  const day = timesheet.days[dayIndex];
-  return Boolean(day?.start && day?.end);
+  const endDate = timesheet.projectEndDate || addDays(timesheet.weekStart, 6);
+  return timesheet.weekStart <= today && today <= endDate;
 }
 
 function futureTimesheetShiftDates(timesheets: Timesheet[], today: string): string[] {

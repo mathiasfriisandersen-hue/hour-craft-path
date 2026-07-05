@@ -19,10 +19,8 @@ function VikarList() {
       ? all.filter((timesheet) => {
           const timesheetNameKey = personKey(timesheet.vikar);
           const timesheetEmailKey = personKey(timesheet.vikarEmail);
-          return Boolean(
-            (workerNameKey && timesheetNameKey === workerNameKey) ||
-              (workerEmailKey && timesheetEmailKey === workerEmailKey),
-          );
+          if (workerNameKey) return timesheetNameKey === workerNameKey;
+          return Boolean(workerEmailKey && timesheetEmailKey === workerEmailKey);
         })
       : all;
 
