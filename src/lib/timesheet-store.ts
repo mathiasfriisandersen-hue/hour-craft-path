@@ -3,9 +3,11 @@ import {
   collectiveAgreements,
   getCollectiveAgreementById,
   getCollectiveAgreementByName,
+  normalizeCollectiveAgreementId,
 } from "./collectiveAgreements";
 import {
   AGREEMENT_RULE_SOURCE_LABEL,
+  agreementRuleText,
   defaultAgreementRules,
   type AgreementRule,
   type AgreementRuleSource,
@@ -203,6 +205,8 @@ export type Timesheet = {
   invoiceDueDate?: string;
   payrollDeadline?: string;
   invoiceNumber?: string;
+  invoiceSentDate?: string;
+  payrollSentDate?: string;
   rejectionComment?: string;
   createdAt: string;
   updatedAt: string;
@@ -425,6 +429,8 @@ type StoredTimesheet = Omit<
   invoiceDueDate?: string;
   payrollDeadline?: string;
   invoiceNumber?: string;
+  invoiceSentDate?: string;
+  payrollSentDate?: string;
   notes?: string;
 };
 
@@ -452,6 +458,13 @@ function normalizeWorkerLanguage(value: unknown): WorkerLanguage {
   return value === "en" || value === "pl" ? value : "da";
 }
 
+function normalizeStoredAgreementId(id?: string, agreementName?: string) {
+  const namedAgreementId = agreementName
+    ? getCollectiveAgreementByName(agreementName)?.id
+    : undefined;
+  return normalizeCollectiveAgreementId(id || namedAgreementId);
+}
+
 function defaultTimesForWorkPeriod(workPeriod: WorkPeriod): { start: string; end: string } {
   if (workPeriod === "evening") return { start: "14:00", end: "23:00" };
   if (workPeriod === "night") return { start: "22:00", end: "07:00" };
@@ -470,7 +483,7 @@ function normalizeProject(project: Partial<CompanyProject>): CompanyProject {
     referenceNo: project.referenceNo ?? "",
     startDate: project.startDate ?? "",
     endDate: project.endDate ?? "",
-    selectedAgreementId: project.selectedAgreementId ?? "",
+    selectedAgreementId: normalizeStoredAgreementId(project.selectedAgreementId),
     tradeSkills: normalizeTradeSkills(project.tradeSkills),
     competencies: project.competencies ?? "",
     workerEmails: Array.isArray(project.workerEmails)
@@ -495,7 +508,7 @@ function normalizeCompany(company: StoredCompany): Company {
     ownerRole,
     cvrNumber: company.cvrNumber ?? "",
     contactPhone: company.contactPhone ?? "",
-    selectedAgreementId: company.selectedAgreementId ?? "",
+    selectedAgreementId: normalizeStoredAgreementId(company.selectedAgreementId),
     localAgreements: company.localAgreements ?? [],
     projects: (company.projects ?? []).map(normalizeProject),
   };
@@ -518,8 +531,10 @@ function normalizeWorkerPhone(value: StoredTimesheet | CreateWorkerTimesheetInpu
 function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
   const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index], index));
-  const migratedAgreementId =
-    value.selectedAgreementId || getCollectiveAgreementByName(value.overenskomst ?? "")?.id || "";
+  const migratedAgreementId = normalizeStoredAgreementId(
+    value.selectedAgreementId,
+    value.overenskomst ?? "",
+  );
   const agreementName =
     getCollectiveAgreementById(migratedAgreementId)?.name ?? value.overenskomst ?? "";
   const localAgreementApplies = value.localAgreementApplies ?? value.lokalaftale ?? false;
@@ -559,6 +574,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     invoiceDueDate: value.invoiceDueDate ?? "",
     payrollDeadline: value.payrollDeadline ?? "",
     invoiceNumber: value.invoiceNumber ?? "",
+    invoiceSentDate: value.invoiceSentDate ?? "",
+    payrollSentDate: value.payrollSentDate ?? "",
     days,
     createdAt: value.createdAt ?? now,
     updatedAt: value.updatedAt ?? now,
@@ -1183,7 +1200,8 @@ function workWindowFromDayPlan(plan: CreateWorkerDayPlan): { start: string; end:
 
 export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Timesheet {
   const base = createBlank();
-  const agreement = getCollectiveAgreementById(input.selectedAgreementId);
+  const selectedAgreementId = normalizeCollectiveAgreementId(input.selectedAgreementId);
+  const agreement = getCollectiveAgreementById(selectedAgreementId);
   const weekStart = getMondayISO(new Date(`${input.startDate}T12:00:00`));
   const workerPhone =
     normalizeWorkerPhone(input) ||
@@ -1265,7 +1283,7 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     contactPersonAccessCode: input.contactPersonAccessCode?.trim() ?? "",
     contactPersonMustChangeAccessCode: Boolean(input.contactPersonAccessCode?.trim()),
     referenceNo: input.referenceNo.trim(),
-    selectedAgreementId: input.selectedAgreementId,
+    selectedAgreementId,
     overenskomst: agreement?.name ?? "",
     hourlyWage: Number(input.hourlyWage) || 0,
     workerAccessCode: input.workerAccessCode.trim(),
@@ -1359,18 +1377,29 @@ function normalizeAgreementRule(rule: AgreementRule, stored?: StoredAgreementRul
         ? legacySources
         : rule.sources,
   };
+  const ruleTextFor = (
+    field: AgreementRuleSourceKey,
+    storedValue: string | undefined,
+    defaultValue: string,
+  ) => {
+    const sourcePages = merged.sources
+      .filter((source) => source.field === field)
+      .map((source) => source.page);
+    const textFromSources = agreementRuleText(field, sourcePages);
+    return textFromSources || ruleTextOrDefault(storedValue, defaultValue);
+  };
 
   return {
     ...merged,
     normalDayHours: stored?.normalDayHours ?? rule.normalDayHours,
     normalWeekHours: stored?.normalWeekHours ?? rule.normalWeekHours,
-    overtimeRule: ruleTextOrDefault(stored?.overtimeRule, rule.overtimeRule),
-    saturdayRule: ruleTextOrDefault(stored?.saturdayRule, rule.saturdayRule),
-    sundayRule: ruleTextOrDefault(stored?.sundayRule, rule.sundayRule),
-    eveningRule: ruleTextOrDefault(stored?.eveningRule, rule.eveningRule),
-    nightRule: ruleTextOrDefault(stored?.nightRule, rule.nightRule),
-    shiftRule: ruleTextOrDefault(stored?.shiftRule, rule.shiftRule),
-    specialRule: ruleTextOrDefault(stored?.specialRule, rule.specialRule),
+    overtimeRule: ruleTextFor("overtimeRule", stored?.overtimeRule, rule.overtimeRule),
+    saturdayRule: ruleTextFor("saturdayRule", stored?.saturdayRule, rule.saturdayRule),
+    sundayRule: ruleTextFor("sundayRule", stored?.sundayRule, rule.sundayRule),
+    eveningRule: ruleTextFor("eveningRule", stored?.eveningRule, rule.eveningRule),
+    nightRule: ruleTextFor("nightRule", stored?.nightRule, rule.nightRule),
+    shiftRule: ruleTextFor("shiftRule", stored?.shiftRule, rule.shiftRule),
+    specialRule: ruleTextFor("specialRule", stored?.specialRule, rule.specialRule),
     eveningStart: stored?.eveningStart?.trim() ? stored.eveningStart : rule.eveningStart,
     nightStart: stored?.nightStart?.trim() ? stored.nightStart : rule.nightStart,
     nightEnd: stored?.nightEnd?.trim() ? stored.nightEnd : rule.nightEnd,
@@ -1401,7 +1430,12 @@ export function listRules(): AgreementRule[] {
 
 export function saveRule(rule: AgreementRule): void {
   const list = listRules();
-  const updated = { ...rule, updatedAt: new Date().toISOString() };
+  const defaultRule =
+    defaultAgreementRules.find((item) => item.agreementId === rule.agreementId) ?? rule;
+  const updated = normalizeAgreementRule(defaultRule, {
+    ...rule,
+    updatedAt: new Date().toISOString(),
+  });
   const index = list.findIndex((item) => item.agreementId === rule.agreementId);
   if (index >= 0) list[index] = updated;
   else list.push(updated);
@@ -1607,6 +1641,8 @@ export type KnownWorker = {
   code: string;
   email: string;
   phone: string;
+  address: string;
+  cpr: string;
   language: WorkerLanguage;
   tradeSkills: TradeSkill[];
   competencies: string;
@@ -1628,25 +1664,55 @@ function knownWorkerKey(timesheet: Timesheet): string {
   return personLookupKey(timesheet.vikar) || personLookupKey(timesheet.vikarEmail);
 }
 
-function knownWorkerReferenceKeys(worker: Pick<KnownWorker, "key" | "name" | "email">): string[] {
+type WorkerIdentity = Pick<KnownWorker, "key" | "name" | "code" | "email">;
+
+function knownWorkerReferenceKeys(worker: WorkerIdentity): string[] {
   return [
     ...new Set(
-      [worker.key, personLookupKey(worker.name), personLookupKey(worker.email)].filter(Boolean),
+      [
+        worker.key,
+        personLookupKey(worker.name),
+        personLookupKey(worker.code),
+        personLookupKey(worker.email),
+      ].filter(Boolean),
     ),
   ];
 }
 
-export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
+function knownWorkerIdentityMatches(
+  worker: WorkerIdentity,
+  candidate: { nameKey: string; codeKey: string; emailKey: string },
+): boolean {
+  const workerNameKey = personLookupKey(worker.name);
+  const workerCodeKey = personLookupKey(worker.code);
+  if (candidate.nameKey && workerNameKey) return candidate.nameKey === workerNameKey;
+  if (candidate.codeKey && workerCodeKey) return candidate.codeKey === workerCodeKey;
+
+  const workerKey = personLookupKey(worker.key);
+  if (candidate.nameKey && workerKey) return candidate.nameKey === workerKey;
+  if (candidate.codeKey && workerKey) return candidate.codeKey === workerKey;
+
+  const workerEmailKey = personLookupKey(worker.email);
+  return Boolean(
+    !candidate.nameKey &&
+      !candidate.codeKey &&
+      candidate.emailKey &&
+      workerEmailKey &&
+      candidate.emailKey === workerEmailKey,
+  );
+}
+
+function buildKnownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
   const workers: KnownWorker[] = [];
   for (const timesheet of timesheets) {
     const nameKey = personLookupKey(timesheet.vikar);
+    const codeKey = personLookupKey(timesheet.vikarCode ?? "");
     const emailKey = personLookupKey(timesheet.vikarEmail);
-    const key = nameKey || emailKey;
+    const key = nameKey || codeKey || emailKey;
     if (!key) continue;
-    const existing = workers.find((worker) => {
-      const references = knownWorkerReferenceKeys(worker);
-      return nameKey ? references.includes(nameKey) : references.includes(emailKey);
-    });
+    const existing = workers.find((worker) =>
+      knownWorkerIdentityMatches(worker, { nameKey, codeKey, emailKey }),
+    );
     const inactive =
       existing?.inactive || timesheet.workerInactive || timesheet.workerConsentInactive || false;
     const tradeSkills = [
@@ -1665,6 +1731,8 @@ export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker
       code: timesheet.vikarCode || existing?.code || "",
       email: timesheet.vikarEmail || existing?.email || "",
       phone: timesheet.vikarPhone || existing?.phone || "",
+      address: timesheet.vikarAddress || existing?.address || "",
+      cpr: timesheet.vikarCpr || existing?.cpr || "",
       language: normalizeWorkerLanguage(timesheet.workerLanguage || existing?.language),
       tradeSkills,
       competencies,
@@ -1677,8 +1745,15 @@ export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker
     }
   }
   return workers
-    .filter((worker) => !worker.inactive)
     .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+}
+
+export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
+  return buildKnownWorkersFromTimesheets(timesheets).filter((worker) => !worker.inactive);
+}
+
+export function knownWorkersIncludingInactiveFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
+  return buildKnownWorkersFromTimesheets(timesheets);
 }
 
 export function listKnownWorkers(): KnownWorker[] {
@@ -1687,6 +1762,58 @@ export function listKnownWorkers(): KnownWorker[] {
 
 export function workerReferenceKeys(worker: KnownWorker): string[] {
   return knownWorkerReferenceKeys(worker);
+}
+
+function timesheetMatchesWorker(timesheet: Timesheet, worker: WorkerIdentity): boolean {
+  const nameKey = personLookupKey(timesheet.vikar);
+  const codeKey = personLookupKey(timesheet.vikarCode ?? "");
+  const emailKey = personLookupKey(timesheet.vikarEmail);
+  return knownWorkerIdentityMatches(worker, { nameKey, codeKey, emailKey });
+}
+
+export function setKnownWorkerInactive(worker: KnownWorker, inactive: boolean): Timesheet[] {
+  const list = readTimesheets();
+  const updated = list.map((item) =>
+    timesheetMatchesWorker(item, worker)
+      ? normalizeTimesheet({
+          ...item,
+          workerInactive: inactive,
+          workerConsentInactive: inactive ? item.workerConsentInactive : false,
+          updatedAt: new Date().toISOString(),
+        })
+      : item,
+  );
+  writeTimesheets(updated);
+  return updated.filter((item) => timesheetMatchesWorker(item, worker));
+}
+
+export function updateKnownWorker(
+  worker: KnownWorker,
+  patch: Pick<
+    KnownWorker,
+    "name" | "code" | "email" | "phone" | "address" | "cpr" | "language" | "tradeSkills" | "competencies"
+  >,
+): Timesheet[] {
+  const list = readTimesheets();
+  const updated = list.map((item) =>
+    timesheetMatchesWorker(item, worker)
+      ? normalizeTimesheet({
+          ...item,
+          vikar: patch.name.trim(),
+          vikarCode: patch.code.trim(),
+          vikarEmail: patch.email.trim(),
+          vikarPhone: patch.phone.trim(),
+          vikarAddress: patch.address.trim(),
+          vikarCpr: patch.cpr.trim(),
+          workerLanguage: normalizeWorkerLanguage(patch.language),
+          tradeSkills: normalizeTradeSkills(patch.tradeSkills),
+          competencies: patch.competencies.trim(),
+          updatedAt: new Date().toISOString(),
+        })
+      : item,
+  );
+  writeTimesheets(updated);
+  return updated.filter((item) => timesheetMatchesWorker(item, { ...worker, ...patch }));
 }
 
 export function timesheetRetentionWarning(
@@ -2961,7 +3088,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Skiftehold Vikar 1",
       email: "skiftehold1@demo-vikar.dk",
       phone: "30100006",
-      agreementId: "jord-betonoverenskomsten",
+      agreementId: "bygge-anlaegsoverenskomsten",
       tradeSkill: "Jord / beton",
       competencies: "Skiftehold paa betonstation",
       hourlyWage: 216,
@@ -2979,7 +3106,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Dagarbejde Vikar 1",
       email: "dag1@demo-vikar.dk",
       phone: "30100007",
-      agreementId: "murer-murerarbejdsmandsarbejde",
+      agreementId: "bygge-anlaegsoverenskomsten-dansk-haandvaerk-3f",
       tradeSkill: "Murer",
       competencies: "Facade og fugearbejde",
       hourlyWage: 211,
@@ -2997,7 +3124,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Weekendarbejde Vikar 2",
       email: "weekend2@demo-vikar.dk",
       phone: "30100008",
-      agreementId: "isoleringsoverenskomsten",
+      agreementId: "bygningsoverenskomsten",
       tradeSkill: "Isolering",
       competencies: "Weekendisolering paa teknikrum",
       hourlyWage: 207,
@@ -3015,7 +3142,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Weekendarbejde Vikar 3",
       email: "weekend3@demo-vikar.dk",
       phone: "30100009",
-      agreementId: "maleroverenskomsten",
+      agreementId: "bygningsoverenskomsten",
       tradeSkill: "Maler",
       competencies: "Spartel og finish i weekenden",
       hourlyWage: 199,
@@ -3033,7 +3160,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Helligdag Vikar 2",
       email: "helligdag2@demo-vikar.dk",
       phone: "30100010",
-      agreementId: "elektrikeroverenskomsten",
+      agreementId: "industrioverenskomsten-byggeri",
       tradeSkill: "Elektriker",
       competencies: "Fejlsoegning og service",
       hourlyWage: 223,
@@ -3051,7 +3178,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Helligdag Vikar 3",
       email: "helligdag3@demo-vikar.dk",
       phone: "30100011",
-      agreementId: "el-overenskomsten-di-def",
+      agreementId: "industriens-overenskomst",
       tradeSkill: "El-installation",
       competencies: "Montage og tavlearbejde",
       hourlyWage: 226,
@@ -3069,7 +3196,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Overarbejde Vikar 2",
       email: "overarbejde2@demo-vikar.dk",
       phone: "30100012",
-      agreementId: "vvs-overenskomsten",
+      agreementId: "industriens-overenskomst",
       tradeSkill: "VVS",
       competencies: "Ekstra montage og trykproeve",
       hourlyWage: 219,
@@ -3087,7 +3214,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Overarbejde Vikar 3",
       email: "overarbejde3@demo-vikar.dk",
       phone: "30100013",
-      agreementId: "industri-vvs-overenskomsten",
+      agreementId: "industriens-overenskomst",
       tradeSkill: "Blikkenslager",
       competencies: "Kanalarbejde og indregulering",
       hourlyWage: 221,
@@ -3105,7 +3232,7 @@ function demoWorkersSeed(): DemoWorkerSeed[] {
       name: "Natarbejde Vikar 2",
       email: "nat2@demo-vikar.dk",
       phone: "30100014",
-      agreementId: "vvs-blikkenslageroverenskomsten",
+      agreementId: "bygge-anlaegsoverenskomsten",
       tradeSkill: "VVS",
       competencies: "Natservice og fejlretning",
       hourlyWage: 224,
@@ -3352,7 +3479,7 @@ function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timeshe
     kontaktpersonPhone: worker.companyContactPhone,
     kontaktpersonEmail: worker.companyContactEmail,
     referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
-    selectedAgreementId: worker.agreementId,
+    selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
     hourlyWage: worker.hourlyWage,
     defaultStart:
       worker.workForm === "night" ? "22:00" : worker.workForm === "evening" ? "14:00" : "07:00",
@@ -3429,7 +3556,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
         contactPhone: worker.companyContactPhone,
         contactEmail: worker.companyContactEmail,
         address: worker.address,
-        selectedAgreementId: worker.agreementId,
+        selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
         localAgreements: [],
         projects: [],
       });
@@ -3443,7 +3570,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
       referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
       startDate: weekStart,
       endDate: addDaysToISODate(weekStart, 28),
-      selectedAgreementId: worker.agreementId,
+      selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
       tradeSkills: [worker.tradeSkill],
       competencies: worker.competencies,
       workerEmails: [worker.name],

@@ -72,14 +72,19 @@ function AdminDetail() {
   const employeeBaseCost = employeeHourlyWage * calc.total;
   const socialCostRate = 0.3888;
   const socialCost = hasSickAbsence ? 0 : employeeBaseCost * socialCostRate;
-  const employeeTotalCost = employeeBaseCost + socialCost;
+  const allowanceHours = totalAllowanceHours(calc);
+  const employeeAllowanceCost =
+    allowanceHours * employeeHourlyWage * (1 + (hasSickAbsence ? 0 : socialCostRate));
+  const employeeTotalCost = employeeBaseCost + socialCost + employeeAllowanceCost;
   const project = listCompanies()
     .find((company) => company.id === t.companyId)
     ?.projects.find((item) => item.id === t.projectId);
   const customerHourlyWage = project?.billingHourlyWage ?? 0;
   const customerBillingFactor = project?.billingFactor ?? 0;
   const customerHourlyRate = customerHourlyWage * customerBillingFactor;
-  const customerBillingTotal = customerHourlyRate * calc.total;
+  const customerBaseBillingTotal = customerHourlyRate * calc.total;
+  const customerAllowanceTotal = customerHourlyRate * allowanceHours;
+  const customerBillingTotal = customerBaseBillingTotal + customerAllowanceTotal;
   const hasCustomerBilling = customerHourlyWage > 0 && customerBillingFactor > 0;
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
@@ -291,8 +296,9 @@ function AdminDetail() {
                     label="Sociale omkostninger 38,88%"
                     value={hasSickAbsence ? "0,00 DKK (sygdom registreret)" : formatDkk(socialCost)}
                   />
-                  <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
                   <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
+                  <Row label="Tillæg i alt" value={formatDkk(employeeAllowanceCost)} />
+                  <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
                 </dl>
               </div>
               <div className="mt-4 border-t pt-4">
@@ -317,6 +323,19 @@ function AdminDetail() {
                     }
                   />
                   <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
+                  <Row
+                    label="Afregning for registrerede timer"
+                    value={
+                      hasCustomerBilling ? formatDkk(customerBaseBillingTotal) : "Ikke sat på projekt"
+                    }
+                  />
+                  <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
+                  <Row
+                    label="Tillæg i alt"
+                    value={
+                      hasCustomerBilling ? formatDkk(customerAllowanceTotal) : "Ikke sat på projekt"
+                    }
+                  />
                   <Row
                     label="Samlet afregning"
                     value={
@@ -665,6 +684,7 @@ function formatAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
     ["Lørdag", calc.saturday],
     ["Søndag", calc.sunday],
     ["Helligdage", calc.publicHoliday],
+    ["Weekendarbejde lokalaftale", calc.weekend],
     ["Aften", calc.evening],
     ["Nat", calc.night],
     ["Skiftehold", calc.shift],
@@ -673,6 +693,19 @@ function formatAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
     .map(([label, hours]) => `${label}: ${Number(hours).toFixed(2)} t`);
 
   return allowanceHours.length ? allowanceHours.join(" · ") : "Ingen";
+}
+
+function totalAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
+  return (
+    calc.overtime +
+    calc.saturday +
+    calc.sunday +
+    calc.publicHoliday +
+    calc.weekend +
+    calc.evening +
+    calc.night +
+    calc.shift
+  );
 }
 
 function AdminTimeRange({

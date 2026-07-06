@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  LabelList,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -11,14 +12,9 @@ import {
   YAxis,
 } from "recharts";
 import { AppShell } from "@/components/app-shell";
+import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
-import {
-  listCompanies,
-  workerReferenceKeys,
-  type Company,
-  type KnownWorker,
-  type Timesheet,
-} from "@/lib/timesheet-store";
+import { listCompanies, type Company, type Timesheet } from "@/lib/timesheet-store";
 
 export const Route = createFileRoute("/admin/statistics")({
   head: () => ({ meta: [{ title: "Admin — Statistik" }] }),
@@ -58,6 +54,18 @@ const USER_COLORS: Record<UserKey, string> = {
   bruger2: "#dc2626",
 };
 
+type StatusOverview = {
+  soon: number;
+  now: number;
+  done: number;
+};
+
+type StatusTone = "neutral" | "warning" | "done";
+type DateRange = {
+  from: string;
+  to: string;
+};
+
 function StatisticsPage() {
   const timesheets = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
@@ -72,6 +80,8 @@ function StatisticsPage() {
     sent: true,
     approved: true,
   });
+  const [invoiceSentRange, setInvoiceSentRange] = useState<DateRange>({ from: "", to: "" });
+  const [payrollSentRange, setPayrollSentRange] = useState<DateRange>({ from: "", to: "" });
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -93,6 +103,14 @@ function StatisticsPage() {
         return row;
       }),
     [companies, timesheets, visibleMetrics, visibleUsers],
+  );
+  const invoiceOverview = useMemo(
+    () => buildInvoiceOverview(timesheets, invoiceSentRange),
+    [invoiceSentRange, timesheets],
+  );
+  const payrollOverview = useMemo(
+    () => buildPayrollOverview(timesheets, payrollSentRange),
+    [payrollSentRange, timesheets],
   );
 
   const toggleUser = (key: UserKey) => {
@@ -129,10 +147,14 @@ function StatisticsPage() {
                 <Tooltip />
                 <Legend verticalAlign="top" align="left" wrapperStyle={{ paddingBottom: 16 }} />
                 {visibleUsers.bruger1 && (
-                  <Bar dataKey="bruger1" name="Blå = Bruger 1" fill={USER_COLORS.bruger1} />
+                  <Bar dataKey="bruger1" name="Blå = Bruger 1" fill={USER_COLORS.bruger1}>
+                    <LabelList dataKey="bruger1" position="top" fill="#111827" fontSize={13} />
+                  </Bar>
                 )}
                 {visibleUsers.bruger2 && (
-                  <Bar dataKey="bruger2" name="Rød = Bruger 2" fill={USER_COLORS.bruger2} />
+                  <Bar dataKey="bruger2" name="Rød = Bruger 2" fill={USER_COLORS.bruger2}>
+                    <LabelList dataKey="bruger2" position="top" fill="#111827" fontSize={13} />
+                  </Bar>
                 )}
               </BarChart>
             </ResponsiveContainer>
@@ -172,8 +194,121 @@ function StatisticsPage() {
           </div>
         </aside>
       </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-2">
+        <OverviewSection
+          title="Fakturaoverblik"
+          rangeLabel="Periode for faktura sendt"
+          range={invoiceSentRange}
+          onRangeChange={setInvoiceSentRange}
+          cards={[
+            {
+              label: "Skal snart håndteres",
+              value: invoiceOverview.soon,
+              help: "Godkendte timesedler med kommende fakturafrist.",
+              tone: "neutral",
+            },
+            {
+              label: "Skal håndteres nu",
+              value: invoiceOverview.now,
+              help: "Godkendte timesedler hvor fakturafristen er nået.",
+              tone: "warning",
+            },
+            {
+              label: "Faktura sendt",
+              value: invoiceOverview.done,
+              help: "Timesedler markeret med eksisterende fakturastatus.",
+              tone: "done",
+            },
+          ]}
+        />
+        <OverviewSection
+          title="Lønoverblik"
+          rangeLabel="Periode for sendt til bogholderi"
+          range={payrollSentRange}
+          onRangeChange={setPayrollSentRange}
+          cards={[
+            {
+              label: "Klar til bogholderi",
+              value: payrollOverview.now,
+              help: "Timesedler der er godkendt eller autogodkendt til løn.",
+              tone: "warning",
+            },
+            {
+              label: "Kræver ikke handling endnu",
+              value: payrollOverview.soon,
+              help: "Timesedler der afventer godkendelse eller lønperiode.",
+              tone: "neutral",
+            },
+            {
+              label: "Sendt til bogholderi",
+              value: payrollOverview.done,
+              help: "Timesedler markeret med eksisterende lønstatus.",
+              tone: "done",
+            },
+          ]}
+        />
+      </div>
     </AppShell>
   );
+}
+
+function OverviewSection({
+  title,
+  rangeLabel,
+  range,
+  onRangeChange,
+  cards,
+}: {
+  title: string;
+  rangeLabel: string;
+  range: DateRange;
+  onRangeChange: (range: DateRange) => void;
+  cards: Array<{ label: string; value: number; help: string; tone: StatusTone }>;
+}) {
+  return (
+    <section className="rounded-lg border bg-card p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="font-semibold">{title}</h2>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="grid gap-1">
+            <span className="text-xs text-muted-foreground">{rangeLabel} fra</span>
+            <Input
+              type="date"
+              value={range.from}
+              onChange={(event) => onRangeChange({ ...range, from: event.target.value })}
+            />
+          </label>
+          <label className="grid gap-1">
+            <span className="text-xs text-muted-foreground">Til</span>
+            <Input
+              type="date"
+              value={range.to}
+              onChange={(event) => onRangeChange({ ...range, to: event.target.value })}
+            />
+          </label>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {cards.map((card) => (
+          <article
+            key={card.label}
+            className={`rounded-md border p-4 ${statusToneClass(card.tone)}`}
+          >
+            <div className="text-sm font-medium">{card.label}</div>
+            <div className="mt-2 text-3xl font-semibold">{card.value}</div>
+            <p className="mt-2 text-xs text-muted-foreground">{card.help}</p>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function statusToneClass(tone: StatusTone): string {
+  if (tone === "warning") return "border-amber-200 bg-amber-50/60";
+  if (tone === "done") return "border-emerald-200 bg-emerald-50/60";
+  return "border-border bg-background";
 }
 
 function FilterCheckbox({
@@ -210,8 +345,8 @@ function metricValue(
   );
 
   if (metric === "companies") return roleCompanies.length;
-  if (metric === "workers") return countWorkers(role, roleCompanies, roleTimesheets);
-  if (metric === "tasks") return countWorkerCompanyLinks(roleCompanies, roleTimesheets);
+  if (metric === "workers") return countWorkersByCodeNamePhone(roleTimesheets);
+  if (metric === "tasks") return countProjectsByContactOrCompany(roleCompanies, roleTimesheets);
   if (metric === "sent")
     return roleTimesheets.filter((timesheet) => timesheet.status === "sent").length;
   return roleTimesheets.filter((timesheet) => timesheet.status === "approved").length;
@@ -222,59 +357,181 @@ function timesheetBelongsToRole(
   role: UserRole,
   companies: Company[],
 ): boolean {
-  if (timesheet.ownerRole) return timesheet.ownerRole === role;
-  const company = companies.find((item) =>
-    timesheet.companyId
-      ? item.id === timesheet.companyId
-      : item.name.trim().toLowerCase() === timesheet.brugervirksomhed.trim().toLowerCase(),
+  const company = companies.find((item) => item.id === timesheet.companyId);
+  if (company?.ownerRole) return company.ownerRole === role;
+
+  const companyByName = companies.find(
+    (item) => statsKey(item.name) === statsKey(timesheet.brugervirksomhed),
   );
-  return company?.ownerRole === role;
+  if (companyByName?.ownerRole) return companyByName.ownerRole === role;
+
+  return timesheet.ownerRole === role;
 }
 
-function countWorkers(role: UserRole, companies: Company[], timesheets: Timesheet[]): number {
+function statsKey(...values: string[]): string {
+  return values
+    .map((value) => value.trim().toLowerCase().replace(/\s+/g, " "))
+    .filter(Boolean)
+    .join(":");
+}
+
+function workerStatsKey(timesheet: Timesheet): string {
+  return (
+    statsKey(timesheet.vikarCode ?? "") ||
+    statsKey(timesheet.vikar, timesheet.vikarPhone ?? "") ||
+    statsKey(timesheet.vikar) ||
+    statsKey(timesheet.vikarPhone ?? "")
+  );
+}
+
+function countWorkersByCodeNamePhone(timesheets: Timesheet[]): number {
   const workerKeys = new Set<string>();
   for (const timesheet of timesheets) {
-    const worker = knownWorkerFromTimesheet(timesheet);
-    for (const key of workerReferenceKeys(worker)) workerKeys.add(key);
-  }
-  for (const company of companies) {
-    if (company.ownerRole !== role) continue;
-    for (const project of company.projects) {
-      for (const reference of project.workerEmails) {
-        const key = reference.trim().toLowerCase();
-        if (key) workerKeys.add(key);
-      }
-    }
+    const key = workerStatsKey(timesheet);
+    if (key) workerKeys.add(key);
   }
   return workerKeys.size;
 }
 
-function countWorkerCompanyLinks(companies: Company[], timesheets: Timesheet[]): number {
-  const links = new Set<string>();
-  for (const timesheet of timesheets) {
-    const companyKey = timesheet.companyId || timesheet.brugervirksomhed.trim().toLowerCase();
-    const workerKey = workerReferenceKeys(knownWorkerFromTimesheet(timesheet))[0];
-    if (companyKey && workerKey) links.add(`${companyKey}:${workerKey}`);
-  }
-  for (const company of companies) {
-    for (const project of company.projects) {
-      for (const reference of project.workerEmails) {
-        const workerKey = reference.trim().toLowerCase();
-        if (workerKey) links.add(`${company.id}:${workerKey}`);
-      }
-    }
-  }
-  return links.size;
+function projectStatsKeyFromTimesheet(timesheet: Timesheet): string {
+  return (
+    statsKey(timesheet.kontaktperson, timesheet.kontaktpersonPhone) ||
+    statsKey(timesheet.companyId ?? "") ||
+    statsKey(timesheet.brugervirksomhed)
+  );
 }
 
-function knownWorkerFromTimesheet(
-  timesheet: Timesheet,
-): Pick<KnownWorker, "key" | "name" | "email"> {
-  const name = timesheet.vikar.trim();
-  const email = timesheet.vikarEmail.trim();
-  return {
-    key: (name || email).toLowerCase(),
-    name,
-    email,
-  };
+function countProjectsByContactOrCompany(companies: Company[], timesheets: Timesheet[]): number {
+  const projectKeys = new Set<string>();
+  for (const company of companies) {
+    for (const project of company.projects) {
+      const key =
+        statsKey(project.contactName, project.contactPhone) ||
+        statsKey(company.id) ||
+        statsKey(company.name);
+      if (key) projectKeys.add(key);
+    }
+  }
+  for (const timesheet of timesheets) {
+    const key = projectStatsKeyFromTimesheet(timesheet);
+    if (key) projectKeys.add(key);
+  }
+  return projectKeys.size;
+}
+
+function buildInvoiceOverview(timesheets: Timesheet[], sentRange: DateRange): StatusOverview {
+  const overview: StatusOverview = { soon: 0, now: 0, done: 0 };
+  const seen = new Set<string>();
+  for (const timesheet of timesheets) {
+    if (seen.has(timesheet.id) || timesheet.archived) continue;
+    seen.add(timesheet.id);
+
+    if (
+      dateInRange(timesheet.invoiceSentDate ?? "", sentRange) ||
+      (dateRangeIsEmpty(sentRange) &&
+        hasDoneStatus(timesheet, ["invoiceStatus", "invoiceState", "billingStatus"]))
+    ) {
+      overview.done += 1;
+      continue;
+    }
+    if (timesheet.status !== "approved" || !hasRegisteredHours(timesheet)) continue;
+
+    const tone = deadlineTone(invoiceDueDateForTimesheet(timesheet.weekStart));
+    if (tone === "now") overview.now += 1;
+    else overview.soon += 1;
+  }
+  return overview;
+}
+
+function buildPayrollOverview(timesheets: Timesheet[], sentRange: DateRange): StatusOverview {
+  const overview: StatusOverview = { soon: 0, now: 0, done: 0 };
+  const seen = new Set<string>();
+  for (const timesheet of timesheets) {
+    if (seen.has(timesheet.id) || timesheet.archived) continue;
+    seen.add(timesheet.id);
+
+    if (
+      dateInRange(timesheet.payrollSentDate ?? "", sentRange) ||
+      (dateRangeIsEmpty(sentRange) &&
+        hasDoneStatus(timesheet, ["payrollStatus", "payrollState", "bookkeepingStatus"]))
+    ) {
+      overview.done += 1;
+      continue;
+    }
+    if (
+      (timesheet.status !== "sent" && timesheet.status !== "approved") ||
+      !hasRegisteredHours(timesheet)
+    ) {
+      continue;
+    }
+
+    const period = payrollPeriodForWeek(timesheet.weekStart);
+    if (payrollReady(timesheet, period.end)) overview.now += 1;
+    else overview.soon += 1;
+  }
+  return overview;
+}
+
+function hasRegisteredHours(timesheet: Timesheet): boolean {
+  return timesheet.days.some((day) => day.start && day.end);
+}
+
+function dateInRange(value: string, range: DateRange): boolean {
+  if (!value) return false;
+  if (range.from && value < range.from) return false;
+  if (range.to && value > range.to) return false;
+  return true;
+}
+
+function dateRangeIsEmpty(range: DateRange): boolean {
+  return !range.from && !range.to;
+}
+
+function hasDoneStatus(timesheet: Timesheet, fields: string[]): boolean {
+  const record = timesheet as unknown as Record<string, unknown>;
+  return fields.some((field) => {
+    const value = record[field];
+    return (
+      value === "sent" || value === "done" || value === "completed" || value === "bookkeeping_sent"
+    );
+  });
+}
+
+function deadlineTone(deadline: string): "soon" | "now" {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${deadline}T12:00:00`);
+  const days = Math.ceil((due.getTime() - today.getTime()) / 86400000);
+  return days <= 0 ? "now" : "soon";
+}
+
+function invoiceDueDateForTimesheet(weekStart: string): string {
+  return addDaysToISODate(addDaysToISODate(weekStart, 8), 8);
+}
+
+function payrollPeriodForWeek(weekStart: string): { start: string; end: string } {
+  const monday = new Date(`${weekStart}T12:00:00`);
+  const oneJan = new Date(`${monday.getFullYear()}-01-01T12:00:00`);
+  const week = Math.ceil(
+    ((monday.getTime() - oneJan.getTime()) / 86400000 + oneJan.getDay() + 1) / 7,
+  );
+  const start = addDaysToISODate(weekStart, week % 2 === 0 ? -7 : 0);
+  return { start, end: addDaysToISODate(start, 13) };
+}
+
+function payrollReady(timesheet: Timesheet, periodEnd: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(`${periodEnd}T12:00:00`);
+  if (end.getTime() >= today.getTime()) return false;
+
+  if (timesheet.status === "approved") return true;
+  const autoApprovalDate = new Date(`${addDaysToISODate(periodEnd, 2)}T12:00:00`);
+  return timesheet.status === "sent" && autoApprovalDate.getTime() <= today.getTime();
+}
+
+function addDaysToISODate(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }

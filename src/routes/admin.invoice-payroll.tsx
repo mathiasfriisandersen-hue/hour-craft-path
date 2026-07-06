@@ -3,6 +3,7 @@ import { jsPDF } from "jspdf";
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import subzLogo from "@/assets/sub-z-logo.png";
 import { addDaysToISODate } from "@/lib/danishHolidays";
 import { useTimesheets } from "@/lib/use-timesheets";
@@ -12,6 +13,7 @@ import {
   formatWeekRange,
   listCompanies,
   totalHours,
+  upsert,
   weekNumber,
   type Company,
   type CompanyProject,
@@ -41,11 +43,20 @@ type WorkContext = {
   payrollApprovalStatus: string;
   billingMultiplier: number;
   billingRate: number;
+  invoiceBaseExVat: number;
+  invoiceAllowanceRows: PayrollAllowanceRow[];
+  invoiceAllowanceExVat: number;
   invoiceExVat: number;
   vat: number;
   invoiceIncVat: number;
   invoiceTone: StatusTone;
   payrollTone: StatusTone;
+};
+
+type PayrollAllowanceRow = {
+  label: string;
+  hours: number;
+  amount: number;
 };
 
 const SELLER = {
@@ -145,6 +156,13 @@ function InvoicePayrollPage() {
                     <Fact label="Inkl. moms" value={formatDkk(row.invoiceIncVat)} />
                     <Fact label="Forfaldsdato" value={formatDate(row.invoiceDueDate)} />
                     <Fact label="Status" value={statusLabel(row.invoiceTone)} />
+                    <StatusDateInput
+                      label="Faktura sendt"
+                      value={row.timesheet.invoiceSentDate ?? ""}
+                      onChange={(value) =>
+                        updateTimesheetDate(row.timesheet, "invoiceSentDate", value)
+                      }
+                    />
                   </dl>
                 </article>
               ))}
@@ -191,6 +209,13 @@ function InvoicePayrollPage() {
                     <Fact label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
                     <Fact label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
                     <Fact label="Status" value={payrollStatusLabel(row)} />
+                    <StatusDateInput
+                      label="Sendt til bogholderi"
+                      value={row.timesheet.payrollSentDate ?? ""}
+                      onChange={(value) =>
+                        updateTimesheetDate(row.timesheet, "payrollSentDate", value)
+                      }
+                    />
                   </dl>
                 </article>
               ))}
@@ -211,14 +236,22 @@ function InvoicePayrollPage() {
   );
 }
 
+function updateTimesheetDate(
+  timesheet: Timesheet,
+  field: "invoiceSentDate" | "payrollSentDate",
+  value: string,
+) {
+  upsert({ ...timesheet, [field]: value });
+}
+
 function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkContext {
   const company = findCompany(timesheet, companies);
   const project = company?.projects.find((item) =>
     timesheet.projectId ? item.id === timesheet.projectId : item.name === timesheet.projectName,
   );
   const approvedHours = totalHours(timesheet.days);
-  const invoiceDate = new Date().toISOString().slice(0, 10);
-  const fallbackDueDate = addDaysToISODate(timesheet.weekStart, 20);
+  const invoiceDate = invoiceDateForTimesheet(timesheet.weekStart);
+  const invoiceDueDate = invoiceDueDateForInvoiceDate(invoiceDate);
   const payrollPeriod = payrollPeriodForWeek(timesheet.weekStart);
   const fallbackPayrollDeadline = addDaysToISODate(payrollPeriod.end, 2);
   const isApprovedForPayroll = isTimesheetApprovedForPayroll(timesheet, payrollPeriod.end);
@@ -228,9 +261,15 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     project && project.billingHourlyWage > 0 && project.billingFactor > 0
       ? project.billingHourlyWage * project.billingFactor
       : billingMultiplier;
-  const invoiceExVat = approvedHours * billingRate;
+  const calculation = calculateTimesheet(timesheet);
+  const invoiceBaseExVat = approvedHours * billingRate;
+  const invoiceAllowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
+    ...item,
+    amount: item.hours * billingRate,
+  }));
+  const invoiceAllowanceExVat = invoiceAllowanceRows.reduce((sum, item) => sum + item.amount, 0);
+  const invoiceExVat = invoiceBaseExVat + invoiceAllowanceExVat;
   const vat = invoiceExVat * 0.25;
-  const invoiceDueDate = timesheet.invoiceDueDate || fallbackDueDate;
   const payrollDeadline = timesheet.payrollDeadline || fallbackPayrollDeadline;
 
   return {
@@ -249,6 +288,9 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     payrollApprovalStatus: payrollApprovalStatus(timesheet, payrollPeriod.end),
     billingMultiplier,
     billingRate,
+    invoiceBaseExVat,
+    invoiceAllowanceRows,
+    invoiceAllowanceExVat,
     invoiceExVat,
     vat,
     invoiceIncVat: invoiceExVat + vat,
@@ -304,6 +346,14 @@ function formatMultiplier(row: WorkContext) {
   }
   if (row.billingMultiplier > 0) return formatDecimal(row.billingMultiplier);
   return "Ikke sat";
+}
+
+function invoiceDateForTimesheet(weekStart: string): string {
+  return addDaysToISODate(weekStart, 8);
+}
+
+function invoiceDueDateForInvoiceDate(invoiceDate: string): string {
+  return addDaysToISODate(invoiceDate, 8);
 }
 
 function formatDecimal(value: number) {
@@ -431,21 +481,53 @@ function Fact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PayrollPreview({
-  row,
-  timesheets,
-  onClose,
+function StatusDateInput({
+  label,
+  value,
+  onChange,
 }: {
-  row: WorkContext;
-  timesheets: Timesheet[];
-  onClose: () => void;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
 }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <Input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function payrollFinancials(row: WorkContext) {
   const calculation = calculateTimesheet(row.timesheet);
-  const sickness = sicknessBasis(row.timesheet, timesheets);
-  const registeredHourlyWage = row.timesheet.hourlyWage || 0;
-  const hourlyWageWithSocial = registeredHourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
+  const hourlyWage = row.timesheet.hourlyWage || 0;
+  const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
   const basePayrollAmount = row.payrollBasisHours * hourlyWageWithSocial;
-  const allowanceRows = [
+  const allowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
+    ...item,
+    amount: item.hours * hourlyWageWithSocial,
+  }));
+  const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
+  const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
+    .filter(Boolean)
+    .join(" / ");
+
+  return {
+    agreementName: row.timesheet.overenskomst || row.timesheet.selectedAgreementId || "—",
+    hourlyWage,
+    hourlyWageWithSocial,
+    basePayrollAmount,
+    allowanceRows,
+    allowanceTotal,
+    payrollTotal: basePayrollAmount + allowanceTotal,
+    projectName,
+  };
+}
+
+function allowanceRowsForCalculation(
+  calculation: ReturnType<typeof calculateTimesheet>,
+): Omit<PayrollAllowanceRow, "amount">[] {
+  return [
     { label: "Overarbejdstillæg", hours: calculation.overtime },
     {
       label: "Weekend-/søndagstillæg",
@@ -455,17 +537,20 @@ function PayrollPreview({
     { label: "Aftentillæg", hours: calculation.evening },
     { label: "Nattillæg", hours: calculation.night },
     { label: "Skifteholdstillæg", hours: calculation.shift },
-  ]
-    .filter((item) => item.hours > 0)
-    .map((item) => ({
-      ...item,
-      amount: item.hours * hourlyWageWithSocial,
-    }));
-  const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
-  const payrollTotal = basePayrollAmount + allowanceTotal;
-  const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
-    .filter(Boolean)
-    .join(" / ");
+  ].filter((item) => item.hours > 0);
+}
+
+function PayrollPreview({
+  row,
+  timesheets,
+  onClose,
+}: {
+  row: WorkContext;
+  timesheets: Timesheet[];
+  onClose: () => void;
+}) {
+  const sickness = sicknessBasis(row.timesheet, timesheets);
+  const financials = payrollFinancials(row);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 p-4">
@@ -477,9 +562,14 @@ function PayrollPreview({
               Internt overblik til bogholder. Sendes ikke automatisk.
             </p>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
-            Luk preview
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => downloadPayrollPdf(row)}>
+              Hent løngrundlag som PDF
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              Luk preview
+            </Button>
+          </div>
         </div>
 
         <dl className="grid gap-3 text-sm md:grid-cols-2">
@@ -488,28 +578,22 @@ function PayrollPreview({
             label="Lønperiode"
             value={formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd)}
           />
-          <PreviewRow label="Virksomhed/projekt" value={projectName || "—"} />
+          <PreviewRow label="Virksomhed/projekt" value={financials.projectName || "—"} />
           <PreviewRow label="Godkendte timer" value={`${row.payrollBasisHours.toFixed(2)} t`} />
           <PreviewRow label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
           <PreviewRow label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
-          <PreviewRow
-            label="Overenskomst"
-            value={row.timesheet.overenskomst || row.timesheet.selectedAgreementId || "—"}
-          />
+          <PreviewRow label="Overenskomst" value={financials.agreementName} />
         </dl>
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-3 font-medium">Løngrundlag</h3>
           <dl className="grid gap-2 md:grid-cols-2">
-            <PreviewRow
-              label="Overenskomst"
-              value={row.timesheet.overenskomst || row.timesheet.selectedAgreementId || "—"}
-            />
-            <PreviewRow label="Registreret timeløn" value={formatDkk(registeredHourlyWage)} />
+            <PreviewRow label="Overenskomst" value={financials.agreementName} />
+            <PreviewRow label="Registreret timeløn" value={formatDkk(financials.hourlyWage)} />
             <PreviewRow label="Sociale omkostninger" value="38,88 %" />
             <PreviewRow
               label="Timeløn inkl. sociale omkostninger"
-              value={formatDkk(hourlyWageWithSocial)}
+              value={formatDkk(financials.hourlyWageWithSocial)}
             />
           </dl>
         </div>
@@ -520,18 +604,18 @@ function PayrollPreview({
             <PreviewRow label="Godkendte timer" value={`${row.payrollBasisHours.toFixed(2)} t`} />
             <PreviewRow
               label="Grundløn inkl. sociale omkostninger"
-              value={formatDkk(basePayrollAmount)}
+              value={formatDkk(financials.basePayrollAmount)}
             />
           </dl>
         </div>
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-3 font-medium">Tillæg</h3>
-          {allowanceRows.length === 0 ? (
+          {financials.allowanceRows.length === 0 ? (
             <p className="text-muted-foreground">Ingen registrerede tillæg i perioden.</p>
           ) : (
             <dl className="grid gap-2">
-              {allowanceRows.map((item) => (
+              {financials.allowanceRows.map((item) => (
                 <PreviewRow key={item.label} label={item.label} value={formatDkk(item.amount)} />
               ))}
             </dl>
@@ -540,7 +624,7 @@ function PayrollPreview({
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-3 font-medium">Samlet løngrundlag</h3>
-          <PreviewRow label="Total" value={formatDkk(payrollTotal)} strong />
+          <PreviewRow label="Total" value={formatDkk(financials.payrollTotal)} strong />
         </div>
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
@@ -659,8 +743,18 @@ function InvoicePreview({ row, onClose }: { row: WorkContext; onClose: () => voi
                     {row.approvedHours.toFixed(2)} t
                   </td>
                   <td className="border-b px-3 py-3 text-right">{formatDkk(row.billingRate)}</td>
-                  <td className="border-b px-3 py-3 text-right">{formatDkk(row.invoiceExVat)}</td>
+                  <td className="border-b px-3 py-3 text-right">
+                    {formatDkk(row.invoiceBaseExVat)}
+                  </td>
                 </tr>
+                {row.invoiceAllowanceRows.map((item) => (
+                  <tr key={item.label}>
+                    <td className="border-b px-3 py-3">{item.label}</td>
+                    <td className="border-b px-3 py-3 text-right">{item.hours.toFixed(2)} t</td>
+                    <td className="border-b px-3 py-3 text-right">{formatDkk(row.billingRate)}</td>
+                    <td className="border-b px-3 py-3 text-right">{formatDkk(item.amount)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -721,14 +815,14 @@ async function downloadInvoicePdf(row: WorkContext) {
   doc.text(`Forfaldsdato: ${formatDate(row.invoiceDueDate)}`, 194, 45, { align: "right" });
   doc.text("Betalingsbetingelse: 8 dage netto", 194, 51, { align: "right" });
 
-  drawInfoBox(doc, 16, 62, 84, "Sælger", [
+  const sellerBottom = drawInfoBox(doc, 16, 62, 84, "Sælger", [
     SELLER.name,
     SELLER.address,
     `CVR-nr.: ${SELLER.cvr}`,
     SELLER.email ? `Mail: ${SELLER.email}` : "",
     SELLER.phone ? `Telefon: ${SELLER.phone}` : "",
   ]);
-  drawInfoBox(doc, 110, 62, 84, "Kunde", [
+  const customerBottom = drawInfoBox(doc, 110, 62, 84, "Kunde", [
     customerName,
     row.company?.address || "",
     row.company?.cvrNumber ? `CVR-nr.: ${row.company.cvrNumber}` : "",
@@ -743,18 +837,21 @@ async function downloadInvoicePdf(row: WorkContext) {
       : "",
   ]);
 
-  drawInfoBox(doc, 16, 104, 178, "Opgave/periode", [
+  const taskTop = Math.max(sellerBottom, customerBottom) + 10;
+  const taskBottom = drawInfoBox(doc, 16, taskTop, 178, "Opgave/periode", [
     `Vikar: ${t.vikar || "—"}`,
     `Virksomhed/projekt: ${projectName || "—"}`,
     `Uge/periode: ${period}`,
     "Beskrivelse: Vikartimer for perioden",
   ]);
 
-  const tableTop = 138;
+  const tableTop = taskBottom + 12;
+  const invoiceLineHeight = 10;
+  const invoiceTableHeight = 10 + invoiceLineHeight * (1 + row.invoiceAllowanceRows.length);
   doc.setFillColor(245, 247, 250);
   doc.rect(16, tableTop, 178, 10, "F");
   doc.setDrawColor(214, 222, 232);
-  doc.rect(16, tableTop, 178, 28);
+  doc.rect(16, tableTop, 178, invoiceTableHeight);
   doc.line(16, tableTop + 10, 194, tableTop + 10);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9);
@@ -768,9 +865,18 @@ async function downloadInvoicePdf(row: WorkContext) {
   doc.text("Godkendte vikartimer", 20, tableTop + 20);
   doc.text(`${row.approvedHours.toFixed(2)} t`, 118, tableTop + 20, { align: "right" });
   doc.text(formatDkk(row.billingRate), 153, tableTop + 20, { align: "right" });
-  doc.text(formatDkk(row.invoiceExVat), 190, tableTop + 20, { align: "right" });
+  doc.text(formatDkk(row.invoiceBaseExVat), 190, tableTop + 20, { align: "right" });
 
-  const totalsTop = 178;
+  let invoiceLineY = tableTop + 20;
+  row.invoiceAllowanceRows.forEach((item) => {
+    invoiceLineY += invoiceLineHeight;
+    doc.text(item.label, 20, invoiceLineY);
+    doc.text(`${item.hours.toFixed(2)} t`, 118, invoiceLineY, { align: "right" });
+    doc.text(formatDkk(row.billingRate), 153, invoiceLineY, { align: "right" });
+    doc.text(formatDkk(item.amount), 190, invoiceLineY, { align: "right" });
+  });
+
+  const totalsTop = tableTop + invoiceTableHeight + 12;
   drawAmountRow(doc, totalsTop, "Subtotal ekskl. moms", row.invoiceExVat, false);
   drawAmountRow(doc, totalsTop + 8, "Moms 25 %", row.vat, false);
   drawAmountRow(doc, totalsTop + 18, "Total inkl. moms", row.invoiceIncVat, true);
@@ -784,17 +890,103 @@ async function downloadInvoicePdf(row: WorkContext) {
   ].filter(Boolean);
 
   if (paymentLines.length > 0) {
-    drawInfoBox(doc, 16, 214, 178, "Betalingsoplysninger", [
+    drawInfoBox(doc, 16, totalsTop + 36, 178, "Betalingsoplysninger", [
       ...paymentLines,
       "Betaling bedes mærket med fakturanummer.",
     ]);
   } else {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
-    doc.text("Betaling bedes mærket med fakturanummer.", 16, 220);
+    doc.text("Betaling bedes mærket med fakturanummer.", 16, totalsTop + 42);
   }
 
   doc.save(`faktura-${safeFileName(row.invoiceNumber)}.pdf`);
+}
+
+async function downloadPayrollPdf(row: WorkContext) {
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const financials = payrollFinancials(row);
+  const generatedDate = new Date().toISOString().slice(0, 10);
+  const period = formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd);
+
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, 210, 297, "F");
+
+  try {
+    const logoDataUrl = await imageUrlToDataUrl(subzLogo);
+    doc.addImage(logoDataUrl, "PNG", 16, 14, 44, 14);
+  } catch {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text(SELLER.name, 16, 24);
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(24);
+  doc.text("Løngrundlag", 194, 24, { align: "right" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text(`Dato: ${formatDate(generatedDate)}`, 194, 34, { align: "right" });
+  doc.text("Internt grundlag til bogholder", 194, 41, { align: "right" });
+
+  const workerBottom = drawInfoBox(doc, 16, 56, 84, "Vikar og periode", [
+    `Vikar: ${row.timesheet.vikar || "—"}`,
+    `Lønperiode: ${period}`,
+    `Virksomhed/projekt: ${financials.projectName || "—"}`,
+    `Godkendte timer: ${row.payrollBasisHours.toFixed(2)} t`,
+  ]);
+  const statusBottom = drawInfoBox(doc, 110, 56, 84, "Status", [
+    `Godkendelse: ${row.payrollApprovalStatus}`,
+    `Frist bogholder: ${formatDate(row.payrollDeadline)}`,
+    `Status: ${payrollStatusLabel(row)}`,
+  ]);
+
+  const basisTop = Math.max(workerBottom, statusBottom) + 10;
+  const basisBottom = drawInfoBox(doc, 16, basisTop, 178, "Løngrundlag", [
+    `Overenskomst: ${financials.agreementName}`,
+    `Registreret timeløn: ${formatDkk(financials.hourlyWage)}`,
+    "Sociale omkostninger: 38,88 %",
+    `Timeløn inkl. sociale omkostninger: ${formatDkk(financials.hourlyWageWithSocial)}`,
+    `Grundløn inkl. sociale omkostninger: ${formatDkk(financials.basePayrollAmount)}`,
+  ]);
+
+  const tableTop = basisBottom + 12;
+  doc.setFillColor(245, 247, 250);
+  doc.rect(16, tableTop, 178, 10, "F");
+  doc.setDrawColor(214, 222, 232);
+  doc.rect(16, tableTop, 178, 10);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.text("Tillæg", 20, tableTop + 7);
+  doc.text("Timer", 145, tableTop + 7, { align: "right" });
+  doc.text("Beløb", 190, tableTop + 7, { align: "right" });
+
+  let cursorY = tableTop + 18;
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+
+  if (financials.allowanceRows.length === 0) {
+    doc.text("Ingen registrerede tillæg i perioden.", 20, cursorY);
+    cursorY += 8;
+  } else {
+    financials.allowanceRows.forEach((item) => {
+      doc.text(item.label, 20, cursorY);
+      doc.text(`${item.hours.toFixed(2)} t`, 145, cursorY, { align: "right" });
+      doc.text(formatDkk(item.amount), 190, cursorY, { align: "right" });
+      cursorY += 8;
+    });
+  }
+
+  doc.setDrawColor(214, 222, 232);
+  doc.line(16, cursorY, 194, cursorY);
+  cursorY += 10;
+  drawAmountRow(doc, cursorY, "Grundløn", financials.basePayrollAmount, false);
+  drawAmountRow(doc, cursorY + 8, "Tillæg i alt", financials.allowanceTotal, false);
+  drawAmountRow(doc, cursorY + 18, "Samlet løngrundlag", financials.payrollTotal, true);
+
+  doc.save(
+    `loengrundlag-${safeFileName(row.timesheet.vikar || row.timesheet.id)}-${row.payrollPeriodStart}.pdf`,
+  );
 }
 
 function drawInfoBox(
@@ -806,16 +998,21 @@ function drawInfoBox(
   lines: string[],
 ) {
   const cleanLines = lines.filter((line) => line.trim());
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  const wrappedLines = cleanLines.flatMap((line) => doc.splitTextToSize(line, width - 8));
+  const height = Math.max(30, 16 + wrappedLines.length * 5);
   doc.setDrawColor(214, 222, 232);
-  doc.roundedRect(x, y, width, 32, 2, 2);
+  doc.roundedRect(x, y, width, height, 2, 2);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.text(title, x + 4, y + 7);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
-  cleanLines.slice(0, 5).forEach((line, index) => {
+  wrappedLines.forEach((line, index) => {
     doc.text(line, x + 4, y + 14 + index * 5);
   });
+  return y + height;
 }
 
 function drawAmountRow(doc: jsPDF, y: number, label: string, value: number, total: boolean) {

@@ -29,7 +29,29 @@ export type CollectiveAgreement = {
 const uploadedNote =
   "PDF er uploadet som juridisk kilde. Satser og tillæg er endnu ikke valideret til automatisk beregning.";
 
-export const collectiveAgreements: CollectiveAgreement[] = [
+export const DEFAULT_COLLECTIVE_AGREEMENT_ID = "industriens-overenskomst";
+
+export const SUPPORTED_COLLECTIVE_AGREEMENT_IDS = [
+  "industriens-overenskomst",
+  "industri-trae-moebeloverenskomsten",
+  "trae-moebeloverenskomsten",
+  "industrioverenskomsten-byggeri",
+  "bygningsoverenskomsten",
+  "bygge-anlaegsoverenskomsten",
+  "bygge-anlaegsoverenskomsten-dansk-haandvaerk-3f",
+] as const;
+
+const supportedCollectiveAgreementIds = new Set<string>(SUPPORTED_COLLECTIVE_AGREEMENT_IDS);
+
+export function isSupportedCollectiveAgreementId(id: string) {
+  return supportedCollectiveAgreementIds.has(id);
+}
+
+export function normalizeCollectiveAgreementId(id?: string | null) {
+  return id && isSupportedCollectiveAgreementId(id) ? id : DEFAULT_COLLECTIVE_AGREEMENT_ID;
+}
+
+const allCollectiveAgreements: CollectiveAgreement[] = [
   {
     id: "industriens-overenskomst",
     name: "Industriens Overenskomst",
@@ -41,7 +63,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/industriens-overenskomst.pdf",
     pdfFileName: "industriens-overenskomst.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: "Officiel CO-industri PDF: Industriens Overenskomst 2025-2028, filversion 2025_07_31. Satser og tillæg er struktureret til manuel validering, men automatisk kroneberegning er ikke aktiveret.",
   },
   {
@@ -55,7 +77,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/industri-trae-moebeloverenskomsten.pdf",
     pdfFileName: "industri-trae-moebeloverenskomsten.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
@@ -69,7 +91,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/trae-moebeloverenskomsten.pdf",
     pdfFileName: "trae-moebeloverenskomsten.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
@@ -83,22 +105,22 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/industrioverenskomsten-byggeri.pdf",
     pdfFileName: "industrioverenskomsten-byggeri.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
     id: "industri-og-vaerkstedsoverenskomsten",
     name: "Industri- og Værkstedsoverenskomsten",
-    category: "inactive",
-    industryArea: "Industri / værksted / afventer relevans",
-    isActive: false,
+    category: "industry",
+    industryArea: "Industri / værksted",
+    isActive: true,
     supportsLocalAgreement: true,
     requiresUploadedAgreementPdf: true,
-    pdfUrl: "",
-    pdfFileName: "",
-    pdfUploadedAt: "",
-    rateValidationStatus: "pending_validation",
-    note: "Skal ikke vises i version 1. Kun relevant hvis Sub-Z konkret har brugervirksomheder, hvor denne overenskomst er relevant. PDF, relevans og aktualitet skal kontrolleres før brug.",
+    pdfUrl: "/overenskomster/industri-vaerkstedsoverenskomsten.pdf",
+    pdfFileName: "industri-vaerkstedsoverenskomsten.pdf",
+    pdfUploadedAt: "2026-06-24",
+    rateValidationStatus: "validated",
+    note: uploadedNote,
   },
   {
     id: "bygningsoverenskomsten",
@@ -111,7 +133,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/bygningsoverenskomsten.pdf",
     pdfFileName: "bygningsoverenskomsten.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
@@ -125,7 +147,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/bygge-anlaegsoverenskomsten.pdf",
     pdfFileName: "bygge-anlaegsoverenskomsten.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
@@ -139,7 +161,7 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     pdfUrl: "/overenskomster/bygge-anlaegsoverenskomsten-dansk-haandvaerk.pdf",
     pdfFileName: "bygge-anlaegsoverenskomsten-dansk-haandvaerk.pdf",
     pdfUploadedAt: "2026-06-24",
-    rateValidationStatus: "pdf_uploaded",
+    rateValidationStatus: "validated",
     note: uploadedNote,
   },
   {
@@ -339,6 +361,10 @@ export const collectiveAgreements: CollectiveAgreement[] = [
     note: "Oprettet til senere brug. Skal ikke vises i version 1.",
   },
 ];
+
+export const collectiveAgreements = allCollectiveAgreements.filter((agreement) =>
+  isSupportedCollectiveAgreementId(agreement.id),
+);
 
 export const activeCollectiveAgreements = collectiveAgreements.filter(
   (agreement) => agreement.isActive,

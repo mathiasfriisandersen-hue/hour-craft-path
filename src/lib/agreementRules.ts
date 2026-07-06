@@ -249,7 +249,7 @@ function hasRuleSourcePages(pages?: AgreementRuleSourcePages) {
   return agreementRuleSourcePages(pages).length > 0;
 }
 
-function ruleText(field: AgreementRuleSourceKey, pages?: AgreementRuleSourcePages) {
+export function agreementRuleText(field: AgreementRuleSourceKey, pages?: AgreementRuleSourcePages) {
   const sourcePages = agreementRuleSourcePages(pages);
   return sourcePages.length
     ? `${AGREEMENT_RULE_SOURCE_LABEL[field]}: ${AGREEMENT_RULE_SOURCE_CONTEXT[field]} Brug kildehenvisningen til PDF-side ${formatAgreementRulePages(sourcePages)} for konkret regeltekst, sats og eventuelle betingelser/lokalaftaler.`
@@ -275,13 +275,31 @@ export const defaultAgreementRules: AgreementRule[] = collectiveAgreements.map((
   normalWeekHours: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.normalWeekHours)
     ? 37
     : undefined,
-  overtimeRule: ruleText("overtimeRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.overtimeRule),
-  saturdayRule: ruleText("saturdayRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.saturdayRule),
-  sundayRule: ruleText("sundayRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.sundayRule),
-  eveningRule: ruleText("eveningRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.eveningRule),
-  nightRule: ruleText("nightRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.nightRule),
-  shiftRule: ruleText("shiftRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.shiftRule),
-  specialRule: ruleText("specialRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.specialRule),
+  overtimeRule: agreementRuleText(
+    "overtimeRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.overtimeRule,
+  ),
+  saturdayRule: agreementRuleText(
+    "saturdayRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.saturdayRule,
+  ),
+  sundayRule: agreementRuleText(
+    "sundayRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.sundayRule,
+  ),
+  eveningRule: agreementRuleText(
+    "eveningRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.eveningRule,
+  ),
+  nightRule: agreementRuleText("nightRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.nightRule),
+  shiftRule: agreementRuleText(
+    "shiftRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.shiftRule,
+  ),
+  specialRule: agreementRuleText(
+    "specialRule",
+    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.specialRule,
+  ),
   eveningStart: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.eveningRule)
     ? "18:00"
     : "",

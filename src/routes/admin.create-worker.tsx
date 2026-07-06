@@ -58,9 +58,15 @@ export function CreateWorkerPage() {
   const validateWorkerFields = () => {
     const nextErrors: string[] = [];
     if (!form.vikar.trim()) nextErrors.push("Vikarnavn mangler");
+    if (!form.vikarCode.trim()) nextErrors.push("Kode mangler");
     if (!/^\S+@\S+\.\S+$/.test(form.vikarEmail))
       nextErrors.push("Vikarens mail mangler eller er ugyldig");
+    if (!form.vikarPhone.trim()) nextErrors.push("Vikarens telefon mangler");
+    if (!form.vikarAddress.trim()) nextErrors.push("Adresse mangler");
+    if (!form.vikarCpr.trim()) nextErrors.push("CPR-nr. mangler");
+    if (!form.workerLanguage) nextErrors.push("Sprog mangler");
     if (!form.tradeSkills.length) nextErrors.push("Vælg mindst ét fag for vikaren");
+    if (!form.competencies.trim()) nextErrors.push("Kompetencer mangler");
     return nextErrors;
   };
 
@@ -126,35 +132,47 @@ export function CreateWorkerPage() {
       <form onSubmit={submit} className="rounded-lg border bg-card p-5 md:p-6">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="Vikarnavn *">
-            <Input value={form.vikar} onChange={(e) => update({ vikar: e.target.value })} />
+            <Input required value={form.vikar} onChange={(e) => update({ vikar: e.target.value })} />
           </Field>
           <Field label="Vikarens mail *">
             <Input
+              required
               type="email"
               value={form.vikarEmail}
               onChange={(e) => update({ vikarEmail: e.target.value })}
             />
           </Field>
-          <Field label="Kode">
-            <Input value={form.vikarCode} onChange={(e) => update({ vikarCode: e.target.value })} />
-          </Field>
-          <Field label="Vikarens telefon">
+          <Field label="Kode *">
             <Input
+              required
+              value={form.vikarCode}
+              onChange={(e) => update({ vikarCode: e.target.value })}
+            />
+          </Field>
+          <Field label="Vikarens telefon *">
+            <Input
+              required
               value={form.vikarPhone}
               onChange={(e) => update({ vikarPhone: e.target.value })}
             />
           </Field>
-          <Field label="Adresse">
+          <Field label="Adresse *">
             <Input
+              required
               value={form.vikarAddress}
               onChange={(e) => update({ vikarAddress: e.target.value })}
             />
           </Field>
-          <Field label="CPR-nr.">
-            <Input value={form.vikarCpr} onChange={(e) => update({ vikarCpr: e.target.value })} />
+          <Field label="CPR-nr. *">
+            <Input
+              required
+              value={form.vikarCpr}
+              onChange={(e) => update({ vikarCpr: e.target.value })}
+            />
           </Field>
-          <Field label="Sprog">
+          <Field label="Sprog *">
             <select
+              required
               className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={form.workerLanguage}
               onChange={(e) => update({ workerLanguage: e.target.value as WorkerLanguage })}
@@ -173,8 +191,9 @@ export function CreateWorkerPage() {
               onChange={(tradeSkills) => update({ tradeSkills })}
             />
           </div>
-          <Field label="Kompetencer" className="md:col-span-2">
+          <Field label="Kompetencer *" className="md:col-span-2">
             <textarea
+              required
               className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               value={form.competencies}
               onChange={(e) => update({ competencies: e.target.value })}
