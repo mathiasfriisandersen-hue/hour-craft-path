@@ -19,6 +19,17 @@ function AdminUserDetail() {
   const view = search.view === "workers" || search.view === "companies" ? search.view : "overview";
 
   if (user) {
+    if (view === "overview") {
+      return (
+        <AdminOverviewContent
+          role={user.roleKey}
+          previewUserId={user.id}
+          dashboardShell
+          dashboardAllow={["admin"]}
+        />
+      );
+    }
+
     return (
       <AppShell allow={["admin"]}>
         {view === "workers" ? (
@@ -27,10 +38,8 @@ function AdminUserDetail() {
             showBackLink
             backHref={`/admin/users/${user.id}`}
           />
-        ) : view === "companies" ? (
-          <UserCompaniesOverview userId={user.id} role={user.roleKey} />
         ) : (
-          <AdminOverviewContent role={user.roleKey} previewUserId={user.id} />
+          <UserCompaniesOverview userId={user.id} role={user.roleKey} />
         )}
       </AppShell>
     );

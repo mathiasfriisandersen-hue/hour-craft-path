@@ -1,4 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  BriefcaseBusiness,
+  Building2,
+  FileText,
+  Mail,
+  MapPin,
+  Phone,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -86,6 +95,18 @@ export function CompaniesPage() {
   const knownWorkers = listKnownWorkers();
   const refresh = () => setCompanies(listCompanies());
   const visibleCompanies = companiesVisibleForRole(companies, role);
+  const totalProjects = visibleCompanies.reduce(
+    (sum, company) => sum + company.projects.length,
+    0,
+  );
+  const totalLocalAgreements = visibleCompanies.reduce(
+    (sum, company) => sum + company.localAgreements.length,
+    0,
+  );
+  const totalContacts = visibleCompanies.filter(
+    (company) => company.contactName || company.contactPhone || company.contactEmail,
+  ).length;
+  const detailCompany = visibleCompanies[0] ?? null;
   const update = (patch: Partial<Company>) => editing && setEditing({ ...editing, ...patch });
   useEffect(() => {
     window.addEventListener("timesheets-changed", refresh);
@@ -104,62 +125,198 @@ export function CompaniesPage() {
   }, []);
 
   return (
-    <AppShell allow={["admin", "bruger", "bruger2"]}>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Virksomheder, projekter og lokalaftaler</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Gem virksomheder, projekter/afdelinger, kontaktpersoner og standardoplysninger til
-            oprettelse af vikarer.
-          </p>
+    <AppShell
+      allow={["admin", "bruger", "bruger2"]}
+      dashboard={{
+        title: "Virksomheder, projekter og lokalaftaler",
+        subtitle:
+          "Gem virksomheder, projekter/afdelinger, kontaktpersoner og standardoplysninger til oprettelse af vikarer.",
+      }}
+    >
+      <div className="space-y-5">
+        <div className="flex justify-end">
+          <Button
+            className="shadow-sm"
+            onClick={() => setEditing({ ...blankCompany(), ownerRole: companyOwnerForRole(role) })}
+          >
+            Ny virksomhed
+          </Button>
         </div>
-        <Button
-          onClick={() => setEditing({ ...blankCompany(), ownerRole: companyOwnerForRole(role) })}
-        >
-          Ny virksomhed
-        </Button>
-      </div>
-      <div className="space-y-3">
-        {visibleCompanies.length === 0 && (
-          <div className="rounded-lg border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
-            Ingen virksomheder er oprettet endnu.
-          </div>
-        )}
-        {visibleCompanies.map((company) => (
-          <div key={company.id} className="rounded-lg border bg-card p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="font-semibold">{company.name}</div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {company.contactName || "—"} · {company.contactPhone || "—"} ·{" "}
-                  {company.contactEmail || "—"}
-                </div>
-                <div className="text-sm text-muted-foreground">{company.address || "—"}</div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  {company.projects.length} projekt(er) · {company.localAgreements.length}{" "}
-                  lokalaftale(r)
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={() => setEditing(company)}>
-                  Redigér
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    if (confirm(`Slet ${company.name}?`)) {
-                      removeCompany(company.id);
-                      refresh();
-                    }
-                  }}
-                >
-                  Slet
-                </Button>
-              </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CompanyKpiCard
+            icon={<Building2 className="h-5 w-5" />}
+            label="Virksomheder"
+            value={visibleCompanies.length}
+            tone="blue"
+          />
+          <CompanyKpiCard
+            icon={<BriefcaseBusiness className="h-5 w-5" />}
+            label="Projekter"
+            value={totalProjects}
+            tone="green"
+          />
+          <CompanyKpiCard
+            icon={<MapPin className="h-5 w-5" />}
+            label="Lokalaftaler"
+            value={totalLocalAgreements}
+            tone="violet"
+          />
+          <CompanyKpiCard
+            icon={<UsersRound className="h-5 w-5" />}
+            label="Kontaktpersoner"
+            value={totalContacts}
+            tone="orange"
+          />
+        </div>
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+            <div className="border-b px-5 py-4">
+              <div className="text-sm font-semibold text-muted-foreground">Virksomhedsliste</div>
             </div>
+
+            {visibleCompanies.length === 0 ? (
+              <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+                Ingen virksomheder er oprettet endnu.
+              </div>
+            ) : (
+              <div className="divide-y">
+                {visibleCompanies.map((company) => (
+                  <div
+                    key={company.id}
+                    className="grid gap-4 px-5 py-4 transition hover:bg-muted/30 lg:grid-cols-[minmax(0,1fr)_120px_120px_auto]"
+                  >
+                    <div className="flex min-w-0 gap-3">
+                      <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+                        <Building2 className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-foreground">{company.name}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {company.contactName || "—"} · {company.contactPhone || "—"} ·{" "}
+                          {company.contactEmail || "—"}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          CVR.nr: {company.cvrNumber || "—"}
+                        </div>
+                        <div className="text-sm text-muted-foreground">{company.address || "—"}</div>
+                      </div>
+                    </div>
+
+                    <CompanyCount value={company.projects.length} label="projekter" />
+                    <CompanyCount value={company.localAgreements.length} label="lokalaftaler" />
+
+                    <div className="flex items-start gap-2 lg:justify-end">
+                      <Button variant="outline" size="sm" onClick={() => setEditing(company)}>
+                        Redigér
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => {
+                          if (confirm(`Slet ${company.name}?`)) {
+                            removeCompany(company.id);
+                            refresh();
+                          }
+                        }}
+                      >
+                        Slet
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
+
+          <aside className="rounded-xl border bg-card p-5 shadow-sm">
+            {detailCompany ? (
+              <div className="space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-lg font-semibold">{detailCompany.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      CVR.nr: {detailCompany.cvrNumber || "—"}
+                    </div>
+                  </div>
+                  <Building2 className="h-5 w-5 text-blue-700" />
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <FileText className="h-4 w-4 text-blue-700" />
+                    Overblik
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Projekter</span>
+                      <span className="font-semibold">{detailCompany.projects.length}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Lokalaftaler</span>
+                      <span className="font-semibold">{detailCompany.localAgreements.length}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-muted-foreground">Standardoverenskomst</span>
+                      <span className="text-right font-semibold">
+                        {activeCollectiveAgreements.find(
+                          (agreement) => agreement.id === detailCompany.selectedAgreementId,
+                        )?.name ?? "—"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
+                    <UsersRound className="h-4 w-4 text-blue-700" />
+                    Kontaktinformation
+                  </div>
+                  <div className="space-y-3">
+                    <CompanyInfoRow
+                      icon={<UsersRound className="h-4 w-4" />}
+                      value={detailCompany.contactName || "—"}
+                    />
+                    <CompanyInfoRow
+                      icon={<Mail className="h-4 w-4" />}
+                      value={detailCompany.contactEmail || "—"}
+                    />
+                    <CompanyInfoRow
+                      icon={<Phone className="h-4 w-4" />}
+                      value={detailCompany.contactPhone || "—"}
+                    />
+                    <CompanyInfoRow
+                      icon={<MapPin className="h-4 w-4" />}
+                      value={detailCompany.address || "—"}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setEditing(detailCompany)}>
+                    Redigér
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-red-600 hover:text-red-700"
+                    onClick={() => {
+                      if (confirm(`Slet ${detailCompany.name}?`)) {
+                        removeCompany(detailCompany.id);
+                        refresh();
+                      }
+                    }}
+                  >
+                    Slet
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">Ingen virksomhed valgt.</div>
+            )}
+          </aside>
+        </div>
       </div>
       {editing && (
         <div
@@ -240,6 +397,59 @@ export function CompaniesPage() {
         </div>
       )}
     </AppShell>
+  );
+}
+
+function CompanyKpiCard({
+  icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: number;
+  tone: "blue" | "green" | "violet" | "orange";
+}) {
+  const toneClass = {
+    blue: "bg-blue-50 text-blue-700 ring-blue-100",
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-100",
+    violet: "bg-violet-50 text-violet-700 ring-violet-100",
+    orange: "bg-orange-50 text-orange-700 ring-orange-100",
+  }[tone];
+
+  return (
+    <div className="rounded-xl border bg-card p-5 shadow-sm">
+      <div className="flex items-center gap-4">
+        <div
+          className={`flex h-12 w-12 items-center justify-center rounded-full ring-1 ${toneClass}`}
+        >
+          {icon}
+        </div>
+        <div>
+          <div className="text-sm font-medium text-muted-foreground">{label}</div>
+          <div className="mt-1 text-2xl font-semibold">{value}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompanyCount({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="text-sm">
+      <div className="font-semibold text-foreground">{value}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+function CompanyInfoRow({ icon, value }: { icon: ReactNode; value: string }) {
+  return (
+    <div className="flex items-start gap-2 text-sm text-muted-foreground">
+      <span className="mt-0.5 text-blue-700">{icon}</span>
+      <span>{value}</span>
+    </div>
   );
 }
 

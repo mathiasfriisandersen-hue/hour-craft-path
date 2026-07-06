@@ -1,10 +1,23 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  ChevronRight,
+  Mail,
+  Phone,
+  RotateCcw,
+  Search,
+  UserRoundCheck,
+  UserRoundX,
+  UsersRound,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Role } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
+import { cn } from "@/lib/utils";
 import {
   knownWorkersFromTimesheets,
   knownWorkersIncludingInactiveFromTimesheets,
@@ -46,25 +59,60 @@ type WorkerRow = {
 };
 
 function WorkerOverview() {
+  const [search, setSearch] = useState("");
+
   return (
-    <AppShell allow={["admin"]}>
-      <WorkerOverviewContent role="admin" showBackLink />
+    <AppShell
+      allow={["admin"]}
+      dashboard={{
+        title: "Vikaroversigt",
+        subtitle: "Overblik over aktive, ledige og inaktive vikarer.",
+        search: {
+          value: search,
+          onChange: setSearch,
+          placeholder: "Søg efter vikar, virksomhed, overenskomst...",
+        },
+      }}
+    >
+      <WorkerOverviewContent
+        role="admin"
+        showBackLink
+        dashboardShell
+        searchQuery={search}
+        onSearchQueryChange={setSearch}
+      />
     </AppShell>
   );
 }
+
+type WorkerTab = "working" | "available" | "inactive";
+type WorkerTone = "blue" | "green" | "orange" | "purple";
 
 export function WorkerOverviewContent({
   role,
   showBackLink = false,
   backHref = "/admin",
+  dashboardShell = false,
+  searchQuery,
+  onSearchQueryChange,
 }: {
   role: Role;
   showBackLink?: boolean;
   backHref?: string;
+  dashboardShell?: boolean;
+  searchQuery?: string;
+  onSearchQueryChange?: (value: string) => void;
 }) {
   const timesheets = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
-  const [showInactive, setShowInactive] = useState(false);
+  const [activeTab, setActiveTab] = useState<WorkerTab>("working");
+  const [localSearch, setLocalSearch] = useState("");
+  const [tradeFilter, setTradeFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<WorkerTab | "all">("all");
+  const [selectedWorkerKey, setSelectedWorkerKey] = useState("");
+  const searchValue = searchQuery ?? localSearch;
+  const updateSearch = onSearchQueryChange ?? setLocalSearch;
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -78,233 +126,608 @@ export function WorkerOverviewContent({
     [timesheets, companies],
   );
 
-  const working = rows.filter((row) => row.hasActiveBooking);
-  const available = rows.filter((row) => !row.hasActiveBooking).sort(compareAvailableWorkerRows);
+  const working = useMemo(() => rows.filter((row) => row.hasActiveBooking), [rows]);
+  const available = useMemo(
+    () => rows.filter((row) => !row.hasActiveBooking).sort(compareAvailableWorkerRows),
+    [rows],
+  );
+  const rowsByTab = useMemo<Record<WorkerTab, WorkerRow[]>>(
+    () => ({
+      working,
+      available,
+      inactive: inactiveRows,
+    }),
+    [available, inactiveRows, working],
+  );
+  const activeTimesheetWeeks = rows.reduce((total, row) => total + row.currentTimesheets.length, 0);
+  const allRows = useMemo(() => [...rows, ...inactiveRows], [inactiveRows, rows]);
+  const tradeOptions = useMemo(() => uniqueTradeOptions(allRows), [allRows]);
+  const companyOptions = useMemo(() => uniqueCompanyOptions(allRows), [allRows]);
+  const filteredRows = useMemo(
+    () =>
+      filterWorkerRows(rowsByTab[activeTab], {
+        query: searchValue,
+        trade: tradeFilter,
+        company: companyFilter,
+        status: statusFilter,
+        currentTab: activeTab,
+      }),
+    [activeTab, rowsByTab, searchValue, tradeFilter, companyFilter, statusFilter],
+  );
+
+  useEffect(() => {
+    if (filteredRows.some((row) => row.worker.key === selectedWorkerKey)) return;
+    setSelectedWorkerKey(filteredRows[0]?.worker.key ?? "");
+  }, [filteredRows, selectedWorkerKey]);
+
+  const selectedRow =
+    filteredRows.find((row) => row.worker.key === selectedWorkerKey) ?? filteredRows[0] ?? null;
 
   const restoreWorker = (worker: KnownWorker) => {
     setKnownWorkerInactive(worker, false);
+    setActiveTab("available");
+    setStatusFilter("all");
   };
 
   const inactivateWorker = (worker: KnownWorker) => {
     setKnownWorkerInactive(worker, true);
-    setShowInactive(true);
+    setActiveTab("inactive");
+    setStatusFilter("all");
+  };
+
+  const selectTab = (tab: WorkerTab) => {
+    setActiveTab(tab);
+    setStatusFilter("all");
+  };
+
+  const selectStatusFilter = (value: WorkerTab | "all") => {
+    setStatusFilter(value);
+    if (value !== "all") setActiveTab(value);
   };
 
   return (
-    <>
-      <div className="mb-6">
-        {showBackLink && (
-          <a href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
+    <div className="space-y-5">
+      {!dashboardShell && (
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-950">Vikaroversigt</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Overblik over aktive, ledige og inaktive vikarer.
+          </p>
+        </div>
+      )}
+
+      {showBackLink && (
+        <div>
+          <a href={backHref} className="text-sm font-medium text-slate-500 hover:text-slate-950">
             ← Timesedler
           </a>
-        )}
-        <h1 className="mt-3 text-2xl font-semibold">Vikaroversigt</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Se hvilke aktive vikarer der er i arbejde, og hvilke der er ledige.
-        </p>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <WorkerSection
-          title="I arbejde"
-          rows={working}
-          emptyText="Ingen vikarer er i arbejde."
-          onInactivate={inactivateWorker}
-        />
-        <div className="space-y-5">
-          <WorkerSection
-            title="Ledige"
-            rows={available}
-            emptyText="Ingen ledige vikarer fundet."
-            onInactivate={inactivateWorker}
-            headerAction={
-              <Button variant="outline" onClick={() => setShowInactive((current) => !current)}>
-                Inaktive vikarer ({inactiveRows.length})
-              </Button>
-            }
-            inlineSection={
-              showInactive
-                ? {
-                    title: "Inaktive vikarer",
-                    rows: inactiveRows,
-                    emptyText: "Ingen inaktive vikarer.",
-                    inactiveMode: true,
-                    onRestore: restoreWorker,
-                  }
-                : undefined
-            }
-          />
         </div>
+      )}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <WorkerKpiCard
+          label="I arbejde"
+          value={working.length}
+          helper="Se alle i arbejde"
+          icon={UsersRound}
+          tone="blue"
+          active={activeTab === "working"}
+          onClick={() => selectTab("working")}
+        />
+        <WorkerKpiCard
+          label="Ledige"
+          value={available.length}
+          helper="Se alle ledige"
+          icon={UserRoundCheck}
+          tone="green"
+          active={activeTab === "available"}
+          onClick={() => selectTab("available")}
+        />
+        <WorkerKpiCard
+          label="Inaktive"
+          value={inactiveRows.length}
+          helper="Se alle inaktive"
+          icon={UserRoundX}
+          tone="orange"
+          active={activeTab === "inactive"}
+          onClick={() => selectTab("inactive")}
+        />
+        <WorkerKpiCard
+          label="Aktive timeseddeluger"
+          value={activeTimesheetWeeks}
+          helper="Aktive ugeforløb"
+          icon={CalendarDays}
+          tone="purple"
+        />
+      </section>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 pt-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <WorkerTabButton
+                label="I arbejde"
+                count={working.length}
+                active={activeTab === "working"}
+                onClick={() => selectTab("working")}
+              />
+              <WorkerTabButton
+                label="Ledige"
+                count={available.length}
+                active={activeTab === "available"}
+                onClick={() => selectTab("available")}
+              />
+              <WorkerTabButton
+                label="Inaktive"
+                count={inactiveRows.length}
+                active={activeTab === "inactive"}
+                onClick={() => selectTab("inactive")}
+              />
+            </div>
+
+            <div className="mt-4 grid gap-3 border-t border-slate-100 py-4 lg:grid-cols-[minmax(16rem,1.4fr)_minmax(9rem,0.8fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)]">
+              <label className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={searchValue}
+                  onChange={(event) => updateSearch(event.target.value)}
+                  placeholder="Søg efter navn, email eller tlf."
+                  className="h-11 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm"
+                />
+              </label>
+
+              <FilterSelect
+                label="Fag"
+                value={tradeFilter}
+                onChange={setTradeFilter}
+                options={tradeOptions}
+                allLabel="Alle fag"
+              />
+              <FilterSelect
+                label="Virksomhed"
+                value={companyFilter}
+                onChange={setCompanyFilter}
+                options={companyOptions}
+                allLabel="Alle virksomheder"
+              />
+              <label className="grid gap-1">
+                <span className="text-xs font-medium text-slate-500">Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(event) => selectStatusFilter(event.target.value as WorkerTab | "all")}
+                  className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition-colors focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                >
+                  <option value="all">Alle statusser</option>
+                  <option value="working">I arbejde</option>
+                  <option value="available">Ledig</option>
+                  <option value="inactive">Inaktiv</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <WorkerTable
+            rows={filteredRows}
+            activeTab={activeTab}
+            selectedWorkerKey={selectedRow?.worker.key ?? ""}
+            onSelectWorker={setSelectedWorkerKey}
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-500">
+            <span>
+              Viser {filteredRows.length === 0 ? 0 : 1}-{filteredRows.length} af{" "}
+              {rowsByTab[activeTab].length}
+            </span>
+            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+              {activeTabLabel(activeTab)}
+            </span>
+          </div>
+        </section>
+
+        <WorkerDetailPanel
+          row={selectedRow}
+          activeTab={activeTab}
+          inactiveMode={activeTab === "inactive"}
+          onInactivate={inactivateWorker}
+          onRestore={restoreWorker}
+        />
       </div>
-    </>
+    </div>
   );
 }
 
-type InlineWorkerSection = {
-  title: string;
-  rows: WorkerRow[];
-  emptyText: string;
-  inactiveMode?: boolean;
-  onRestore?: (worker: KnownWorker) => void;
-};
-
-function WorkerSection({
-  title,
-  rows,
-  emptyText,
-  headerAction,
-  inlineSection,
-  inactiveMode = false,
-  onInactivate,
-  onRestore,
+function WorkerKpiCard({
+  label,
+  value,
+  helper,
+  icon: Icon,
+  tone,
+  active = false,
+  onClick,
 }: {
-  title: string;
-  rows: WorkerRow[];
-  emptyText: string;
-  headerAction?: ReactNode;
-  inlineSection?: InlineWorkerSection;
-  inactiveMode?: boolean;
-  onInactivate?: (worker: KnownWorker) => void;
-  onRestore?: (worker: KnownWorker) => void;
+  label: string;
+  value: number;
+  helper: string;
+  icon: typeof UsersRound;
+  tone: WorkerTone;
+  active?: boolean;
+  onClick?: () => void;
 }) {
-  const [expandedWorkerKeys, setExpandedWorkerKeys] = useState<string[]>([]);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/30",
+        active && "border-blue-300 ring-2 ring-blue-100",
+        !onClick && "cursor-default hover:border-slate-200 hover:bg-white",
+      )}
+    >
+      <div className="flex items-center gap-4">
+        <span
+          className={cn(
+            "grid h-12 w-12 shrink-0 place-items-center rounded-full",
+            tone === "blue" && "bg-blue-100 text-blue-700",
+            tone === "green" && "bg-emerald-100 text-emerald-700",
+            tone === "orange" && "bg-orange-100 text-orange-700",
+            tone === "purple" && "bg-violet-100 text-violet-700",
+          )}
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold text-slate-700">{label}</span>
+          <span className="mt-1 block text-3xl font-semibold leading-none text-slate-950">
+            {value}
+          </span>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
+            {helper}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </span>
+        </span>
+      </div>
+    </button>
+  );
+}
 
-  const toggleWorker = (workerKey: string) => {
-    setExpandedWorkerKeys((current) =>
-      current.includes(workerKey)
-        ? current.filter((key) => key !== workerKey)
-        : [...current, workerKey],
+function WorkerTabButton({
+  label,
+  count,
+  active,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-2 border-b-2 px-3 pb-3 text-sm font-semibold transition-colors",
+        active
+          ? "border-blue-600 text-blue-700"
+          : "border-transparent text-slate-500 hover:text-slate-900",
+      )}
+    >
+      {label}
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-xs",
+          active ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500",
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  onChange,
+  options,
+  allLabel,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  allLabel: string;
+}) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-xs font-medium text-slate-500">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition-colors focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+      >
+        <option value="all">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function WorkerTable({
+  rows,
+  activeTab,
+  selectedWorkerKey,
+  onSelectWorker,
+}: {
+  rows: WorkerRow[];
+  activeTab: WorkerTab;
+  selectedWorkerKey: string;
+  onSelectWorker: (workerKey: string) => void;
+}) {
+  if (rows.length === 0) {
+    return (
+      <div className="px-5 py-14 text-center text-sm text-slate-500">
+        Ingen vikarer matcher den valgte visning.
+      </div>
     );
-  };
+  }
 
   return (
-    <section className="rounded-lg border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <h2 className="font-semibold">
-          {title} <span className="text-muted-foreground">({rows.length})</span>
-        </h2>
-        {headerAction}
-      </div>
-      {inlineSection && (
-        <div className="border-b bg-muted/20">
-          <div className="border-b px-4 py-3">
-            <h3 className="font-semibold">
-              {inlineSection.title}{" "}
-              <span className="text-muted-foreground">({inlineSection.rows.length})</span>
-            </h3>
-          </div>
-          {inlineSection.rows.length === 0 ? (
-            <div className="px-4 py-8 text-sm text-muted-foreground">{inlineSection.emptyText}</div>
-          ) : (
-            <WorkerRows
-              title={inlineSection.title}
-              rows={inlineSection.rows}
-              expandedWorkerKeys={expandedWorkerKeys}
-              inactiveMode={inlineSection.inactiveMode ?? false}
-              onInactivate={onInactivate}
-              onRestore={inlineSection.onRestore}
-              onToggleWorker={toggleWorker}
-            />
-          )}
-        </div>
-      )}
-      {rows.length === 0 ? (
-        <div className="px-4 py-8 text-sm text-muted-foreground">{emptyText}</div>
-      ) : (
-        <WorkerRows
-          title={title}
-          rows={rows}
-          expandedWorkerKeys={expandedWorkerKeys}
-          inactiveMode={inactiveMode}
-          onInactivate={onInactivate}
-          onRestore={onRestore}
-          onToggleWorker={toggleWorker}
-        />
-      )}
-    </section>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[900px] text-sm">
+        <thead className="bg-slate-50 text-left text-xs uppercase tracking-normal text-slate-500">
+          <tr>
+            <th className="px-5 py-3 font-semibold">Navn</th>
+            <th className="px-5 py-3 font-semibold">Email</th>
+            <th className="px-5 py-3 font-semibold">Telefon</th>
+            <th className="px-5 py-3 font-semibold">Fag</th>
+            <th className="px-5 py-3 font-semibold">Virksomhed</th>
+            <th className="px-5 py-3 font-semibold">Start dato</th>
+            <th className="px-5 py-3 font-semibold">Slut dato</th>
+            <th className="px-5 py-3 font-semibold">Status</th>
+            <th className="px-5 py-3" />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const selected = selectedWorkerKey === row.worker.key;
+            return (
+              <tr
+                key={row.worker.key}
+                className={cn(
+                  "border-t border-slate-100 transition-colors hover:bg-blue-50/40",
+                  selected && "bg-blue-50/70",
+                )}
+              >
+                <td className="px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => onSelectWorker(row.worker.key)}
+                    className="flex min-w-0 items-center gap-3 text-left"
+                  >
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                      {workerInitials(row.worker)}
+                    </span>
+                    <span className="font-semibold text-slate-950">{row.worker.name || "—"}</span>
+                  </button>
+                </td>
+                <td className="px-5 py-4 text-slate-600">{row.worker.email || "—"}</td>
+                <td className="px-5 py-4 text-slate-600">{row.worker.phone || "—"}</td>
+                <td className="px-5 py-4 text-slate-600">{formatTradeSkills(row.worker)}</td>
+                <td className="px-5 py-4 font-medium text-slate-700">{displayCompanyName(row)}</td>
+                <td className="px-5 py-4 text-slate-600">{formatDate(row.bookingStart)}</td>
+                <td className="px-5 py-4 text-slate-600">{formatDate(row.bookingEnd)}</td>
+                <td className="px-5 py-4">
+                  <WorkerStatusBadge status={workerStatus(row, activeTab)} />
+                </td>
+                <td className="px-5 py-4 text-right">
+                  <button
+                    type="button"
+                    onClick={() => onSelectWorker(row.worker.key)}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#164a82] hover:text-blue-700"
+                  >
+                    Åbn
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
-function WorkerRows({
-  title,
-  rows,
-  expandedWorkerKeys,
+function WorkerDetailPanel({
+  row,
+  activeTab,
   inactiveMode,
   onInactivate,
   onRestore,
-  onToggleWorker,
 }: {
-  title: string;
-  rows: WorkerRow[];
-  expandedWorkerKeys: string[];
+  row: WorkerRow | null;
+  activeTab: WorkerTab;
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
-  onToggleWorker: (workerKey: string) => void;
 }) {
+  if (!row) {
+    return (
+      <aside className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+        Vælg en vikar for at se oplysninger.
+      </aside>
+    );
+  }
+
   return (
-    <div className="divide-y">
-      {rows.map((row) => {
-        const isExpanded = expandedWorkerKeys.includes(row.worker.key);
-        return (
-          <article key={row.worker.key} className="p-4">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h3 className="font-medium">{row.worker.name || "—"}</h3>
-                <p className="text-sm text-muted-foreground">{row.worker.email || "—"}</p>
-              </div>
-              <div className="text-sm text-muted-foreground sm:text-right">
-                {row.bookingStart || row.bookingEnd ? (
-                  <>
-                    <div>Start vagt {formatDate(row.bookingStart)}</div>
-                    <div>Slut vagt {formatDate(row.bookingEnd)}</div>
-                  </>
-                ) : (
-                  <div>Ingen aktiv booking</div>
-                )}
-                {row.worker.phone && <div className="mt-1">Tlf. {row.worker.phone}</div>}
-              </div>
+    <aside className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start gap-3">
+        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-blue-100 text-lg font-semibold text-blue-700">
+          {workerInitials(row.worker)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-950">{row.worker.name || "—"}</h2>
+              <p className="mt-1 text-sm text-slate-500">{row.worker.email || "—"}</p>
+              <p className="mt-1 text-sm text-slate-500">{row.worker.phone || "—"}</p>
             </div>
-            {title === "I arbejde" && row.assignments.length > 0 && (
-              <div className="mt-3 space-y-1.5 text-sm">
-                {row.assignments.map((assignment) => (
-                  <div key={`${assignment.companyName}-${assignment.projectName}`}>
-                    <span className="font-medium">{assignment.companyName}</span>
-                    <span className="text-muted-foreground">
-                      {" "}
-                      / {assignment.projectName || "Projekt"} · {formatDate(assignment.startDate)} –{" "}
-                      {formatDate(assignment.endDate)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {row.currentTimesheets.length > 0 && (
-              <div className="mt-3 text-sm text-muted-foreground">
-                Aktiv timeseddeluge: {row.currentTimesheets.length}
-              </div>
-            )}
-            <button
-              type="button"
-              className="mt-3 text-sm font-medium text-primary hover:underline"
-              aria-expanded={isExpanded}
-              onClick={() => onToggleWorker(row.worker.key)}
-            >
-              {isExpanded ? "Skjul oplysninger" : "Vis oplysninger"}
-            </button>
-            {isExpanded && (
-              <WorkerDetails
-                row={row}
-                inactiveMode={inactiveMode}
-                onInactivate={onInactivate}
-                onRestore={onRestore}
-              />
-            )}
-          </article>
-        );
-      })}
+            <WorkerStatusBadge status={workerStatus(row, activeTab)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
+        <PanelMetric label="Status" value={workerStatusLabel(workerStatus(row, activeTab))} />
+        <PanelMetric label="Startdato" value={formatDate(row.bookingStart)} />
+        <PanelMetric label="Slutdato" value={formatDate(row.bookingEnd)} />
+        <PanelMetric label="Aktive timeseddeluger" value={String(row.currentTimesheets.length)} />
+      </div>
+
+      <div className="rounded-xl border border-slate-200 p-4">
+        <h3 className="mb-3 text-sm font-semibold text-slate-950">Kontaktinformation</h3>
+        <div className="space-y-2 text-sm text-slate-600">
+          <div className="flex items-center gap-2">
+            <Mail className="h-4 w-4 text-slate-400" />
+            <span className="break-all">{row.worker.email || "—"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Phone className="h-4 w-4 text-slate-400" />
+            <span>{row.worker.phone || "—"}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <BriefcaseBusiness className="h-4 w-4 text-slate-400" />
+            <span>{displayCompanyName(row)}</span>
+          </div>
+        </div>
+      </div>
+
+      <WorkerDetails
+        row={row}
+        inactiveMode={inactiveMode}
+        onInactivate={onInactivate}
+        onRestore={onRestore}
+        variant="panel"
+      />
+    </aside>
+  );
+}
+
+function PanelMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-semibold text-slate-900">{value}</span>
     </div>
   );
+}
+
+function WorkerStatusBadge({ status }: { status: WorkerTab }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold",
+        status === "working" && "bg-emerald-100 text-emerald-700",
+        status === "available" && "bg-blue-100 text-blue-700",
+        status === "inactive" && "bg-orange-100 text-orange-700",
+      )}
+    >
+      {workerStatusLabel(status)}
+    </span>
+  );
+}
+
+function workerStatus(row: WorkerRow, tab: WorkerTab): WorkerTab {
+  if (row.worker.inactive || tab === "inactive") return "inactive";
+  if (row.hasActiveBooking || tab === "working") return "working";
+  return "available";
+}
+
+function workerStatusLabel(status: WorkerTab): string {
+  if (status === "working") return "I arbejde";
+  if (status === "inactive") return "Inaktiv";
+  return "Ledig";
+}
+
+function activeTabLabel(tab: WorkerTab): string {
+  if (tab === "working") return "I arbejde";
+  if (tab === "inactive") return "Inaktive";
+  return "Ledige";
+}
+
+function workerInitials(worker: KnownWorker): string {
+  const source = worker.name || worker.email || worker.key;
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function formatTradeSkills(worker: KnownWorker): string {
+  return worker.tradeSkills.length ? worker.tradeSkills.join(", ") : "—";
+}
+
+function displayCompanyName(row: WorkerRow): string {
+  return (
+    row.assignments[0]?.companyName ||
+    row.futureAssignments[0]?.companyName ||
+    row.nextTimesheet?.brugervirksomhed ||
+    "—"
+  );
+}
+
+function uniqueTradeOptions(rows: WorkerRow[]): string[] {
+  return [...new Set(rows.flatMap((row) => row.worker.tradeSkills))].sort((a, b) =>
+    a.localeCompare(b, "da-DK"),
+  );
+}
+
+function uniqueCompanyOptions(rows: WorkerRow[]): string[] {
+  return [...new Set(rows.map(displayCompanyName).filter((value) => value !== "—"))].sort((a, b) =>
+    a.localeCompare(b, "da-DK"),
+  );
+}
+
+function filterWorkerRows(
+  rows: WorkerRow[],
+  filters: {
+    query: string;
+    trade: string;
+    company: string;
+    status: WorkerTab | "all";
+    currentTab: WorkerTab;
+  },
+): WorkerRow[] {
+  const query = filters.query.trim().toLowerCase();
+
+  return rows.filter((row) => {
+    if (filters.status !== "all" && filters.status !== filters.currentTab) return false;
+    if (filters.trade !== "all" && !row.worker.tradeSkills.includes(filters.trade)) return false;
+    if (filters.company !== "all" && displayCompanyName(row) !== filters.company) return false;
+
+    if (!query) return true;
+
+    const haystack = [
+      row.worker.name,
+      row.worker.email,
+      row.worker.phone,
+      row.worker.code,
+      row.worker.competencies,
+      displayCompanyName(row),
+      formatTradeSkills(row.worker),
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    return haystack.includes(query);
+  });
 }
 
 function WorkerDetails({
@@ -312,11 +735,13 @@ function WorkerDetails({
   inactiveMode,
   onInactivate,
   onRestore,
+  variant = "inline",
 }: {
   row: WorkerRow;
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
+  variant?: "inline" | "panel";
 }) {
   const [editing, setEditing] = useState(false);
   const timesheet = row.currentTimesheets[0];
@@ -332,7 +757,9 @@ function WorkerDetails({
       : "—";
 
   return (
-    <div className="mt-4 border-t pt-3">
+    <div
+      className={cn(variant === "panel" ? "border-t border-slate-200 pt-3" : "mt-4 border-t pt-3")}
+    >
       {editing ? (
         <WorkerEditForm worker={row.worker} onClose={() => setEditing(false)} />
       ) : (
@@ -400,6 +827,7 @@ function WorkerDetails({
             )}
             {inactiveMode ? (
               <Button size="sm" onClick={() => onRestore?.(row.worker)}>
+                <RotateCcw className="mr-1.5 h-4 w-4" />
                 Læg tilbage i ledige vikarer
               </Button>
             ) : (

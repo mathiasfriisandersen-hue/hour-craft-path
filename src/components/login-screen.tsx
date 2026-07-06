@@ -24,16 +24,21 @@ export function LoginScreen() {
     e.preventDefault();
     const vikarTimesheetId = pathname.match(/^\/vikar\/([^/]+)$/)?.[1];
     const vikarTimesheet = vikarTimesheetId ? getById(vikarTimesheetId) : undefined;
+    const validDemoPassword = password === DEMO_PASSWORD;
     const validVikarPassword =
+      !validDemoPassword &&
       role === "vikar" &&
       vikarTimesheet?.workerAccessCode === password &&
       vikarTimesheet.workerMustChangeAccessCode === false &&
       /^\d{4,8}$/.test(password);
     const matchedVikarTimesheet =
-      role === "vikar" && !validVikarPassword ? findByWorkerAccessCode(password) : undefined;
+      role === "vikar" && !validDemoPassword && !validVikarPassword
+        ? findByWorkerAccessCode(password)
+        : undefined;
     const matchedContactTimesheet =
-      role === "kontaktperson" ? findByContactPersonAccessCode(password) : undefined;
-    const validDemoPassword = password === DEMO_PASSWORD;
+      role === "kontaktperson" && !validDemoPassword
+        ? findByContactPersonAccessCode(password)
+        : undefined;
 
     if (
       !validDemoPassword &&
@@ -54,7 +59,10 @@ export function LoginScreen() {
     }
     if (matchedVikarTimesheet) {
       login("vikar", {
-        workerIdentity: { name: matchedVikarTimesheet.vikar, email: matchedVikarTimesheet.vikarEmail },
+        workerIdentity: {
+          name: matchedVikarTimesheet.vikar,
+          email: matchedVikarTimesheet.vikarEmail,
+        },
       });
       navigate({ to: "/vikar/$id", params: { id: matchedVikarTimesheet.id }, replace: true });
       return;

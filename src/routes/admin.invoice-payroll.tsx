@@ -1,6 +1,16 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { jsPDF } from "jspdf";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Building2,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  FileText,
+  Send,
+  WalletCards,
+  type LucideIcon,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +29,7 @@ import {
   type CompanyProject,
   type Timesheet,
 } from "@/lib/timesheet-store";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/invoice-payroll")({
   head: () => ({ meta: [{ title: "Admin — Faktura & løn" }] }),
@@ -26,6 +37,7 @@ export const Route = createFileRoute("/admin/invoice-payroll")({
 });
 
 type StatusTone = "red" | "orange" | "green";
+type DashboardTone = "blue" | "amber" | "green" | "slate";
 
 type WorkContext = {
   timesheet: Timesheet;
@@ -81,6 +93,7 @@ function InvoicePayrollPage() {
   const [companies, setCompanies] = useState(listCompanies);
   const [preview, setPreview] = useState<WorkContext | null>(null);
   const [payrollPreview, setPayrollPreview] = useState<WorkContext | null>(null);
+  const [view, setView] = useState<"invoice" | "payroll">("invoice");
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -106,122 +119,203 @@ function InvoicePayrollPage() {
         totalHours(row.timesheet.days) > 0,
     )
     .sort(comparePayrollRows);
+  const invoiceSentRows = invoiceRows.filter((row) => row.timesheet.invoiceSentDate);
+  const invoiceNowRows = invoiceRows.filter(
+    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone === "red",
+  );
+  const invoiceSoonRows = invoiceRows.filter(
+    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone !== "red",
+  );
+  const payrollSentRows = payrollRows.filter((row) => row.timesheet.payrollSentDate);
+  const payrollReadyRows = payrollRows.filter(
+    (row) => !row.timesheet.payrollSentDate && row.payrollTone === "red",
+  );
+  const payrollWaitingRows = payrollRows.filter(
+    (row) => !row.timesheet.payrollSentDate && row.payrollTone !== "red",
+  );
+  const sentCount = invoiceSentRows.length + payrollSentRows.length;
+  const actionCount = invoiceNowRows.length + payrollReadyRows.length;
 
   return (
-    <AppShell allow={["admin"]}>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Faktura & løn</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Administrativt overblik over godkendte timer til fakturering og bogholderi.
-        </p>
-      </div>
-
-      <div className="grid items-start gap-5 lg:grid-cols-2">
-        <section className="rounded-lg border bg-card">
-          <div className="border-b px-4 py-3">
-            <h2 className="font-semibold">Fakturaoverblik</h2>
-          </div>
-          {invoiceRows.length === 0 ? (
-            <EmptyState text="Ingen godkendte timesedler klar til faktura." />
-          ) : (
-            <div className="divide-y">
-              {invoiceRows.map((row) => (
-                <article key={`invoice-${row.timesheet.id}`} className="p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <StatusDot tone={row.invoiceTone} />
-                        <h3 className="font-medium">
-                          {row.company?.name || row.timesheet.brugervirksomhed}
-                        </h3>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {row.timesheet.vikar} · Uge {weekNumber(row.timesheet.weekStart)} ·{" "}
-                        {formatWeekRange(row.timesheet.weekStart)}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPreview(row)}
-                    >
-                      Preview
-                    </Button>
-                  </div>
-                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <Fact label="Godkendte timer" value={`${row.approvedHours.toFixed(2)} t`} />
-                    <Fact label="Gangefaktor" value={formatMultiplier(row)} />
-                    <Fact label="Ekskl. moms" value={formatDkk(row.invoiceExVat)} />
-                    <Fact label="Inkl. moms" value={formatDkk(row.invoiceIncVat)} />
-                    <Fact label="Forfaldsdato" value={formatDate(row.invoiceDueDate)} />
-                    <Fact label="Status" value={statusLabel(row.invoiceTone)} />
-                    <StatusDateInput
-                      label="Faktura sendt"
-                      value={row.timesheet.invoiceSentDate ?? ""}
-                      onChange={(value) =>
-                        updateTimesheetDate(row.timesheet, "invoiceSentDate", value)
-                      }
-                    />
-                  </dl>
-                </article>
-              ))}
-            </div>
-          )}
+    <AppShell
+      allow={["admin"]}
+      dashboard={{
+        title: "Faktura & løn",
+        subtitle: "Administrativt overblik over godkendte timer til fakturering og bogholderi.",
+      }}
+    >
+      <div className="space-y-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <FinanceKpiCard
+            label="Samlede fakturaer"
+            value={invoiceRows.length}
+            meta="Godkendte timesedler klar til faktura"
+            icon={FileText}
+            tone="blue"
+          />
+          <FinanceKpiCard
+            label="Klar til bogholderi"
+            value={payrollReadyRows.length}
+            meta="Eksisterende lønstatus kræver handling"
+            icon={WalletCards}
+            tone="amber"
+          />
+          <FinanceKpiCard
+            label="Sendt"
+            value={sentCount}
+            meta="Faktura eller løn markeret sendt"
+            icon={Send}
+            tone="green"
+          />
+          <FinanceKpiCard
+            label="Kræver handling"
+            value={actionCount}
+            meta="Faktura eller løn skal håndteres nu"
+            icon={Clock3}
+            tone="slate"
+          />
         </section>
 
-        <section className="rounded-lg border bg-card">
-          <div className="border-b px-4 py-3">
-            <h2 className="font-semibold">Lønoverblik</h2>
-          </div>
-          {payrollRows.length === 0 ? (
-            <EmptyState text="Ingen godkendte timesedler klar til bogholder." />
-          ) : (
-            <div className="divide-y">
-              {payrollRows.map((row) => (
-                <article key={`payroll-${row.timesheet.id}`} className="p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="flex items-start gap-2">
-                      <StatusDot tone={row.payrollTone} />
-                      <div>
-                        <h3 className="font-medium">{row.timesheet.vikar}</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {row.company?.name || row.timesheet.brugervirksomhed}
-                          {row.project?.name ? ` / ${row.project.name}` : ""}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setPayrollPreview(row)}
-                    >
-                      Preview
-                    </Button>
-                  </div>
-                  <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                    <Fact
-                      label="Lønperiode"
-                      value={formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd)}
-                    />
-                    <Fact label="Godkendte timer" value={`${row.payrollBasisHours.toFixed(2)} t`} />
-                    <Fact label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
-                    <Fact label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
-                    <Fact label="Status" value={payrollStatusLabel(row)} />
-                    <StatusDateInput
-                      label="Sendt til bogholderi"
-                      value={row.timesheet.payrollSentDate ?? ""}
-                      onChange={(value) =>
-                        updateTimesheetDate(row.timesheet, "payrollSentDate", value)
-                      }
-                    />
-                  </dl>
-                </article>
-              ))}
+        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-950">Datagrundlag</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Siden viser alle ikke-arkiverede timesedler fra eksisterende faktura- og lønlogik.
+              </p>
             </div>
-          )}
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin">Til dashboard</Link>
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            <ScopeChip icon={CalendarDays} label="Periode" value="Alle eksisterende perioder" />
+            <ScopeChip icon={Building2} label="Virksomhed" value="Alle virksomheder" />
+            <ScopeChip icon={CheckCircle2} label="Status" value="Eksisterende statusser" />
+            <ScopeChip icon={Clock3} label="Filtre" value="Ingen aktive filtre på siden" />
+          </div>
         </section>
+
+        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+          <ViewToggleButton
+            active={view === "invoice"}
+            onClick={() => setView("invoice")}
+            label="Fakturaoverblik"
+            count={invoiceRows.length}
+          />
+          <ViewToggleButton
+            active={view === "payroll"}
+            onClick={() => setView("payroll")}
+            label="Lønoverblik"
+            count={payrollRows.length}
+          />
+        </div>
+
+        {view === "invoice" ? (
+          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="Fakturaoverblik"
+              count={invoiceRows.length}
+              actionLabel="Se alle fakturaer"
+            />
+            <div className="grid gap-4 p-4 xl:grid-cols-3">
+              <StatusColumn
+                title="Skal snart håndteres"
+                count={invoiceSoonRows.length}
+                tone="orange"
+                empty="Ingen fakturaer i denne status."
+              >
+                {invoiceSoonRows.map((row) => (
+                  <InvoiceCaseCard
+                    key={`invoice-soon-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+              <StatusColumn
+                title="Skal håndteres nu"
+                count={invoiceNowRows.length}
+                tone="red"
+                empty="Ingen fakturaer kræver handling lige nu."
+              >
+                {invoiceNowRows.map((row) => (
+                  <InvoiceCaseCard
+                    key={`invoice-now-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+              <StatusColumn
+                title="Faktura sendt"
+                count={invoiceSentRows.length}
+                tone="green"
+                empty="Ingen fakturaer er markeret sendt."
+              >
+                {invoiceSentRows.map((row) => (
+                  <InvoiceCaseCard
+                    key={`invoice-sent-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+            </div>
+          </section>
+        ) : (
+          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="Lønoverblik"
+              count={payrollRows.length}
+              actionLabel="Se alle lønoplysninger"
+            />
+            <div className="grid gap-4 p-4 xl:grid-cols-3">
+              <StatusColumn
+                title="Klar til bogholderi"
+                count={payrollReadyRows.length}
+                tone="orange"
+                empty="Ingen lønsager er klar til bogholderi."
+              >
+                {payrollReadyRows.map((row) => (
+                  <PayrollCaseCard
+                    key={`payroll-ready-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPayrollPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+              <StatusColumn
+                title="Kræver ikke handling endnu"
+                count={payrollWaitingRows.length}
+                tone="slate"
+                empty="Ingen lønsager afventer."
+              >
+                {payrollWaitingRows.map((row) => (
+                  <PayrollCaseCard
+                    key={`payroll-waiting-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPayrollPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+              <StatusColumn
+                title="Sendt til bogholderi"
+                count={payrollSentRows.length}
+                tone="green"
+                empty="Ingen lønsager er markeret sendt."
+              >
+                {payrollSentRows.map((row) => (
+                  <PayrollCaseCard
+                    key={`payroll-sent-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPayrollPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+            </div>
+          </section>
+        )}
       </div>
 
       {preview && <InvoicePreview row={preview} onClose={() => setPreview(null)} />}
@@ -234,6 +328,263 @@ function InvoicePayrollPage() {
       )}
     </AppShell>
   );
+}
+
+function FinanceKpiCard({
+  label,
+  value,
+  meta,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number;
+  meta: string;
+  icon: LucideIcon;
+  tone: DashboardTone;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className={cn("grid h-11 w-11 place-items-center rounded-lg", toneIconClass(tone))}>
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+      <div className="mt-4 text-sm font-semibold text-slate-900">{label}</div>
+      <div className="mt-2 text-3xl font-semibold leading-none text-slate-950 tabular-nums">
+        {value}
+      </div>
+      <div className={cn("mt-2 text-xs font-medium", toneTextClass(tone))}>{meta}</div>
+    </article>
+  );
+}
+
+function ScopeChip({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+      <div className="grid h-8 w-8 place-items-center rounded-md bg-white text-slate-500 shadow-sm">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs font-medium text-slate-500">{label}</div>
+        <div className="truncate text-sm font-semibold text-slate-900">{value}</div>
+      </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  count,
+  actionLabel,
+}: {
+  title: string;
+  count: number;
+  actionLabel: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4">
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
+        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+          {count}
+        </span>
+      </div>
+      <span className="text-sm font-medium text-blue-600">{actionLabel}</span>
+    </div>
+  );
+}
+
+function ViewToggleButton({
+  active,
+  onClick,
+  label,
+  count,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  count: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex min-w-44 flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors sm:flex-none",
+        active
+          ? "bg-blue-600 text-white shadow-sm"
+          : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+      )}
+    >
+      <span>{label}</span>
+      <span
+        className={cn(
+          "rounded-full px-2 py-0.5 text-xs",
+          active ? "bg-white/20 text-white" : "bg-white text-slate-500",
+        )}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function StatusColumn({
+  title,
+  count,
+  tone,
+  empty,
+  children,
+}: {
+  title: string;
+  count: number;
+  tone: StatusTone | "slate";
+  empty: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="min-h-64 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <ColumnDot tone={tone} />
+          <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+        </div>
+        <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-500 shadow-sm">
+          {count}
+        </span>
+      </div>
+      {count === 0 ? (
+        <div className="grid min-h-48 place-items-center rounded-lg border border-dashed border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-500">
+          {empty}
+        </div>
+      ) : (
+        <div className="space-y-3">{children}</div>
+      )}
+    </section>
+  );
+}
+
+function InvoiceCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () => void }) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-950">
+            {row.company?.name || row.timesheet.brugervirksomhed}
+          </div>
+          <div className="mt-1 truncate text-xs text-slate-500">
+            {row.timesheet.vikar} · Uge {weekNumber(row.timesheet.weekStart)}
+          </div>
+        </div>
+        <div className="text-right text-sm font-semibold text-slate-950">
+          {row.approvedHours.toFixed(2)} t
+        </div>
+      </div>
+
+      <dl className="mt-3 grid gap-2 text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <Fact label="Periode" value={formatWeekRange(row.timesheet.weekStart)} />
+          <Fact label="Forfaldsdato" value={formatDate(row.invoiceDueDate)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Fact label="Ekskl. moms" value={formatDkk(row.invoiceExVat)} />
+          <Fact label="Inkl. moms" value={formatDkk(row.invoiceIncVat)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Fact label="Gangefaktor" value={formatMultiplier(row)} />
+          <Fact label="Status" value={statusLabel(row.invoiceTone)} />
+        </div>
+        <StatusDateInput
+          label="Faktura sendt"
+          value={row.timesheet.invoiceSentDate ?? ""}
+          onChange={(value) => updateTimesheetDate(row.timesheet, "invoiceSentDate", value)}
+        />
+      </dl>
+
+      <div className="mt-3 flex justify-end">
+        <Button type="button" variant="outline" size="sm" onClick={onPreview}>
+          Preview
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () => void }) {
+  return (
+    <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-950">{row.timesheet.vikar}</div>
+          <div className="mt-1 truncate text-xs text-slate-500">
+            {row.company?.name || row.timesheet.brugervirksomhed}
+            {row.project?.name ? ` / ${row.project.name}` : ""}
+          </div>
+        </div>
+        <div className="text-right text-sm font-semibold text-slate-950">
+          {row.payrollBasisHours.toFixed(2)} t
+        </div>
+      </div>
+
+      <dl className="mt-3 grid gap-2 text-sm">
+        <div className="grid grid-cols-2 gap-2">
+          <Fact
+            label="Lønperiode"
+            value={formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd)}
+          />
+          <Fact label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
+        </div>
+        <Fact label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
+        <Fact label="Status" value={payrollStatusLabel(row)} />
+        <StatusDateInput
+          label="Sendt til bogholderi"
+          value={row.timesheet.payrollSentDate ?? ""}
+          onChange={(value) => updateTimesheetDate(row.timesheet, "payrollSentDate", value)}
+        />
+      </dl>
+
+      <div className="mt-3 flex justify-end">
+        <Button type="button" variant="outline" size="sm" onClick={onPreview}>
+          Preview
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function ColumnDot({ tone }: { tone: StatusTone | "slate" }) {
+  const color =
+    tone === "red"
+      ? "bg-red-500"
+      : tone === "orange"
+        ? "bg-amber-400"
+        : tone === "green"
+          ? "bg-emerald-500"
+          : "bg-slate-300";
+  return <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${color}`} aria-hidden="true" />;
+}
+
+function toneIconClass(tone: DashboardTone): string {
+  if (tone === "blue") return "bg-blue-50 text-blue-600";
+  if (tone === "amber") return "bg-amber-50 text-amber-600";
+  if (tone === "green") return "bg-emerald-50 text-emerald-600";
+  return "bg-slate-100 text-slate-500";
+}
+
+function toneTextClass(tone: DashboardTone): string {
+  if (tone === "blue") return "text-blue-600";
+  if (tone === "amber") return "text-amber-600";
+  if (tone === "green") return "text-emerald-600";
+  return "text-slate-500";
 }
 
 function updateTimesheetDate(
@@ -386,9 +737,9 @@ function payrollTone(timesheet: Timesheet, periodEnd: string): StatusTone {
   const end = new Date(`${periodEnd}T12:00:00`);
   const autoApprovalDate = new Date(`${addDaysToISODate(periodEnd, 2)}T12:00:00`);
 
-  if (end.getTime() >= today.getTime()) return "green";
   if (isTimesheetApprovedForPayroll(timesheet, periodEnd)) return "red";
   if (autoApprovalDate.getTime() <= today.getTime()) return "red";
+  if (end.getTime() >= today.getTime()) return "green";
   return "orange";
 }
 
@@ -460,16 +811,6 @@ function daysBetween(start: string, end: string) {
   const startTime = new Date(`${start}T12:00:00`).getTime();
   const endTime = new Date(`${end}T12:00:00`).getTime();
   return Math.max(0, Math.floor((endTime - startTime) / 86400000));
-}
-
-function EmptyState({ text }: { text: string }) {
-  return <div className="px-4 py-8 text-sm text-muted-foreground">{text}</div>;
-}
-
-function StatusDot({ tone }: { tone: StatusTone }) {
-  const color =
-    tone === "red" ? "bg-red-500" : tone === "orange" ? "bg-orange-400" : "bg-emerald-500";
-  return <span className={`mt-1 h-3 w-3 shrink-0 rounded-full ${color}`} aria-hidden="true" />;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Bar,
   BarChart,
@@ -11,10 +11,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  Building2,
+  CheckCircle2,
+  ClipboardCheck,
+  Send,
+  UsersRound,
+  type LucideIcon,
+} from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
 import { listCompanies, type Company, type Timesheet } from "@/lib/timesheet-store";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/statistics")({
   head: () => ({ meta: [{ title: "Admin — Statistik" }] }),
@@ -61,14 +70,32 @@ type StatusOverview = {
 };
 
 type StatusTone = "neutral" | "warning" | "done";
+type DashboardTone = "blue" | "red" | "green" | "violet" | "amber";
 type DateRange = {
   from: string;
   to: string;
 };
 
+const METRIC_ICONS: Record<MetricKey, LucideIcon> = {
+  companies: Building2,
+  workers: UsersRound,
+  tasks: ClipboardCheck,
+  sent: Send,
+  approved: CheckCircle2,
+};
+
+const METRIC_TONES: Record<MetricKey, DashboardTone> = {
+  companies: "blue",
+  workers: "green",
+  tasks: "violet",
+  sent: "amber",
+  approved: "green",
+};
+
 function StatisticsPage() {
   const timesheets = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
+  const [search, setSearch] = useState("");
   const [visibleUsers, setVisibleUsers] = useState<Record<UserKey, boolean>>({
     bruger1: true,
     bruger2: true,
@@ -104,6 +131,17 @@ function StatisticsPage() {
       }),
     [companies, timesheets, visibleMetrics, visibleUsers],
   );
+  const metricTotals = useMemo(
+    () =>
+      METRICS.map((metric) => ({
+        ...metric,
+        value: USERS.reduce(
+          (sum, user) => sum + metricValue(metric.key, user.role, timesheets, companies),
+          0,
+        ),
+      })),
+    [companies, timesheets],
+  );
   const invoiceOverview = useMemo(
     () => buildInvoiceOverview(timesheets, invoiceSentRange),
     [invoiceSentRange, timesheets],
@@ -122,65 +160,121 @@ function StatisticsPage() {
   };
 
   return (
-    <AppShell allow={["admin"]}>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Statistik</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Overblik over aktivitet fordelt på brugere
-        </p>
-      </div>
-
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-        <section className="rounded-lg border bg-card p-4">
-          <div className="h-[420px] min-w-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 8, right: 12, bottom: 44, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis
-                  dataKey="metric"
-                  interval={0}
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-                <Tooltip />
-                <Legend verticalAlign="top" align="left" wrapperStyle={{ paddingBottom: 16 }} />
-                {visibleUsers.bruger1 && (
-                  <Bar dataKey="bruger1" name="Blå = Bruger 1" fill={USER_COLORS.bruger1}>
-                    <LabelList dataKey="bruger1" position="top" fill="#111827" fontSize={13} />
-                  </Bar>
-                )}
-                {visibleUsers.bruger2 && (
-                  <Bar dataKey="bruger2" name="Rød = Bruger 2" fill={USER_COLORS.bruger2}>
-                    <LabelList dataKey="bruger2" position="top" fill="#111827" fontSize={13} />
-                  </Bar>
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+    <AppShell
+      allow={["admin"]}
+      dashboard={{
+        title: "Statistik",
+        subtitle: "Overblik over aktivitet fordelt på brugere.",
+        search: {
+          value: search,
+          onChange: setSearch,
+          placeholder: "Søg efter vikar, virksomhed, overenskomst...",
+        },
+      }}
+    >
+      <div className="space-y-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {metricTotals.map((metric) => (
+            <StatisticKpiCard
+              key={metric.key}
+              label={kpiLabel(metric.label)}
+              value={metric.value}
+              icon={METRIC_ICONS[metric.key]}
+              tone={METRIC_TONES[metric.key]}
+            />
+          ))}
         </section>
 
-        <aside className="rounded-lg border bg-card p-4">
-          <h2 className="font-semibold">Filtre</h2>
-          <div className="mt-4 space-y-5">
-            <div>
-              <div className="mb-2 text-sm font-medium text-muted-foreground">Brugere</div>
-              <div className="space-y-2">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">
+                  Aktivitet fordelt på brugere
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Eksisterende målinger fordelt på Bruger 1 og Bruger 2.
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <LegendPill color={USER_COLORS.bruger1} label="Bruger 1" />
+                <LegendPill color={USER_COLORS.bruger2} label="Bruger 2" />
+              </div>
+            </div>
+
+            <div className="h-[480px] min-w-0 px-3 py-5 sm:px-5">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 24, right: 16, bottom: 32, left: 0 }}>
+                  <CartesianGrid stroke="#e2e8f0" strokeDasharray="4 4" vertical={false} />
+                  <XAxis
+                    dataKey="metric"
+                    interval={0}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "rgba(15, 23, 42, 0.04)" }}
+                    contentStyle={{
+                      borderRadius: 8,
+                      borderColor: "#e2e8f0",
+                      boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                  <Legend verticalAlign="top" align="left" wrapperStyle={{ paddingBottom: 16 }} />
+                  {visibleUsers.bruger1 && (
+                    <Bar
+                      dataKey="bruger1"
+                      name="Blå = Bruger 1"
+                      fill={USER_COLORS.bruger1}
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={58}
+                    >
+                      <LabelList dataKey="bruger1" position="top" fill="#0f172a" fontSize={13} />
+                    </Bar>
+                  )}
+                  {visibleUsers.bruger2 && (
+                    <Bar
+                      dataKey="bruger2"
+                      name="Rød = Bruger 2"
+                      fill={USER_COLORS.bruger2}
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={58}
+                    >
+                      <LabelList dataKey="bruger2" position="top" fill="#0f172a" fontSize={13} />
+                    </Bar>
+                  )}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3 text-xs text-slate-500">
+              <span>Data opdateres fra eksisterende timesedler og virksomhedsregister.</span>
+              <span>Fordelt på synlige brugere og valgte metrikker.</span>
+            </div>
+          </section>
+
+          <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Filtre</h2>
+            <div className="mt-4 space-y-5">
+              <FilterGroup title="Sammenlign brugere">
                 {USERS.map((user) => (
                   <FilterCheckbox
                     key={user.key}
                     label={`Vis ${user.label}`}
+                    color={USER_COLORS[user.key]}
                     checked={visibleUsers[user.key]}
                     onChange={() => toggleUser(user.key)}
                   />
                 ))}
-              </div>
-            </div>
+              </FilterGroup>
 
-            <div>
-              <div className="mb-2 text-sm font-medium text-muted-foreground">Målinger</div>
-              <div className="space-y-2">
+              <FilterGroup title="Metrikker">
                 {METRICS.map((metric) => (
                   <FilterCheckbox
                     key={metric.key}
@@ -189,67 +283,128 @@ function StatisticsPage() {
                     onChange={() => toggleMetric(metric.key)}
                   />
                 ))}
-              </div>
+              </FilterGroup>
             </div>
-          </div>
-        </aside>
-      </div>
+          </aside>
+        </div>
 
-      <div className="mt-6 grid gap-5 lg:grid-cols-2">
-        <OverviewSection
-          title="Fakturaoverblik"
-          rangeLabel="Periode for faktura sendt"
-          range={invoiceSentRange}
-          onRangeChange={setInvoiceSentRange}
-          cards={[
-            {
-              label: "Skal snart håndteres",
-              value: invoiceOverview.soon,
-              help: "Godkendte timesedler med kommende fakturafrist.",
-              tone: "neutral",
-            },
-            {
-              label: "Skal håndteres nu",
-              value: invoiceOverview.now,
-              help: "Godkendte timesedler hvor fakturafristen er nået.",
-              tone: "warning",
-            },
-            {
-              label: "Faktura sendt",
-              value: invoiceOverview.done,
-              help: "Timesedler markeret med eksisterende fakturastatus.",
-              tone: "done",
-            },
-          ]}
-        />
-        <OverviewSection
-          title="Lønoverblik"
-          rangeLabel="Periode for sendt til bogholderi"
-          range={payrollSentRange}
-          onRangeChange={setPayrollSentRange}
-          cards={[
-            {
-              label: "Klar til bogholderi",
-              value: payrollOverview.now,
-              help: "Timesedler der er godkendt eller autogodkendt til løn.",
-              tone: "warning",
-            },
-            {
-              label: "Kræver ikke handling endnu",
-              value: payrollOverview.soon,
-              help: "Timesedler der afventer godkendelse eller lønperiode.",
-              tone: "neutral",
-            },
-            {
-              label: "Sendt til bogholderi",
-              value: payrollOverview.done,
-              help: "Timesedler markeret med eksisterende lønstatus.",
-              tone: "done",
-            },
-          ]}
-        />
+        <div className="grid gap-5 xl:grid-cols-2">
+          <OverviewSection
+            title="Fakturaoverblik"
+            rangeLabel="Periode for faktura sendt"
+            range={invoiceSentRange}
+            onRangeChange={setInvoiceSentRange}
+            cards={[
+              {
+                label: "Skal snart håndteres",
+                value: invoiceOverview.soon,
+                help: "Godkendte timesedler med kommende fakturafrist.",
+                tone: "neutral",
+              },
+              {
+                label: "Skal håndteres nu",
+                value: invoiceOverview.now,
+                help: "Godkendte timesedler hvor fakturafristen er nået.",
+                tone: "warning",
+              },
+              {
+                label: "Faktura sendt",
+                value: invoiceOverview.done,
+                help: "Timesedler markeret med eksisterende fakturastatus.",
+                tone: "done",
+              },
+            ]}
+          />
+          <OverviewSection
+            title="Lønoverblik"
+            rangeLabel="Periode for sendt til bogholderi"
+            range={payrollSentRange}
+            onRangeChange={setPayrollSentRange}
+            cards={[
+              {
+                label: "Klar til bogholderi",
+                value: payrollOverview.now,
+                help: "Timesedler der er godkendt eller autogodkendt til løn.",
+                tone: "warning",
+              },
+              {
+                label: "Kræver ikke handling endnu",
+                value: payrollOverview.soon,
+                help: "Timesedler der afventer godkendelse eller lønperiode.",
+                tone: "neutral",
+              },
+              {
+                label: "Sendt til bogholderi",
+                value: payrollOverview.done,
+                help: "Timesedler markeret med eksisterende lønstatus.",
+                tone: "done",
+              },
+            ]}
+          />
+        </div>
       </div>
     </AppShell>
+  );
+}
+
+function StatisticKpiCard({
+  label,
+  value,
+  icon: Icon,
+  tone,
+}: {
+  label: string;
+  value: number;
+  icon: LucideIcon;
+  tone: DashboardTone;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className={cn("grid h-12 w-12 place-items-center rounded-full", toneIconClass(tone))}>
+          <Icon className="h-5 w-5" />
+        </div>
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-900">{label}</div>
+          <div className="mt-2 text-3xl font-semibold leading-none text-slate-950 tabular-nums">
+            {value}
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function kpiLabel(label: string): string {
+  if (label === "Virksomheder oprettet") return "Virksomheder";
+  if (label === "Vikarer oprettet") return "Vikarer";
+  if (label === "Timesedler godkendt") return "Godkendte timesedler";
+  return label;
+}
+
+function toneIconClass(tone: DashboardTone): string {
+  if (tone === "blue") return "bg-blue-50 text-blue-600";
+  if (tone === "red") return "bg-red-50 text-red-600";
+  if (tone === "green") return "bg-emerald-50 text-emerald-600";
+  if (tone === "violet") return "bg-violet-50 text-violet-600";
+  return "bg-amber-50 text-amber-600";
+}
+
+function LegendPill({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-sm font-medium text-slate-600">
+      <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
+}
+
+function FilterGroup({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="border-b border-slate-200 pb-5 last:border-b-0 last:pb-0">
+      <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
+      <div className="mt-3 space-y-2">{children}</div>
+    </section>
   );
 }
 
@@ -267,12 +422,12 @@ function OverviewSection({
   cards: Array<{ label: string; value: number; help: string; tone: StatusTone }>;
 }) {
   return (
-    <section className="rounded-lg border bg-card p-4">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <h2 className="font-semibold">{title}</h2>
+        <h2 className="text-lg font-semibold text-slate-950">{title}</h2>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1">
-            <span className="text-xs text-muted-foreground">{rangeLabel} fra</span>
+            <span className="text-xs font-medium text-slate-500">{rangeLabel} fra</span>
             <Input
               type="date"
               value={range.from}
@@ -280,7 +435,7 @@ function OverviewSection({
             />
           </label>
           <label className="grid gap-1">
-            <span className="text-xs text-muted-foreground">Til</span>
+            <span className="text-xs font-medium text-slate-500">Til</span>
             <Input
               type="date"
               value={range.to}
@@ -293,11 +448,13 @@ function OverviewSection({
         {cards.map((card) => (
           <article
             key={card.label}
-            className={`rounded-md border p-4 ${statusToneClass(card.tone)}`}
+            className={`rounded-lg border p-4 ${statusToneClass(card.tone)}`}
           >
-            <div className="text-sm font-medium">{card.label}</div>
-            <div className="mt-2 text-3xl font-semibold">{card.value}</div>
-            <p className="mt-2 text-xs text-muted-foreground">{card.help}</p>
+            <div className="text-sm font-semibold text-slate-900">{card.label}</div>
+            <div className="mt-2 text-3xl font-semibold text-slate-950 tabular-nums">
+              {card.value}
+            </div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">{card.help}</p>
           </article>
         ))}
       </div>
@@ -306,29 +463,34 @@ function OverviewSection({
 }
 
 function statusToneClass(tone: StatusTone): string {
-  if (tone === "warning") return "border-amber-200 bg-amber-50/60";
-  if (tone === "done") return "border-emerald-200 bg-emerald-50/60";
-  return "border-border bg-background";
+  if (tone === "warning") return "border-amber-200 bg-amber-50/70";
+  if (tone === "done") return "border-emerald-200 bg-emerald-50/70";
+  return "border-slate-200 bg-slate-50";
 }
 
 function FilterCheckbox({
   label,
   checked,
   onChange,
+  color,
 }: {
   label: string;
   checked: boolean;
   onChange: () => void;
+  color?: string;
 }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
+      <span className="flex min-w-0 items-center gap-2">
+        {color && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />}
+        <span className="truncate">{label}</span>
+      </span>
       <input
         type="checkbox"
         checked={checked}
         onChange={onChange}
-        className="h-4 w-4 rounded border-input"
+        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
       />
-      {label}
     </label>
   );
 }

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { timesheetsVisibleForRole } from "@/lib/company-access";
 import { useAuth } from "@/lib/auth";
@@ -107,22 +108,19 @@ function AdminCalendar() {
   const currentMonthLabel = useMemo(() => formatMonth(month), [month]);
 
   return (
-    <AppShell allow={["admin", "bruger", "bruger2"]}>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Kalender</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Se hvilke vikarer der er planlagt hos hvilke virksomheder.
-          </p>
-        </div>
-      </div>
-
-      <section className="mb-5 rounded-lg border bg-card p-4">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_1fr_auto]">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Vikarer</span>
+    <AppShell
+      allow={["admin", "bruger", "bruger2"]}
+      dashboard={{
+        title: "Kalender",
+        subtitle: "Se hvilke vikarer der er planlagt hos hvilke virksomheder.",
+      }}
+    >
+      <section className="mb-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_18rem]">
+          <label className="grid gap-2 text-sm">
+            <span className="font-semibold text-slate-950">Vikarer</span>
             <select
-              className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-sm outline-none transition-colors hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               value={worker}
               onChange={(event) => setWorker(event.target.value)}
             >
@@ -135,10 +133,10 @@ function AdminCalendar() {
             </select>
           </label>
 
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Virksomheder</span>
+          <label className="grid gap-2 text-sm">
+            <span className="font-semibold text-slate-950">Virksomheder</span>
             <select
-              className="h-9 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm"
+              className="h-11 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-sm outline-none transition-colors hover:border-slate-300 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
               value={company}
               onChange={(event) => setCompany(event.target.value)}
             >
@@ -151,65 +149,73 @@ function AdminCalendar() {
             </select>
           </label>
 
-          <div className="grid gap-1 text-sm">
-            <span className="font-medium">Måned</span>
-            <div className="flex h-9 items-center justify-between gap-2 rounded-md border border-input bg-background px-2">
+          <div className="grid gap-2 text-sm">
+            <span className="font-semibold text-slate-950">Måned</span>
+            <div className="flex h-11 items-center justify-between overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <button
                 type="button"
-                className="rounded px-2 py-1 text-sm font-medium hover:bg-accent"
+                className="grid h-full w-12 place-items-center border-r border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950"
                 onClick={() => setMonth((current) => shiftMonth(current, -1))}
+                aria-label="Forrige måned"
               >
-                ←
+                <ChevronLeft className="h-4 w-4" />
               </button>
-              <div className="min-w-32 text-center text-sm font-medium">{currentMonthLabel}</div>
+              <div className="min-w-32 flex-1 px-3 text-center text-sm font-semibold capitalize text-slate-950">
+                {currentMonthLabel}
+              </div>
               <button
                 type="button"
-                className="rounded px-2 py-1 text-sm font-medium hover:bg-accent"
+                className="grid h-full w-12 place-items-center border-l border-slate-200 text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-950"
                 onClick={() => setMonth((current) => shiftMonth(current, 1))}
+                aria-label="Næste måned"
               >
-                →
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      <div className="overflow-x-auto rounded-lg border bg-card">
-        <div className="grid min-w-[860px] grid-cols-7 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
-          {WEEK_DAY_LABELS.map((label) => (
-            <div key={label} className="px-3 py-2">
-              {label}
-            </div>
-          ))}
-        </div>
-        <div className="grid min-w-[860px] grid-cols-7">
-          {monthCells.map((cell) => (
-            <div
-              key={cell.date}
-              className={
-                cell.inMonth
-                  ? "min-h-36 border-b border-r p-2"
-                  : "min-h-36 border-b border-r bg-muted/25 p-2 text-muted-foreground"
-              }
-            >
-              <div className="mb-2 text-xs font-medium">{cell.dayOfMonth}</div>
-              <div className="space-y-1.5">
-                {cell.shifts.map((item) => (
-                  <Link
-                    key={item.id}
-                    to="/admin/$id"
-                    params={{ id: item.timesheet.id }}
-                    className="block rounded-md border bg-background px-2 py-1 text-xs hover:bg-accent"
-                  >
-                    <div className="truncate font-medium">{item.timesheet.vikar || "—"}</div>
-                    <div className="truncate text-muted-foreground">
-                      {item.day.start}–{item.day.end} · {item.timesheet.brugervirksomhed || "—"}
-                    </div>
-                  </Link>
-                ))}
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto">
+          <div className="grid min-w-[920px] grid-cols-7 border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            {WEEK_DAY_LABELS.map((label) => (
+              <div key={label} className="px-4 py-3 text-center">
+                {label}
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+          <div className="grid min-w-[920px] grid-cols-7">
+            {monthCells.map((cell) => (
+              <div
+                key={cell.date}
+                className={
+                  cell.inMonth
+                    ? "min-h-36 border-b border-r border-slate-200 bg-white p-3"
+                    : "min-h-36 border-b border-r border-slate-200 bg-slate-50/80 p-3 text-slate-400"
+                }
+              >
+                <div className="mb-2 text-sm font-semibold text-slate-950">{cell.dayOfMonth}</div>
+                <div className="space-y-2">
+                  {cell.shifts.map((item) => (
+                    <Link
+                      key={item.id}
+                      to="/admin/$id"
+                      params={{ id: item.timesheet.id }}
+                      className="block rounded-lg border border-blue-100 bg-blue-50 px-2.5 py-2 text-xs shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-100"
+                    >
+                      <div className="truncate font-semibold text-blue-800">
+                        {item.timesheet.vikar || "—"}
+                      </div>
+                      <div className="mt-1 truncate text-slate-600">
+                        {item.day.start}–{item.day.end} · {item.timesheet.brugervirksomhed || "—"}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </AppShell>
