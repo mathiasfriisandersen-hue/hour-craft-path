@@ -2,27 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   Archive,
-  Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
-  Clock3,
   Download,
-  Eye,
-  FileSpreadsheet,
-  FileText,
   MoreHorizontal,
   Search,
   Send,
-  ShieldCheck,
-  UserRound,
   UsersRound,
-  WalletCards,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
 import { AppShell, StatusBadge } from "@/components/app-shell";
+import { AdminDashboard } from "@/components/admin-dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
@@ -46,7 +37,7 @@ import { listCompanies } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/")({
-  head: () => ({ meta: [{ title: "Admin — Timesedler" }] }),
+  head: () => ({ meta: [{ title: "Admin — Dashboard" }] }),
   component: AdminList,
 });
 
@@ -54,7 +45,7 @@ type DashboardStatus = Status | "all" | "archived" | "inactive";
 type DashboardTone = "blue" | "amber" | "green" | "red" | "slate";
 
 function AdminList() {
-  return <AdminOverviewContent role="admin" dashboardShell />;
+  return <AdminDashboard />;
 }
 
 export function AdminOverviewContent({
@@ -79,7 +70,6 @@ export function AdminOverviewContent({
   const [week, setWeek] = useState("");
   const [archiveMode, setArchiveMode] = useState(false);
   const [selectedArchiveIds, setSelectedArchiveIds] = useState<string[]>([]);
-  const [selectedTimesheetId, setSelectedTimesheetId] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -130,22 +120,6 @@ export function AdminOverviewContent({
       );
     });
   }, [canManageArchive, visibleSubmitted, query, status, agreement, week]);
-
-  useEffect(() => {
-    if (!list.length) {
-      if (selectedTimesheetId) setSelectedTimesheetId(null);
-      return;
-    }
-
-    if (!selectedTimesheetId || !list.some((item) => item.id === selectedTimesheetId)) {
-      setSelectedTimesheetId(list[0].id);
-    }
-  }, [list, selectedTimesheetId]);
-
-  const selectedTimesheet = useMemo(
-    () => list.find((item) => item.id === selectedTimesheetId) ?? list[0] ?? null,
-    [list, selectedTimesheetId],
-  );
 
   const exportCsv = () => {
     const blob = new Blob([timesheetsToCsv(list)], { type: "text/csv;charset=utf-8" });
@@ -479,11 +453,9 @@ export function AdminOverviewContent({
                 return (
                   <tr
                     key={item.id}
-                    onClick={() => setSelectedTimesheetId(item.id)}
                     className={cn(
-                      "cursor-pointer border-t transition-colors hover:bg-muted/20",
+                      "border-t transition-colors hover:bg-muted/20",
                       dashboardMode && "border-slate-100 hover:bg-blue-50/40",
-                      dashboardMode && selectedTimesheet?.id === item.id && "bg-blue-50/70",
                     )}
                   >
                     <td className="px-4 py-3">
@@ -709,14 +681,12 @@ export function AdminOverviewContent({
         </div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+      <div>
         <section className="min-w-0 space-y-3">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-slate-950">Timeseddel-tabel</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Vælg en række for at se detaljer i panelet til højre.
-              </p>
+              <p className="mt-1 text-sm text-slate-500">Åbn en timeseddel fra rækken.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               <StatusFilterButton active={status === "all"} onClick={() => setStatus("all")}>
@@ -741,8 +711,6 @@ export function AdminOverviewContent({
           </div>
           {listContent}
         </section>
-
-        <TimesheetDetailPanel timesheet={selectedTimesheet} />
       </div>
     </div>
   );
@@ -767,169 +735,6 @@ export function AdminOverviewContent({
   }
 
   return standardContent;
-}
-
-function TimesheetDetailPanel({ timesheet }: { timesheet: Timesheet | null }) {
-  if (!timesheet) {
-    return (
-      <aside className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
-        Vælg en timeseddel i tabellen for at se detaljer.
-      </aside>
-    );
-  }
-
-  const calc = calculateTimesheet(timesheet);
-  const hours = totalHours(timesheet.days).toFixed(2);
-  const invoiceStatus = timesheet.invoiceSentDate ? "Afsendt" : "Ikke afsendt";
-  const payrollStatus = timesheet.payrollSentDate ? "Sendt til bogholderi" : "Ikke sendt";
-
-  return (
-    <aside className="rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold text-slate-950">
-            {timesheet.vikar || "—"}
-          </h2>
-          <div className="mt-2">
-            <StatusBadge status={timesheet.status} />
-          </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Timeseddel: {timesheet.vikarCode || "—"} · Oprettet{" "}
-            {formatDateLabel(timesheet.createdAt)}
-          </p>
-        </div>
-        <Link
-          to="/admin/$id"
-          params={{ id: timesheet.id }}
-          className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Åbn timeseddel"
-        >
-          <MoreHorizontal className="h-5 w-5" />
-        </Link>
-      </div>
-
-      <div className="divide-y divide-slate-100 px-5">
-        <DetailRow
-          icon={UserRound}
-          label="Vikar"
-          title={timesheet.vikar || "—"}
-          description={timesheet.vikarEmail || timesheet.vikarPhone || "—"}
-        />
-        <DetailRow
-          icon={Building2}
-          label="Virksomhed / Projekt"
-          title={timesheet.brugervirksomhed || "—"}
-          description={timesheet.projectName || timesheet.kontaktperson || "—"}
-        />
-        <DetailRow
-          icon={CalendarDays}
-          label="Periode"
-          title={`Uge ${weekNumber(timesheet.weekStart)}`}
-          description={formatWeekRange(timesheet.weekStart)}
-        />
-        <DetailRow
-          icon={Clock3}
-          label="Timer"
-          title={`${hours} timer`}
-          description="Detaljeret tidsregistrering"
-        />
-        <DetailRow
-          icon={ShieldCheck}
-          label="Overenskomst"
-          title={calc.agreementName || "—"}
-          description={calc.rateValidationStatus}
-        />
-        <DetailRow
-          icon={ClipboardCheck}
-          label="Godkendelsesstatus"
-          title={STATUS_LABEL[timesheet.status]}
-          description={`Opdateret ${formatDateLabel(timesheet.updatedAt)}`}
-        />
-        <DetailRow
-          icon={FileSpreadsheet}
-          label="Fakturastatus"
-          title={invoiceStatus}
-          description={
-            timesheet.invoiceSentDate
-              ? `${timesheet.invoiceNumber || "Faktura"} · ${formatDateLabel(timesheet.invoiceSentDate)}`
-              : timesheet.invoiceDueDate
-                ? `Frist ${formatDateLabel(timesheet.invoiceDueDate)}`
-                : "Ingen fakturadato registreret"
-          }
-          tone={timesheet.invoiceSentDate ? "green" : "amber"}
-        />
-        <DetailRow
-          icon={WalletCards}
-          label="Lønstatus"
-          title={payrollStatus}
-          description={
-            timesheet.payrollSentDate
-              ? formatDateLabel(timesheet.payrollSentDate)
-              : timesheet.payrollDeadline
-                ? `Frist ${formatDateLabel(timesheet.payrollDeadline)}`
-                : "Ingen løndato registreret"
-          }
-          tone={timesheet.payrollSentDate ? "green" : "amber"}
-        />
-      </div>
-
-      <div className="border-t border-slate-200 px-5 py-4">
-        <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">Note</div>
-        <p className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6 text-slate-600">
-          {timesheet.notes || "Ingen note registreret."}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap gap-2 border-t border-slate-200 px-5 py-4">
-        <Button asChild variant="outline" size="sm" className="flex-1">
-          <Link to="/admin/$id" params={{ id: timesheet.id }}>
-            <Eye className="h-4 w-4" />
-            Preview
-          </Link>
-        </Button>
-        <Button asChild size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700">
-          <Link to="/admin/$id" params={{ id: timesheet.id }}>
-            <FileText className="h-4 w-4" />
-            Åbn
-          </Link>
-        </Button>
-      </div>
-    </aside>
-  );
-}
-
-function DetailRow({
-  icon: Icon,
-  label,
-  title,
-  description,
-  tone = "slate",
-}: {
-  icon: LucideIcon;
-  label: string;
-  title: string;
-  description: string;
-  tone?: "slate" | "amber" | "green";
-}) {
-  return (
-    <div className="flex gap-3 py-4">
-      <div
-        className={cn(
-          "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg",
-          detailToneClass(tone),
-        )}
-      >
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">
-          {label}
-        </div>
-        <div className="mt-1 truncate text-sm font-semibold text-slate-950">{title}</div>
-        <div className="mt-0.5 text-xs leading-5 text-slate-500">{description}</div>
-      </div>
-    </div>
-  );
 }
 
 function DashboardKpiCard({
@@ -1008,12 +813,6 @@ function toneTextClass(tone: DashboardTone): string {
   if (tone === "green") return "text-emerald-600";
   if (tone === "red") return "text-red-600";
   return "text-slate-500";
-}
-
-function detailToneClass(tone: "slate" | "amber" | "green"): string {
-  if (tone === "amber") return "bg-amber-50 text-amber-600";
-  if (tone === "green") return "bg-emerald-50 text-emerald-600";
-  return "bg-slate-100 text-slate-500";
 }
 
 function initialsFor(name: string): string {

@@ -744,10 +744,13 @@ function payrollTone(timesheet: Timesheet, periodEnd: string): StatusTone {
 }
 
 function isTimesheetApprovedForPayroll(timesheet: Timesheet, periodEnd: string) {
-  if (timesheet.status === "approved") return true;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
+  const end = new Date(`${periodEnd}T12:00:00`);
   const autoApprovalDate = new Date(`${addDaysToISODate(periodEnd, 2)}T12:00:00`);
+
+  if (end.getTime() >= today.getTime()) return false;
+  if (timesheet.status === "approved") return true;
   return timesheet.status === "sent" && autoApprovalDate.getTime() <= today.getTime();
 }
 

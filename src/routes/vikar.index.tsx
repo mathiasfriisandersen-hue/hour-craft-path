@@ -1,16 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import {
   Archive,
-  Building2,
-  CalendarDays,
   CheckCircle2,
   ChevronRight,
-  Clock3,
   FileText,
   MoreHorizontal,
   Send,
-  UserRound,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -42,7 +38,6 @@ function VikarList() {
   const { workerIdentity } = useAuth();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<VikarStatus>("all");
-  const [selectedTimesheetId, setSelectedTimesheetId] = useState<string | null>(null);
   const workerNameKey = personKey(workerIdentity?.name ?? "");
   const workerEmailKey = personKey(workerIdentity?.email ?? "");
 
@@ -78,22 +73,6 @@ function VikarList() {
       );
     });
   }, [query, status, workerScopedList]);
-
-  useEffect(() => {
-    if (!list.length) {
-      if (selectedTimesheetId) setSelectedTimesheetId(null);
-      return;
-    }
-
-    if (!selectedTimesheetId || !list.some((timesheet) => timesheet.id === selectedTimesheetId)) {
-      setSelectedTimesheetId(list[0].id);
-    }
-  }, [list, selectedTimesheetId]);
-
-  const selectedTimesheet = useMemo(
-    () => list.find((timesheet) => timesheet.id === selectedTimesheetId) ?? list[0] ?? null,
-    [list, selectedTimesheetId],
-  );
 
   const counts = (value: Status) =>
     workerScopedList.filter((timesheet) => timesheet.status === value).length;
@@ -174,40 +153,6 @@ function VikarList() {
           ))}
         </section>
 
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-950">Filtre</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Viser {list.length} af {workerScopedList.length} timesedler.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <StatusFilterButton active={status === "all"} onClick={() => setStatus("all")}>
-                Alle {workerScopedList.length}
-              </StatusFilterButton>
-              <StatusFilterButton active={status === "draft"} onClick={() => setStatus("draft")}>
-                {STATUS_LABEL.draft} {counts("draft")}
-              </StatusFilterButton>
-              <StatusFilterButton active={status === "sent"} onClick={() => setStatus("sent")}>
-                {STATUS_LABEL.sent} {counts("sent")}
-              </StatusFilterButton>
-              <StatusFilterButton
-                active={status === "approved"}
-                onClick={() => setStatus("approved")}
-              >
-                {STATUS_LABEL.approved} {counts("approved")}
-              </StatusFilterButton>
-              <StatusFilterButton
-                active={status === "rejected"}
-                onClick={() => setStatus("rejected")}
-              >
-                {STATUS_LABEL.rejected} {counts("rejected")}
-              </StatusFilterButton>
-            </div>
-          </div>
-        </section>
-
         {list.length === 0 ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm">
             {workerScopedList.length === 0
@@ -215,13 +160,11 @@ function VikarList() {
               : "Ingen timesedler matcher filtrene."}
           </div>
         ) : (
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div>
             <section className="min-w-0 space-y-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-950">Timesedler</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Vælg en række for at se detaljer i panelet til højre.
-                </p>
+                <p className="mt-1 text-sm text-slate-500">Åbn en timeseddel fra rækken.</p>
               </div>
 
               <div className="space-y-3 md:hidden">
@@ -297,11 +240,7 @@ function VikarList() {
                     {list.map((timesheet) => (
                       <tr
                         key={timesheet.id}
-                        onClick={() => setSelectedTimesheetId(timesheet.id)}
-                        className={cn(
-                          "cursor-pointer border-t border-slate-100 transition-colors hover:bg-blue-50/40",
-                          selectedTimesheet?.id === timesheet.id && "bg-blue-50/70",
-                        )}
+                        className="border-t border-slate-100 transition-colors hover:bg-blue-50/40"
                       >
                         <td className="px-4 py-3 font-semibold whitespace-nowrap text-slate-950">
                           Uge {weekNumber(timesheet.weekStart)}
@@ -356,135 +295,10 @@ function VikarList() {
                 </table>
               </div>
             </section>
-
-            <VikarDetailPanel timesheet={selectedTimesheet} onDeleteDraft={deleteDraft} />
           </div>
         )}
       </div>
     </AppShell>
-  );
-}
-
-function VikarDetailPanel({
-  timesheet,
-  onDeleteDraft,
-}: {
-  timesheet: Timesheet | null;
-  onDeleteDraft: (timesheet: Timesheet) => void;
-}) {
-  if (!timesheet) {
-    return (
-      <aside className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
-        Vælg en timeseddel i tabellen for at se detaljer.
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="rounded-xl border border-slate-200 bg-white shadow-sm xl:sticky xl:top-6 xl:self-start">
-      <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-semibold text-slate-950">
-            {timesheet.vikar || "—"}
-          </h2>
-          <div className="mt-2">
-            <StatusBadge status={timesheet.status} />
-          </div>
-          <p className="mt-2 text-xs leading-5 text-slate-500">
-            Uge {weekNumber(timesheet.weekStart)} · {formatWeekRange(timesheet.weekStart)}
-          </p>
-        </div>
-        <Link
-          to="/vikar/$id"
-          params={{ id: timesheet.id }}
-          className="rounded-full p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-          aria-label="Åbn timeseddel"
-        >
-          <MoreHorizontal className="h-5 w-5" />
-        </Link>
-      </div>
-
-      <div className="divide-y divide-slate-100 px-5">
-        <DetailRow
-          icon={UserRound}
-          label="Vikar"
-          title={timesheet.vikar || "—"}
-          description={timesheet.vikarEmail || timesheet.vikarPhone || "—"}
-        />
-        <DetailRow
-          icon={Building2}
-          label="Brugervirksomhed"
-          title={timesheet.brugervirksomhed || "—"}
-          description={timesheet.kontaktperson || "—"}
-        />
-        <DetailRow
-          icon={CalendarDays}
-          label="Periode"
-          title={`Uge ${weekNumber(timesheet.weekStart)}`}
-          description={formatWeekRange(timesheet.weekStart)}
-        />
-        <DetailRow
-          icon={Clock3}
-          label="Timer"
-          title={`${totalHours(timesheet.days).toFixed(2)} timer`}
-          description="Detaljeret tidsregistrering"
-        />
-        <DetailRow
-          icon={CheckCircle2}
-          label="Status"
-          title={STATUS_LABEL[timesheet.status]}
-          description={`Senest opdateret ${formatDateLabel(timesheet.updatedAt)}`}
-        />
-      </div>
-
-      <div className="flex flex-wrap gap-2 border-t border-slate-200 px-5 py-4">
-        <Button asChild size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
-          <Link to="/vikar/$id" params={{ id: timesheet.id }}>
-            <FileText className="h-4 w-4" />
-            Åbn
-          </Link>
-        </Button>
-        {timesheet.status === "draft" && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => onDeleteDraft(timesheet)}
-            className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-          >
-            <XCircle className="h-4 w-4" />
-            Slet
-          </Button>
-        )}
-      </div>
-    </aside>
-  );
-}
-
-function DetailRow({
-  icon: Icon,
-  label,
-  title,
-  description,
-}: {
-  icon: LucideIcon;
-  label: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex gap-3 py-4">
-      <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500">
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold uppercase tracking-normal text-slate-500">
-          {label}
-        </div>
-        <div className="mt-1 truncate text-sm font-semibold text-slate-950">{title}</div>
-        <div className="mt-0.5 text-xs leading-5 text-slate-500">{description}</div>
-      </div>
-    </div>
   );
 }
 
@@ -520,29 +334,6 @@ function VikarKpiCard({
         {value}
       </div>
       <div className={cn("mt-2 text-xs font-medium", toneTextClass(tone))}>{meta}</div>
-    </button>
-  );
-}
-
-function StatusFilterButton({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
-        active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200",
-      )}
-    >
-      {children}
     </button>
   );
 }

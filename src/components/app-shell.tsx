@@ -1,7 +1,6 @@
 import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
-  Bell,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
@@ -13,7 +12,6 @@ import {
   LogOut,
   Plus,
   Search,
-  Settings,
   UsersRound,
   WalletCards,
 } from "lucide-react";
@@ -44,6 +42,7 @@ export function AppShell({
   dashboard?: DashboardShellOptions;
 }) {
   const { role, logout, ready } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   if (!ready) {
@@ -59,7 +58,8 @@ export function AppShell({
   const adminNav =
     role === "admin"
       ? [
-          { to: "/admin", label: "Timesedler" },
+          { to: "/admin", label: "Dashboard" },
+          { to: "/admin/timesheets", label: "Timesedler" },
           { to: "/admin/rules", label: "Regelgrundlag" },
           { to: "/admin/workers", label: "Vikarer" },
           { to: "/admin/companies", label: "Virksomheder" },
@@ -129,10 +129,6 @@ export function AppShell({
           </nav>
 
           <div className="space-y-2 border-t border-white/10 px-3 py-4">
-            <div className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300">
-              <Settings className="h-4 w-4" />
-              Indstillinger
-            </div>
             <button
               onClick={logout}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
@@ -169,16 +165,7 @@ export function AppShell({
                   </label>
                 )}
 
-                <button
-                  type="button"
-                  className="relative grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm"
-                  aria-label="Notifikationer"
-                >
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500" />
-                </button>
-
-                <div className="flex items-center gap-3">
+                <div className="relative flex items-center gap-3">
                   <div className="grid h-10 w-10 place-items-center rounded-full bg-[#164a82] text-sm font-semibold text-white">
                     {ROLE_LABEL[role].slice(0, 1)}
                   </div>
@@ -186,7 +173,27 @@ export function AppShell({
                     <div className="text-sm font-semibold text-slate-950">{ROLE_LABEL[role]}</div>
                     <div className="text-xs text-slate-500">{dashboardRoleSubtitle(role)}</div>
                   </div>
-                  <ChevronDown className="hidden h-4 w-4 text-slate-400 sm:block" />
+                  <button
+                    type="button"
+                    onClick={() => setProfileOpen((open) => !open)}
+                    className="hidden rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 sm:block"
+                    aria-expanded={profileOpen}
+                    aria-label="Åbn profilmenu"
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+                  {profileOpen && (
+                    <div className="absolute right-0 top-12 z-30 min-w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                      <button
+                        type="button"
+                        onClick={logout}
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        Log ud
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -276,7 +283,7 @@ export function AppShell({
 }
 
 function dashboardNavIcon(label: string) {
-  if (label === "Overblik") return Home;
+  if (label === "Dashboard") return Home;
   if (label === "Timesedler") return ClipboardList;
   if (label === "Regelgrundlag") return FileBadge2;
   if (label === "Vikarer") return UsersRound;

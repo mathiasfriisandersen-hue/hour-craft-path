@@ -22,7 +22,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { listCompanies, type Company, type Timesheet } from "@/lib/timesheet-store";
+import { listCompanies, seedIfEmpty, type Company, type Timesheet } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/statistics")({
@@ -94,8 +94,10 @@ const METRIC_TONES: Record<MetricKey, DashboardTone> = {
 
 function StatisticsPage() {
   const timesheets = useTimesheets();
-  const [companies, setCompanies] = useState(listCompanies);
-  const [search, setSearch] = useState("");
+  const [companies, setCompanies] = useState(() => {
+    seedIfEmpty();
+    return listCompanies();
+  });
   const [visibleUsers, setVisibleUsers] = useState<Record<UserKey, boolean>>({
     bruger1: true,
     bruger2: true,
@@ -165,11 +167,6 @@ function StatisticsPage() {
       dashboard={{
         title: "Statistik",
         subtitle: "Overblik over aktivitet fordelt på brugere.",
-        search: {
-          value: search,
-          onChange: setSearch,
-          placeholder: "Søg efter vikar, virksomhed, overenskomst...",
-        },
       }}
     >
       <div className="space-y-5">

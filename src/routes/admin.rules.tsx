@@ -27,6 +27,9 @@ export const Route = createFileRoute("/admin/rules")({
   component: RulesPage,
 });
 
+const inputClassName =
+  "h-10 rounded-lg border-slate-200 bg-white text-slate-950 shadow-sm focus-visible:ring-blue-100";
+
 function RulesPage() {
   const [rules, setRules] = useState(listRules);
   const [selectedId, setSelectedId] = useState(rules[0]?.agreementId ?? "");
@@ -114,35 +117,37 @@ function RulesPage() {
   };
 
   return (
-    <AppShell allow={["admin"]}>
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Overenskomstregler</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Vedligehold det regelgrundlag, som bruges i adminberegningen.
-        </p>
-      </div>
+    <AppShell
+      allow={["admin"]}
+      dashboard={{
+        title: "Overenskomstregler",
+        subtitle: "Vedligehold det regelgrundlag, som bruges i adminberegningen.",
+      }}
+    >
       <InfoBanner tone="warning">
         Systemet indeholder ingen forudfyldte satser. Indtast kun verificerede regler fra den
         gældende overenskomst, og angiv gyldighedsperioden.
       </InfoBanner>
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
-        <aside className="max-h-[720px] overflow-y-auto rounded-lg border bg-card p-2">
+        <aside className="max-h-[720px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
           {collectiveAgreements.map((agreement) => (
             <button
               key={agreement.id}
               onClick={() => setSelectedId(agreement.id)}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm ${selectedId === agreement.id ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+              className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${selectedId === agreement.id ? "bg-blue-600 text-white shadow-sm" : "text-slate-700 hover:bg-slate-50 hover:text-slate-950"}`}
             >
-              <span className="block">{agreement.name}</span>
+              <span className="block font-medium">{agreement.name}</span>
               <span className="block text-xs opacity-80">{agreement.rateValidationStatus}</span>
             </button>
           ))}
         </aside>
         {rule && (
-          <section className="rounded-lg border bg-card p-5 md:p-6">
+          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
             <div className="mb-5">
-              <h2 className="text-lg font-semibold">{agreement?.name ?? rule.agreementId}</h2>
-              <div className="mt-1 text-sm text-muted-foreground">
+              <h2 className="text-lg font-semibold text-slate-950">
+                {agreement?.name ?? rule.agreementId}
+              </h2>
+              <div className="mt-1 text-sm text-slate-500">
                 {agreement?.industryArea ?? "Ukendt brancheområde"} ·{" "}
                 {agreement?.rateValidationStatus ?? "missing_pdf"}
               </div>
@@ -151,7 +156,7 @@ function RulesPage() {
                   href={publicAgreementPdfHref(agreement.pdfUrl)}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-2 inline-flex text-sm font-medium text-primary hover:underline"
+                  className="mt-2 inline-flex text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline"
                 >
                   Åbn PDF-kilde →
                 </a>
@@ -164,6 +169,7 @@ function RulesPage() {
                   min={0}
                   step="0.01"
                   value={rule.normalDayHours ?? ""}
+                  className={inputClassName}
                   onChange={(e) =>
                     update({ normalDayHours: e.target.value ? Number(e.target.value) : undefined })
                   }
@@ -175,6 +181,7 @@ function RulesPage() {
                   min={0}
                   step="0.01"
                   value={rule.normalWeekHours ?? ""}
+                  className={inputClassName}
                   onChange={(e) =>
                     update({ normalWeekHours: e.target.value ? Number(e.target.value) : undefined })
                   }
@@ -184,6 +191,7 @@ function RulesPage() {
                 <Input
                   type="date"
                   value={rule.validFrom}
+                  className={inputClassName}
                   onChange={(e) => update({ validFrom: e.target.value })}
                 />
               </Field>
@@ -191,6 +199,7 @@ function RulesPage() {
                 <Input
                   type="date"
                   value={rule.validTo}
+                  className={inputClassName}
                   onChange={(e) => update({ validTo: e.target.value })}
                 />
               </Field>
@@ -198,6 +207,7 @@ function RulesPage() {
                 <Input
                   type="time"
                   value={rule.eveningStart}
+                  className={inputClassName}
                   onChange={(e) => update({ eveningStart: e.target.value })}
                 />
               </Field>
@@ -206,6 +216,7 @@ function RulesPage() {
                   <Input
                     type="time"
                     value={rule.nightStart}
+                    className={inputClassName}
                     onChange={(e) => update({ nightStart: e.target.value })}
                   />
                 </Field>
@@ -213,6 +224,7 @@ function RulesPage() {
                   <Input
                     type="time"
                     value={rule.nightEnd}
+                    className={inputClassName}
                     onChange={(e) => update({ nightEnd: e.target.value })}
                   />
                 </Field>
@@ -254,9 +266,9 @@ function RulesPage() {
                 className="md:col-span-2"
               />
             </div>
-            <section className="mt-6 rounded-lg border bg-muted/20 p-4">
-              <h3 className="font-semibold">Kildehenvisninger til PDF</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
+            <section className="mt-6 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+              <h3 className="font-semibold text-slate-950">Kildehenvisninger til PDF</h3>
+              <p className="mt-1 text-sm text-slate-500">
                 Angiv den faktiske PDF-side eller sideinterval, hvor reglen eller tillægget er
                 fundet. Linkene åbner direkte på siderne, fx 38-40 hvis reglen fortsætter over flere
                 sider.
@@ -270,14 +282,15 @@ function RulesPage() {
                     return (
                       <div
                         key={field}
-                        className="grid grid-cols-1 gap-2 rounded-md border bg-card p-3 md:grid-cols-[220px_1fr_120px_auto]"
+                        className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:grid-cols-[220px_1fr_120px_auto]"
                       >
-                        <div className="text-sm font-medium">
+                        <div className="text-sm font-semibold text-slate-700">
                           {AGREEMENT_RULE_SOURCE_LABEL[field]}
                         </div>
                         <Input
                           value={source?.pdfUrl ?? agreement?.pdfUrl ?? ""}
                           placeholder="/overenskomster/filnavn.pdf"
+                          className={inputClassName}
                           onChange={(e) =>
                             updateSource(field, {
                               pdfUrl: e.target.value,
@@ -311,14 +324,14 @@ function RulesPage() {
                                   href={agreementRuleSourceHref(item)}
                                   target="_blank"
                                   rel="noreferrer"
-                                  className="block text-sm font-medium text-primary hover:underline"
+                                  className="block text-sm font-semibold text-blue-700 hover:text-blue-800 hover:underline"
                                 >
                                   Åbn side {item.page} →
                                 </a>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-sm text-muted-foreground">Ingen kilde</span>
+                            <span className="text-sm text-slate-500">Ingen kilde</span>
                           )}
                         </div>
                       </div>
@@ -328,8 +341,10 @@ function RulesPage() {
               </div>
             </section>
             <div className="mt-5 flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground">{message}</span>
-              <Button onClick={save}>Gem regler</Button>
+              <span className="text-sm text-slate-500">{message}</span>
+              <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={save}>
+                Gem regler
+              </Button>
             </div>
           </section>
         )}
@@ -341,7 +356,7 @@ function RulesPage() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label>
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      <span className="mb-1.5 block text-sm font-semibold text-slate-700">{label}</span>
       {children}
     </label>
   );
@@ -360,9 +375,9 @@ function TextField({
 }) {
   return (
     <label className={className}>
-      <span className="mb-1.5 block text-sm font-medium">{label}</span>
+      <span className="mb-1.5 block text-sm font-semibold text-slate-700">{label}</span>
       <textarea
-        className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+        className="min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -521,7 +536,7 @@ function PdfPageInput({
       value={draftValue}
       placeholder={placeholder}
       inputMode="text"
-      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      className="flex h-10 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 shadow-sm outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
       onFocus={() => setIsFocused(true)}
       onChange={(event) => {
         setDraftValue(event.currentTarget.value);

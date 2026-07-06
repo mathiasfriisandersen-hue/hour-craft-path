@@ -39,14 +39,14 @@ export const Route = createFileRoute("/admin/workers")({
   component: WorkerOverview,
 });
 
-type Assignment = {
+export type Assignment = {
   companyName: string;
   projectName: string;
   startDate: string;
   endDate: string;
 };
 
-type WorkerRow = {
+export type WorkerRow = {
   worker: KnownWorker;
   assignments: Assignment[];
   futureAssignments: Assignment[];
@@ -241,8 +241,8 @@ export function WorkerOverviewContent({
         />
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 pt-5">
             <div className="flex flex-wrap items-center gap-2">
               <WorkerTabButton
@@ -265,15 +265,18 @@ export function WorkerOverviewContent({
               />
             </div>
 
-            <div className="mt-4 grid gap-3 border-t border-slate-100 py-4 lg:grid-cols-[minmax(16rem,1.4fr)_minmax(9rem,0.8fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)]">
-              <label className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  value={searchValue}
-                  onChange={(event) => updateSearch(event.target.value)}
-                  placeholder="Søg efter navn, email eller tlf."
-                  className="h-11 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm"
-                />
+            <div className="mt-4 grid min-w-0 gap-3 border-t border-slate-100 py-4 lg:grid-cols-2 xl:grid-cols-[minmax(14rem,1.3fr)_minmax(9rem,0.8fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)]">
+              <label className="grid gap-1">
+                <span className="invisible text-xs font-medium text-slate-500">Søgning</span>
+                <span className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={searchValue}
+                    onChange={(event) => updateSearch(event.target.value)}
+                    placeholder="Søg efter navn, email eller tlf."
+                    className="h-11 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm"
+                  />
+                </span>
               </label>
 
               <FilterSelect
@@ -477,19 +480,30 @@ function WorkerTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[900px] text-sm">
+    <div className="max-w-full overflow-x-auto">
+      <table className="w-full min-w-[57rem] table-fixed text-sm">
+        <colgroup>
+          <col className="w-[9rem]" />
+          <col className="w-[10rem]" />
+          <col className="w-[6rem]" />
+          <col className="w-[7rem]" />
+          <col className="w-[7rem]" />
+          <col className="w-[5.75rem]" />
+          <col className="w-[5.75rem]" />
+          <col className="w-[4.5rem]" />
+          <col className="w-[4.5rem]" />
+        </colgroup>
         <thead className="bg-slate-50 text-left text-xs uppercase tracking-normal text-slate-500">
           <tr>
-            <th className="px-5 py-3 font-semibold">Navn</th>
-            <th className="px-5 py-3 font-semibold">Email</th>
-            <th className="px-5 py-3 font-semibold">Telefon</th>
-            <th className="px-5 py-3 font-semibold">Fag</th>
-            <th className="px-5 py-3 font-semibold">Virksomhed</th>
-            <th className="px-5 py-3 font-semibold">Start dato</th>
-            <th className="px-5 py-3 font-semibold">Slut dato</th>
-            <th className="px-5 py-3 font-semibold">Status</th>
-            <th className="px-5 py-3" />
+            <th className="px-4 py-3 font-semibold">Navn</th>
+            <th className="px-4 py-3 font-semibold">Email</th>
+            <th className="px-4 py-3 font-semibold">Telefon</th>
+            <th className="px-4 py-3 font-semibold">Fag</th>
+            <th className="px-4 py-3 font-semibold">Virksomhed</th>
+            <th className="px-4 py-3 font-semibold">Start dato</th>
+            <th className="px-4 py-3 font-semibold">Slut dato</th>
+            <th className="px-4 py-3 font-semibold">Status</th>
+            <th className="sticky right-0 z-10 bg-slate-50 px-1 py-3" />
           </tr>
         </thead>
         <tbody>
@@ -503,32 +517,47 @@ function WorkerTable({
                   selected && "bg-blue-50/70",
                 )}
               >
-                <td className="px-5 py-4">
+                <td className="px-4 py-4">
                   <button
                     type="button"
                     onClick={() => onSelectWorker(row.worker.key)}
-                    className="flex min-w-0 items-center gap-3 text-left"
+                    className="flex w-full min-w-0 items-center gap-3 text-left"
                   >
                     <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
                       {workerInitials(row.worker)}
                     </span>
-                    <span className="font-semibold text-slate-950">{row.worker.name || "—"}</span>
+                    <span className="min-w-0 truncate font-semibold text-slate-950">
+                      {row.worker.name || "—"}
+                    </span>
                   </button>
                 </td>
-                <td className="px-5 py-4 text-slate-600">{row.worker.email || "—"}</td>
-                <td className="px-5 py-4 text-slate-600">{row.worker.phone || "—"}</td>
-                <td className="px-5 py-4 text-slate-600">{formatTradeSkills(row.worker)}</td>
-                <td className="px-5 py-4 font-medium text-slate-700">{displayCompanyName(row)}</td>
-                <td className="px-5 py-4 text-slate-600">{formatDate(row.bookingStart)}</td>
-                <td className="px-5 py-4 text-slate-600">{formatDate(row.bookingEnd)}</td>
-                <td className="px-5 py-4">
+                <td className="truncate px-4 py-4 text-slate-600">{row.worker.email || "—"}</td>
+                <td className="truncate px-4 py-4 text-slate-600">{row.worker.phone || "—"}</td>
+                <td className="truncate px-4 py-4 text-slate-600">
+                  {formatTradeSkills(row.worker)}
+                </td>
+                <td className="truncate px-4 py-4 font-medium text-slate-700">
+                  {displayCompanyName(row)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                  {formatDate(row.bookingStart)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                  {formatDate(row.bookingEnd)}
+                </td>
+                <td className="px-4 py-4">
                   <WorkerStatusBadge status={workerStatus(row, activeTab)} />
                 </td>
-                <td className="px-5 py-4 text-right">
+                <td
+                  className={cn(
+                    "sticky right-0 z-10 px-1 py-4 text-right",
+                    selected ? "bg-blue-50" : "bg-white",
+                  )}
+                >
                   <button
                     type="button"
                     onClick={() => onSelectWorker(row.worker.key)}
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-[#164a82] hover:text-blue-700"
+                    className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm font-semibold text-[#164a82] hover:bg-blue-50 hover:text-blue-700"
                   >
                     Åbn
                     <ChevronRight className="h-4 w-4" />
@@ -577,7 +606,6 @@ function WorkerDetailPanel({
               <p className="mt-1 text-sm text-slate-500">{row.worker.email || "—"}</p>
               <p className="mt-1 text-sm text-slate-500">{row.worker.phone || "—"}</p>
             </div>
-            <WorkerStatusBadge status={workerStatus(row, activeTab)} />
           </div>
         </div>
       </div>
@@ -1024,14 +1052,17 @@ function EditField({
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid gap-1 border-b py-2 last:border-b-0 sm:grid-cols-[11rem_1fr]">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium text-foreground sm:text-right">{value}</dd>
+    <div className="grid min-w-0 grid-cols-[minmax(7rem,0.8fr)_minmax(0,1fr)] gap-3 border-b py-2 last:border-b-0 sm:grid-cols-[11rem_minmax(0,1fr)]">
+      <dt className="min-w-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-right font-medium text-foreground [overflow-wrap:anywhere]">
+        {value}
+      </dd>
     </div>
   );
 }
 
-function buildWorkerRows(
+// eslint-disable-next-line react-refresh/only-export-components
+export function buildWorkerRows(
   timesheets: Timesheet[],
   companies: Company[],
   options: { inactive?: boolean } = {},

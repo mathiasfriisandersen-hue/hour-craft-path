@@ -9,8 +9,14 @@ export const Route = createFileRoute("/bruger2/workers")({
 
 function Bruger2WorkersPage() {
   return (
-    <AppShell allow={["bruger2"]}>
-      <WorkerOverviewContent role="bruger2" showBackLink backHref="/bruger2" />
+    <AppShell
+      allow={["bruger2"]}
+      dashboard={{
+        title: "Vikaroversigt",
+        subtitle: "Overblik over aktive, ledige og inaktive vikarer.",
+      }}
+    >
+      <WorkerOverviewContent role="bruger2" showBackLink backHref="/bruger2" dashboardShell />
     </AppShell>
   );
 }

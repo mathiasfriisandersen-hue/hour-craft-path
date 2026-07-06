@@ -28,6 +28,7 @@ import { Route as Bruger1CreateWorkerRouteImport } from './routes/bruger1.create
 import { Route as Bruger1CompaniesRouteImport } from './routes/bruger1.companies'
 import { Route as AdminWorkersRouteImport } from './routes/admin.workers'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminTimesheetsRouteImport } from './routes/admin.timesheets'
 import { Route as AdminStatisticsRouteImport } from './routes/admin.statistics'
 import { Route as AdminRulesRouteImport } from './routes/admin.rules'
 import { Route as AdminInvoicePayrollRouteImport } from './routes/admin.invoice-payroll'
@@ -132,6 +133,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/admin/users',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminTimesheetsRoute = AdminTimesheetsRouteImport.update({
+  id: '/admin/timesheets',
+  path: '/admin/timesheets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminStatisticsRoute = AdminStatisticsRouteImport.update({
   id: '/admin/statistics',
   path: '/admin/statistics',
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/timesheets': typeof AdminTimesheetsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/bruger1/companies': typeof Bruger1CompaniesRoute
@@ -211,6 +218,7 @@ export interface FileRoutesByTo {
   '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/timesheets': typeof AdminTimesheetsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/bruger1/companies': typeof Bruger1CompaniesRoute
@@ -241,6 +249,7 @@ export interface FileRoutesById {
   '/admin/invoice-payroll': typeof AdminInvoicePayrollRoute
   '/admin/rules': typeof AdminRulesRoute
   '/admin/statistics': typeof AdminStatisticsRoute
+  '/admin/timesheets': typeof AdminTimesheetsRoute
   '/admin/users': typeof AdminUsersRouteWithChildren
   '/admin/workers': typeof AdminWorkersRoute
   '/bruger1/companies': typeof Bruger1CompaniesRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
+    | '/admin/timesheets'
     | '/admin/users'
     | '/admin/workers'
     | '/bruger1/companies'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
+    | '/admin/timesheets'
     | '/admin/users'
     | '/admin/workers'
     | '/bruger1/companies'
@@ -330,6 +341,7 @@ export interface FileRouteTypes {
     | '/admin/invoice-payroll'
     | '/admin/rules'
     | '/admin/statistics'
+    | '/admin/timesheets'
     | '/admin/users'
     | '/admin/workers'
     | '/bruger1/companies'
@@ -360,6 +372,7 @@ export interface RootRouteChildren {
   AdminInvoicePayrollRoute: typeof AdminInvoicePayrollRoute
   AdminRulesRoute: typeof AdminRulesRoute
   AdminStatisticsRoute: typeof AdminStatisticsRoute
+  AdminTimesheetsRoute: typeof AdminTimesheetsRoute
   AdminUsersRoute: typeof AdminUsersRouteWithChildren
   AdminWorkersRoute: typeof AdminWorkersRoute
   Bruger1CompaniesRoute: typeof Bruger1CompaniesRoute
@@ -515,6 +528,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/timesheets': {
+      id: '/admin/timesheets'
+      path: '/admin/timesheets'
+      fullPath: '/admin/timesheets'
+      preLoaderRoute: typeof AdminTimesheetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/statistics': {
       id: '/admin/statistics'
       path: '/admin/statistics'
@@ -595,6 +615,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminInvoicePayrollRoute: AdminInvoicePayrollRoute,
   AdminRulesRoute: AdminRulesRoute,
   AdminStatisticsRoute: AdminStatisticsRoute,
+  AdminTimesheetsRoute: AdminTimesheetsRoute,
   AdminUsersRoute: AdminUsersRouteWithChildren,
   AdminWorkersRoute: AdminWorkersRoute,
   Bruger1CompaniesRoute: Bruger1CompaniesRoute,

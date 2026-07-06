@@ -1025,7 +1025,9 @@ export function setWorkerInactive(workerKey: string, workerInactive: boolean): T
   return updated.filter((item) => knownWorkerKey(item) === key);
 }
 
-export function removeWorkerFromSystem(worker: Pick<Timesheet, "vikar" | "vikarCode" | "vikarEmail">): void {
+export function removeWorkerFromSystem(
+  worker: Pick<Timesheet, "vikar" | "vikarCode" | "vikarEmail">,
+): void {
   const nameKey = personLookupKey(worker.vikar);
   const codeKey = personLookupKey(worker.vikarCode ?? "");
   const emailKey = personLookupKey(worker.vikarEmail);
@@ -1033,7 +1035,9 @@ export function removeWorkerFromSystem(worker: Pick<Timesheet, "vikar" | "vikarC
   const matchesWorker = (item: Timesheet) => {
     if (nameKey && personLookupKey(item.vikar) === nameKey) return true;
     if (codeKey && personLookupKey(item.vikarCode ?? "") === codeKey) return true;
-    return Boolean(!nameKey && !codeKey && emailKey && personLookupKey(item.vikarEmail) === emailKey);
+    return Boolean(
+      !nameKey && !codeKey && emailKey && personLookupKey(item.vikarEmail) === emailKey,
+    );
   };
 
   const nextTimesheets = readTimesheets().filter((item) => {
@@ -1530,11 +1534,17 @@ function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolea
 }
 
 function applyAppState(state: RemoteAppState, updatedAt: string): void {
+  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
+  const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
   const timesheets = Array.isArray(state.timesheets)
-    ? state.timesheets.map((item) => normalizeTimesheet(item))
+    ? state.timesheets
+        .map((item) => normalizeTimesheet(item))
+        .filter((item) => !deletedTimesheetIds.has(item.id))
     : [];
   const companies = Array.isArray(state.companies)
-    ? state.companies.map((item) => normalizeCompany(item))
+    ? state.companies
+        .map((item) => normalizeCompany(item))
+        .filter((item) => !deletedCompanyIds.has(item.id))
     : [];
 
   writeTimesheets(timesheets, { syncRemote: false });
@@ -1695,10 +1705,10 @@ function knownWorkerIdentityMatches(
   const workerEmailKey = personLookupKey(worker.email);
   return Boolean(
     !candidate.nameKey &&
-      !candidate.codeKey &&
-      candidate.emailKey &&
-      workerEmailKey &&
-      candidate.emailKey === workerEmailKey,
+    !candidate.codeKey &&
+    candidate.emailKey &&
+    workerEmailKey &&
+    candidate.emailKey === workerEmailKey,
   );
 }
 
@@ -1744,15 +1754,16 @@ function buildKnownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[]
       workers.push(worker);
     }
   }
-  return workers
-    .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+  return workers.sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
 }
 
 export function knownWorkersFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
   return buildKnownWorkersFromTimesheets(timesheets).filter((worker) => !worker.inactive);
 }
 
-export function knownWorkersIncludingInactiveFromTimesheets(timesheets: Timesheet[]): KnownWorker[] {
+export function knownWorkersIncludingInactiveFromTimesheets(
+  timesheets: Timesheet[],
+): KnownWorker[] {
   return buildKnownWorkersFromTimesheets(timesheets);
 }
 
@@ -1791,7 +1802,15 @@ export function updateKnownWorker(
   worker: KnownWorker,
   patch: Pick<
     KnownWorker,
-    "name" | "code" | "email" | "phone" | "address" | "cpr" | "language" | "tradeSkills" | "competencies"
+    | "name"
+    | "code"
+    | "email"
+    | "phone"
+    | "address"
+    | "cpr"
+    | "language"
+    | "tradeSkills"
+    | "competencies"
   >,
 ): Timesheet[] {
   const list = readTimesheets();
@@ -2482,7 +2501,11 @@ export function workerSubmissionReceiptBody(t: Timesheet, options: MailTextOptio
     }
     if (!day.start || !day.end) {
       return `${name} ${formatDateLabel(date)}: ${
-        language === "en" ? "No registration" : language === "pl" ? "Brak rejestracji" : "Ingen registrering"
+        language === "en"
+          ? "No registration"
+          : language === "pl"
+            ? "Brak rejestracji"
+            : "Ingen registrering"
       }`;
     }
     const pause = language === "pl" ? "przerwa" : "pause";
@@ -2765,7 +2788,9 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
   const language = normalizeWorkerLanguage(t.workerLanguage);
   const calc = calculateTimesheet(t);
   const defaultWorkday = t.days.find((day) => day.start && day.end);
-  const safeName = htmlEscape(t.vikar || (language === "en" ? "worker" : language === "pl" ? "pracowniku" : "vikar"));
+  const safeName = htmlEscape(
+    t.vikar || (language === "en" ? "worker" : language === "pl" ? "pracowniku" : "vikar"),
+  );
   const safeInviteUrl = htmlEscape(inviteUrl);
   const copy =
     language === "en"
@@ -3631,45 +3656,478 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-// Kept for backwards compatibility with the existing hook. New installations start empty.
+const TEST_DATA_PREFIX = "testdata-2026-07-06-v5";
+const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
+const TEST_DATA_BASE_DATE = "2026-07-06";
+const TEST_DATA_ACTIVE_PROJECT_END_DATE = "2026-08-03";
+const TEST_DATA_PAST_PROJECT_START = "2026-06-16";
+const TEST_DATA_PAST_PROJECT_END = "2026-06-22";
+const TEST_DATA_PAST_WEEK_START = "2026-06-15";
+const TEST_DATA_ACTIVE_WEEK_START = "2026-07-06";
+
+type TestCompanyInput = {
+  name: string;
+  address: string;
+  contactName: string;
+  contactPhone: string;
+  contactEmail: string;
+  agreementId: string;
+};
+
+type TestWorkerInput = {
+  index: number;
+  ownerRole: "bruger" | "bruger2";
+  name: string;
+  tradeSkill: TradeSkill;
+  competencies: string;
+  language: WorkerLanguage;
+};
+
+type TestProjectInput = {
+  companyIndex: number;
+  projectIndex: number;
+  ownerRole: "bruger" | "bruger2";
+  name: string;
+  tradeSkill: TradeSkill;
+  competencies: string;
+  workerIndexes: number[];
+  workPeriod: WorkPeriod;
+  startDate: string;
+  endDate: string;
+};
+
+const TEST_TRADE_SKILLS: TradeSkill[] = [
+  "Industri / produktion",
+  "Smed / metal",
+  "CNC / maskinarbejde",
+  "Tømrer / snedker",
+  "Anlæg",
+  "Murer",
+  "Montage",
+  "Svejser",
+  "Træ / møbel",
+  "Byggeri / håndværk",
+  "Jord / beton",
+  "Murerarbejdsmand",
+];
+
+const TEST_AGREEMENT_IDS = [
+  "industriens-overenskomst",
+  "industri-trae-moebeloverenskomsten",
+  "trae-moebeloverenskomsten",
+  "bygge-anlaegsoverenskomsten",
+  "bygge-anlaegsoverenskomsten-dansk-haandvaerk-3f",
+  "bygningsoverenskomsten",
+];
+
+const TEST_COMPETENCIES = [
+  "Kan arbejde selvstændigt efter tegninger og arbejdsbeskrivelser",
+  "Erfaring med montage og brug af almindeligt håndværktøj",
+  "Truckcertifikat og erfaring med lager, pluk og pak",
+  "Svejsning med MIG/MAG og efterkontrol af emner",
+  "Erfaring med byggeplads, oprydning og sikkerhedsregler",
+  "CNC-betjening, opmåling og kvalitetskontrol",
+  "Kan læse simple produktionstegninger og følge procesplan",
+  "Erfaring med beton, jordarbejde og afspærring",
+  "Stabil på aften- og nathold med overlevering til næste hold",
+  "Erfaring med træbearbejdning, samling og finish",
+  "Kan arbejde i teams og dokumentere udført arbejde",
+  "Erfaring med murerarbejde, blanding og materialehåndtering",
+];
+
+function testCompaniesInput(ownerRole: "bruger" | "bruger2"): TestCompanyInput[] {
+  const bruger1: TestCompanyInput[] = [
+    ["Test Industri Nord", "Industrivej 12, 6700 Esbjerg", "Mette Holm"],
+    ["Test Montage Syd", "Montageparken 4, 6000 Kolding", "Lars Mikkelsen"],
+    ["Test CNC Center", "Maskinvej 8, 7100 Vejle", "Camilla Birk"],
+    ["Test Byg Vest", "Teglvangen 5, 6200 Aabenraa", "Rasmus Toft"],
+    ["Test Træværk", "Snedkervej 17, 7400 Herning", "Niels Lund"],
+    ["Test Beton & Jord", "Grusvej 21, 8800 Viborg", "Sofie Brandt"],
+    ["Test Smedeteknik", "Staalvej 3, 7000 Fredericia", "Jonas Krag"],
+    ["Test Lager Produktion", "Logistikvej 14, 8700 Horsens", "Laura Nørgaard"],
+    ["Test Håndværk Øst", "Byggepladsen 2, 4600 Køge", "Henrik Dahl"],
+    ["Test Murer Service", "Murervej 9, 5000 Odense C", "Pernille Skov"],
+    ["Test Anlæg Fyn", "Anlægsvej 44, 5700 Svendborg", "Thomas Vang"],
+    ["Test Metal Partner", "Metalbuen 6, 9000 Aalborg", "Julie Fisker"],
+    ["Test Produktionslinjen", "Fabriks Allé 10, 2630 Taastrup", "Anders Riis"],
+  ].map(([name, address, contactName], index) =>
+    testCompanyInput(index, name, address, contactName),
+  );
+
+  const bruger2: TestCompanyInput[] = [
+    ["Test El & Montage", "Havnevej 22, 7100 Vejle", "Sanne Bro"],
+    ["Test VVS Drift", "Installationsvej 7, 8200 Aarhus N", "Morten Hjort"],
+    ["Test Malerteam", "Farvevej 18, 4000 Roskilde", "Eva Møller"],
+    ["Test Byggepartner", "Entreprenørvej 1, 8600 Silkeborg", "Kristian Holm"],
+    ["Test Maskinfabrik", "Drejebænken 11, 9400 Nørresundby", "Sara Kjær"],
+    ["Test Elementbyg", "Elementvej 30, 4700 Næstved", "Daniel Bøje"],
+    ["Test Anlæg Øst", "Jordstykket 16, 3400 Hillerød", "Nina Falk"],
+    ["Test Produktion Vest", "Procesvej 26, 7500 Holstebro", "Martin Smed"],
+    ["Test Træ & Møbel", "Møbelvej 33, 8300 Odder", "Ida Storm"],
+    ["Test Byggeri Service", "Stilladsvej 5, 9900 Frederikshavn", "Peter Brix"],
+  ].map(([name, address, contactName], index) =>
+    testCompanyInput(index + 13, name, address, contactName),
+  );
+
+  return ownerRole === "bruger" ? bruger1 : bruger2;
+}
+
+function testCompanyInput(
+  index: number,
+  name: string,
+  address: string,
+  contactName: string,
+): TestCompanyInput {
+  return {
+    name,
+    address,
+    contactName,
+    contactPhone: `28${String(110000 + index).slice(0, 6)}`,
+    contactEmail: `kontakt${String(index + 1).padStart(2, "0")}@testdata.local`,
+    agreementId: TEST_AGREEMENT_IDS[index % TEST_AGREEMENT_IDS.length],
+  };
+}
+
+function testLanguage(index: number): WorkerLanguage {
+  if (index % 10 === 0) return "pl";
+  if (index % 5 === 0) return "en";
+  return "da";
+}
+
+function testWorkersInput(
+  ownerRole: "bruger" | "bruger2",
+  count: number,
+  offset: number,
+): TestWorkerInput[] {
+  return Array.from({ length: count }, (_, index) => {
+    const globalIndex = offset + index;
+    const tradeSkill = TEST_TRADE_SKILLS[index % TEST_TRADE_SKILLS.length];
+    return {
+      index,
+      ownerRole,
+      name: `${tradeSkill.split(" / ")[0]} Vikar ${String(index + 1).padStart(2, "0")}`,
+      tradeSkill,
+      competencies: TEST_COMPETENCIES[index % TEST_COMPETENCIES.length],
+      language: testLanguage(globalIndex),
+    };
+  });
+}
+
+function testWorkPeriod(index: number): WorkPeriod {
+  if (index % 3 === 1) return "evening";
+  if (index % 3 === 2) return "night";
+  return "day";
+}
+
+function testWorkPeriodTimes(workPeriod: WorkPeriod) {
+  if (workPeriod === "evening") {
+    return {
+      start: "14:00",
+      end: "23:00",
+      pauseStart: "17:30",
+      pauseEnd: "17:45",
+      pause2Start: "20:30",
+      pause2End: "20:45",
+    };
+  }
+  if (workPeriod === "night") {
+    return {
+      start: "22:00",
+      end: "06:00",
+      pauseStart: "01:00",
+      pauseEnd: "01:15",
+      pause2Start: "04:00",
+      pause2End: "04:15",
+    };
+  }
+  return {
+    start: "07:00",
+    end: "15:00",
+    pauseStart: "09:30",
+    pauseEnd: "09:45",
+    pause2Start: "12:00",
+    pause2End: "12:15",
+  };
+}
+
+function testProjectInputs(
+  ownerRole: "bruger" | "bruger2",
+  companyProjectCounts: number[],
+  workerCount: number,
+): TestProjectInput[] {
+  const projects: TestProjectInput[] = [];
+  let projectIndex = 0;
+  companyProjectCounts.forEach((count, companyIndex) => {
+    for (let localProjectIndex = 0; localProjectIndex < count; localProjectIndex += 1) {
+      const tradeSkill = TEST_TRADE_SKILLS[projectIndex % TEST_TRADE_SKILLS.length];
+      const isCurrentProject = projectIndex < 20;
+      const workerIndexes =
+        ownerRole === "bruger" && projectIndex === 0
+          ? [0, workerCount - 1]
+          : [projectIndex % workerCount];
+      projects.push({
+        companyIndex,
+        projectIndex,
+        ownerRole,
+        name: `${tradeSkill.split(" / ")[0]} ${localProjectIndex + 1}`,
+        tradeSkill,
+        competencies: TEST_COMPETENCIES[projectIndex % TEST_COMPETENCIES.length],
+        workerIndexes,
+        workPeriod: testWorkPeriod(projectIndex),
+        startDate: isCurrentProject ? TEST_DATA_BASE_DATE : TEST_DATA_PAST_PROJECT_START,
+        endDate: isCurrentProject ? TEST_DATA_ACTIVE_PROJECT_END_DATE : TEST_DATA_PAST_PROJECT_END,
+      });
+      projectIndex += 1;
+    }
+  });
+  return projects;
+}
+
+function testWeekPlan(workPeriod: WorkPeriod): CreateWorkerDayPlan[] {
+  const times = testWorkPeriodTimes(workPeriod);
+  return Array.from({ length: 7 }, (_, index) => {
+    const isWorkday = index < 5;
+    return {
+      start: isWorkday ? times.start : "",
+      end: isWorkday ? times.end : "",
+      pause: isWorkday ? 30 : 0,
+      pauseStart: isWorkday ? times.pauseStart : "",
+      pauseEnd: isWorkday ? times.pauseEnd : "",
+      pause2Start: isWorkday ? times.pause2Start : "",
+      pause2End: isWorkday ? times.pause2End : "",
+      dayWorkStart: isWorkday && workPeriod === "day" ? times.start : "",
+      dayWorkEnd: isWorkday && workPeriod === "day" ? times.end : "",
+      eveningWorkStart: isWorkday && workPeriod === "evening" ? times.start : "",
+      eveningWorkEnd: isWorkday && workPeriod === "evening" ? times.end : "",
+      nightWorkStart: isWorkday && workPeriod === "night" ? times.start : "",
+      nightWorkEnd: isWorkday && workPeriod === "night" ? times.end : "",
+      shiftWork: false,
+    };
+  });
+}
+
+function testDataId(kind: string, ownerRole: "bruger" | "bruger2", index: number): string {
+  return `${TEST_DATA_PREFIX}-${ownerRole}-${kind}-${String(index + 1).padStart(2, "0")}`;
+}
+
+function testTimesheetStatus(projectIndex: number): Status {
+  if (projectIndex < 10) return "sent";
+  if (projectIndex < 20) return "approved";
+  if (projectIndex < 22) return "sent";
+  if (projectIndex < 28) return "approved";
+  if (projectIndex % 11 === 0) return "rejected";
+  return "draft";
+}
+
+function testInvoiceSentDate(projectIndex: number): string {
+  return projectIndex >= 15 && projectIndex < 18 ? "2026-07-01" : "";
+}
+
+function testPayrollSentDate(projectIndex: number): string {
+  return projectIndex >= 17 && projectIndex < 20 ? "2026-07-02" : "";
+}
+
+function testWorkerCode(globalIndex: number): string {
+  return `VIK-${String(globalIndex + 1).padStart(3, "0")}`;
+}
+
+function testWorkerEmail(globalIndex: number): string {
+  return `vikar${String(globalIndex + 1).padStart(3, "0")}@testdata.local`;
+}
+
+function testWorkerPhone(globalIndex: number): string {
+  return `30${String(100000 + globalIndex).slice(0, 6)}`;
+}
+
+function testWorkerCpr(globalIndex: number): string {
+  return `010190-${String(9000 + globalIndex).padStart(4, "0")}`;
+}
+
+function testWorkerAddress(globalIndex: number): string {
+  const postalCodes = [
+    "6000 Kolding",
+    "7100 Vejle",
+    "8700 Horsens",
+    "5000 Odense C",
+    "8200 Aarhus N",
+  ];
+  return `Testvej ${globalIndex + 1}, ${postalCodes[globalIndex % postalCodes.length]}`;
+}
+
+function buildOwnerTestSeed(
+  ownerRole: "bruger" | "bruger2",
+  companyProjectCounts: number[],
+  workerCount: number,
+  globalWorkerOffset: number,
+): { companies: Company[]; timesheets: Timesheet[] } {
+  const companiesInput = testCompaniesInput(ownerRole);
+  const workers = testWorkersInput(ownerRole, workerCount, globalWorkerOffset);
+  const projects = testProjectInputs(ownerRole, companyProjectCounts, workerCount);
+  const projectsByWorker = new Map<number, TestProjectInput>();
+  projects.forEach((project) => {
+    project.workerIndexes.forEach((workerIndex) => {
+      if (!projectsByWorker.has(workerIndex)) projectsByWorker.set(workerIndex, project);
+    });
+  });
+
+  const companies = companiesInput.map((companyInput, companyIndex) => {
+    const companyProjects = projects.filter((project) => project.companyIndex === companyIndex);
+    const company: Company = {
+      id: testDataId("company", ownerRole, companyIndex),
+      name: companyInput.name,
+      ownerRole,
+      cvrNumber: `99${String(companyIndex + (ownerRole === "bruger" ? 1 : 14)).padStart(6, "0")}`,
+      contactName: companyInput.contactName,
+      contactPhone: companyInput.contactPhone,
+      contactEmail: companyInput.contactEmail,
+      address: companyInput.address,
+      selectedAgreementId: normalizeCollectiveAgreementId(companyInput.agreementId),
+      localAgreements: [],
+      projects: companyProjects.map((project) => {
+        const times = testWorkPeriodTimes(project.workPeriod);
+        return {
+          id: testDataId("project", ownerRole, project.projectIndex),
+          name: project.name,
+          contactName: companyInput.contactName,
+          contactPhone: companyInput.contactPhone,
+          contactEmail: companyInput.contactEmail,
+          referenceNo: `REF-${ownerRole === "bruger" ? "B1" : "B2"}-${String(project.projectIndex + 1).padStart(3, "0")}`,
+          startDate: project.startDate,
+          endDate: project.endDate,
+          selectedAgreementId: normalizeCollectiveAgreementId(companyInput.agreementId),
+          tradeSkills: [project.tradeSkill],
+          competencies: project.competencies,
+          workerEmails: project.workerIndexes.map((workerIndex) => workers[workerIndex].name),
+          workPeriod: project.workPeriod,
+          defaultStart: times.start,
+          defaultEnd: times.end,
+          pauseStart: times.pauseStart,
+          pauseEnd: times.pauseEnd,
+          pause2Start: times.pause2Start,
+          pause2End: times.pause2End,
+          billingHourlyWage: 205 + (project.projectIndex % 9) * 5,
+          billingFactor: 1.72 + (project.projectIndex % 4) * 0.08,
+        };
+      }),
+    };
+    return normalizeCompany(company);
+  });
+
+  const timesheets = workers.map((worker, workerIndex) => {
+    const project = projectsByWorker.get(workerIndex) ?? projects[0];
+    const companyInput = companiesInput[project.companyIndex];
+    const company = companies[project.companyIndex];
+    const companyProject = company.projects.find(
+      (item) => item.id === testDataId("project", ownerRole, project.projectIndex),
+    );
+    const times = testWorkPeriodTimes(project.workPeriod);
+    const globalIndex = globalWorkerOffset + workerIndex;
+    const timesheet = createTimesheetForWorker({
+      ownerRole,
+      vikar: worker.name,
+      vikarCode: testWorkerCode(globalIndex),
+      vikarEmail: testWorkerEmail(globalIndex),
+      vikarPhone: testWorkerPhone(globalIndex),
+      workerLanguage: worker.language,
+      tradeSkills: [worker.tradeSkill],
+      competencies: worker.competencies,
+      brugervirksomhed: company.name,
+      companyId: company.id,
+      projectId: companyProject?.id ?? "",
+      projectName: companyProject?.name ?? project.name,
+      projectEndDate: project.endDate,
+      arbejdssted: company.address,
+      kontaktperson: companyInput.contactName,
+      kontaktpersonPhone: companyInput.contactPhone,
+      kontaktpersonEmail: companyInput.contactEmail,
+      referenceNo: companyProject?.referenceNo ?? "",
+      selectedAgreementId: companyProject?.selectedAgreementId ?? company.selectedAgreementId ?? "",
+      hourlyWage: 168 + (workerIndex % 8) * 4,
+      defaultStart: times.start,
+      defaultEnd: times.end,
+      defaultPause: 30,
+      defaultPauseStart: times.pauseStart,
+      defaultPauseEnd: times.pauseEnd,
+      defaultPause2Start: times.pause2Start,
+      defaultPause2End: times.pause2End,
+      defaultDayWorkStart: project.workPeriod === "day" ? times.start : "",
+      defaultDayWorkEnd: project.workPeriod === "day" ? times.end : "",
+      defaultEveningWorkStart: project.workPeriod === "evening" ? times.start : "",
+      defaultEveningWorkEnd: project.workPeriod === "evening" ? times.end : "",
+      defaultNightWorkStart: project.workPeriod === "night" ? times.start : "",
+      defaultNightWorkEnd: project.workPeriod === "night" ? times.end : "",
+      weekPlan: testWeekPlan(project.workPeriod),
+      startDate:
+        project.projectIndex < 20 ? TEST_DATA_ACTIVE_WEEK_START : TEST_DATA_PAST_WEEK_START,
+      workerAccessCode: "0000",
+      contactPersonAccessCode: "0000",
+    });
+
+    return normalizeTimesheet({
+      ...timesheet,
+      id: testDataId("timesheet", ownerRole, workerIndex),
+      vikarAddress: testWorkerAddress(globalIndex),
+      vikarCpr: testWorkerCpr(globalIndex),
+      status: testTimesheetStatus(project.projectIndex),
+      invoiceSentDate: testInvoiceSentDate(project.projectIndex),
+      payrollSentDate: testPayrollSentDate(project.projectIndex),
+      workerMustChangeAccessCode: false,
+      contactPersonMustChangeAccessCode: false,
+      createdAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
+      updatedAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
+    });
+  });
+
+  return { companies, timesheets };
+}
+
+function buildTestDataSeed(): { companies: Company[]; timesheets: Timesheet[] } {
+  const bruger1 = buildOwnerTestSeed("bruger", [3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], 28, 0);
+  const bruger2 = buildOwnerTestSeed("bruger2", [3, 3, 3, 2, 2, 2, 2, 2, 2, 2], 22, 28);
+
+  return {
+    companies: [...bruger1.companies, ...bruger2.companies],
+    timesheets: [...bruger1.timesheets, ...bruger2.timesheets],
+  };
+}
+
+function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): boolean {
+  const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
+  const companyIds = new Set(companies.map((company) => company.id));
+  const timesheetIds = new Set(timesheets.map((timesheet) => timesheet.id));
+  const projectIds = new Set(
+    companies.flatMap((company) => company.projects.map((project) => project.id)),
+  );
+  const testProjectIds = testCompanies.flatMap((company) =>
+    company.projects.map((project) => project.id),
+  );
+
+  return (
+    companies.length === testCompanies.length &&
+    timesheets.length === testTimesheets.length &&
+    projectIds.size === testProjectIds.length &&
+    testCompanies.every((company) => companyIds.has(company.id)) &&
+    testProjectIds.every((projectId) => projectIds.has(projectId)) &&
+    testTimesheets.every((timesheet) => timesheetIds.has(timesheet.id))
+  );
+}
+
+// Kept as the single bootstrap hook for local demo data.
 export function seedIfEmpty(): void {
-  const weekStart = getMondayISO();
-  const demoWorkers = demoWorkersSeed();
-  const demoTimesheets = demoWorkers.map((worker) => createDemoTimesheet(worker, weekStart));
-  const demoCompanies = demoCompaniesForSeed(weekStart, demoWorkers);
   const existingTimesheets = readTimesheets();
   const existingCompanies = listCompanies();
+  const hasSeededCurrentVersion =
+    storageForKey(TEST_DATA_SEED_KEY)?.getItem(TEST_DATA_SEED_KEY) === TEST_DATA_PREFIX;
 
-  if (localUpdatedAt() || existingTimesheets.length > 0 || existingCompanies.length > 0) {
+  if (hasSeededCurrentVersion && hasCurrentTestData(existingCompanies, existingTimesheets)) {
     return;
   }
 
-  const mergedTimesheets = [
-    ...existingTimesheets.filter((item) => !item.id.startsWith("demo-timesheet-")),
-    ...demoTimesheets,
-  ];
-  const mergedCompanies = [
-    ...existingCompanies.filter((company) => !company.id.startsWith("demo-company-")),
-    ...demoCompanies,
-  ];
+  const { companies, timesheets } = buildTestDataSeed();
 
-  const hasCurrentDemoTimesheets = demoTimesheets.every((demoTimesheet) =>
-    existingTimesheets.some(
-      (item) => item.id === demoTimesheet.id && item.ownerRole === demoTimesheet.ownerRole,
-    ),
-  );
-  const hasCurrentDemoCompanies = demoCompanies.every((demoCompany) =>
-    existingCompanies.some(
-      (company) => company.id === demoCompany.id && company.ownerRole === demoCompany.ownerRole,
-    ),
-  );
-
-  if (hasCurrentDemoTimesheets && hasCurrentDemoCompanies) {
-    return;
-  }
-
-  setStorageItem(TIMESHEET_KEY, JSON.stringify(mergedTimesheets));
-  setStorageItem(COMPANY_KEY, JSON.stringify(mergedCompanies));
+  setStorageItem(TIMESHEET_KEY, JSON.stringify(timesheets));
+  setStorageItem(COMPANY_KEY, JSON.stringify(companies));
+  setStorageItem(TEST_DATA_SEED_KEY, TEST_DATA_PREFIX);
   markLocalUpdated();
   queueRemoteAppStatePersist();
   emit();

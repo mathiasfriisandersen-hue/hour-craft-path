@@ -36,8 +36,16 @@ function KontaktDetail() {
 
   if (!t)
     return (
-      <AppShell allow={["kontaktperson"]}>
-        <div>Indlæser…</div>
+      <AppShell
+        allow={["kontaktperson"]}
+        dashboard={{
+          title: "Timeseddel",
+          subtitle: "Indlæser…",
+        }}
+      >
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 shadow-sm">
+          Indlæser…
+        </div>
       </AppShell>
     );
 
@@ -56,15 +64,21 @@ function KontaktDetail() {
   };
 
   return (
-    <AppShell allow={["kontaktperson"]}>
-      <div className="mb-6">
-        <Link to="/kontaktperson" className="text-sm text-muted-foreground hover:text-foreground">
+    <AppShell
+      allow={["kontaktperson"]}
+      dashboard={{
+        title: `Timeseddel · Uge ${weekNumber(t.weekStart)}`,
+        subtitle: `${t.vikar || "—"} · ${t.brugervirksomhed || "—"} · ${formatWeekRange(t.weekStart)}`,
+      }}
+    >
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to="/kontaktperson"
+          className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-blue-200 hover:text-blue-700"
+        >
           ← Tilbage
         </Link>
-        <div className="mt-1 flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Timeseddel · Uge {weekNumber(t.weekStart)}</h1>
-          <StatusBadge status={t.status} />
-        </div>
+        <StatusBadge status={t.status} />
       </div>
 
       <InfoBanner>
@@ -72,9 +86,9 @@ function KontaktDetail() {
         brugervirksomheden har modtaget og accepteret de indsendte timer.
       </InfoBanner>
 
-      <section className="mt-6 rounded-lg border bg-card p-6">
-        <h2 className="font-semibold mb-4">Oplysninger</h2>
-        <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 font-semibold text-slate-950">Oplysninger</h2>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm md:grid-cols-2">
           <Row label="Vikar" value={t.vikar} />
           <Row label="Brugervirksomhed" value={t.brugervirksomhed} />
           <Row label="Kontaktperson" value={t.kontaktperson} />
@@ -93,11 +107,11 @@ function KontaktDetail() {
         </dl>
       </section>
 
-      <section className="mt-6 rounded-lg border bg-card overflow-hidden">
-        <h2 className="font-semibold p-6 pb-3">Registrerede timer</h2>
+      <section className="mt-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <h2 className="p-6 pb-3 font-semibold text-slate-950">Registrerede timer</h2>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-muted/50 text-left text-muted-foreground">
+            <thead className="bg-slate-50 text-left text-slate-500">
               <tr>
                 <th className="px-4 py-2 font-medium">Dag</th>
                 <th className="px-4 py-2 font-medium">Start</th>
@@ -115,29 +129,35 @@ function KontaktDetail() {
                 const d = t.days[i];
                 const marker = calc.dayRuleMarkers[i];
                 return (
-                  <tr key={n} className="border-t">
-                    <td className="px-4 py-2 font-medium">{n}</td>
-                    <td className="px-4 py-2 tabular-nums">{d.start || "—"}</td>
-                    <td className="px-4 py-2 tabular-nums">{d.end || "—"}</td>
-                    <td className="px-4 py-2 tabular-nums">{d.pause ? `${d.pause} min` : "—"}</td>
+                  <tr key={n} className="border-t border-slate-100">
+                    <td className="px-4 py-3 font-medium text-slate-950">{n}</td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">{d.start || "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">{d.end || "—"}</td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">
+                      {d.pause ? `${d.pause} min` : "—"}
+                    </td>
                     {showDelayedMealBreak && (
-                      <td className="px-4 py-2">{marker?.delayedMealBreakStatus ?? "Nej"}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {marker?.delayedMealBreakStatus ?? "Nej"}
+                      </td>
                     )}
-                    <td className="px-4 py-2 text-muted-foreground">{d.comment || ""}</td>
-                    <td className="px-4 py-2 text-right tabular-nums">{dayHours(d).toFixed(2)}</td>
+                    <td className="px-4 py-3 text-slate-500">{d.comment || ""}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-950">
+                      {dayHours(d).toFixed(2)}
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
             <tfoot>
-              <tr className="border-t bg-muted/30">
+              <tr className="border-t border-slate-200 bg-slate-50">
                 <td
                   colSpan={showDelayedMealBreak ? 6 : 5}
-                  className="px-4 py-3 text-right font-medium"
+                  className="px-4 py-3 text-right font-medium text-slate-700"
                 >
                   Samlede timer
                 </td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums">
+                <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-950">
                   {totalHours(t.days).toFixed(2)}
                 </td>
               </tr>
@@ -147,7 +167,7 @@ function KontaktDetail() {
       </section>
 
       {t.status === "rejected" && t.rejectionComment && (
-        <div className="mt-6 rounded-md border border-status-rejected-fg/30 bg-status-rejected/40 text-status-rejected-fg px-4 py-3 text-sm">
+        <div className="mt-6 rounded-xl border border-status-rejected-fg/30 bg-status-rejected/40 px-4 py-3 text-sm text-status-rejected-fg shadow-sm">
           <div className="font-medium">Afvist</div>
           <div className="mt-1">{t.rejectionComment}</div>
         </div>
@@ -156,10 +176,12 @@ function KontaktDetail() {
       {canAct && (
         <div className="mt-6 flex flex-col gap-4">
           {showReject ? (
-            <div className="rounded-lg border bg-card p-4">
-              <label className="block text-sm font-medium mb-1.5">Kommentar ved afvisning</label>
+            <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Kommentar ved afvisning
+              </label>
               <textarea
-                className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="min-h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition-colors placeholder:text-slate-400 focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 placeholder="Beskriv kort hvorfor timesedlen afvises…"
@@ -178,7 +200,9 @@ function KontaktDetail() {
               <Button variant="outline" onClick={() => setShowReject(true)}>
                 Afvis timer
               </Button>
-              <Button onClick={approve}>Godkend timer</Button>
+              <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={approve}>
+                Godkend timer
+              </Button>
             </div>
           )}
         </div>
@@ -189,9 +213,9 @@ function KontaktDetail() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4 border-b py-2 last:border-0 md:border-0 md:py-0">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="font-medium text-right">{value || "—"}</dd>
+    <div className="flex justify-between gap-4 border-b border-slate-100 py-3 last:border-0 md:border-0 md:py-0">
+      <dt className="text-slate-500">{label}</dt>
+      <dd className="text-right font-medium text-slate-950">{value || "—"}</dd>
     </div>
   );
 }
