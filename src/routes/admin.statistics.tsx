@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
@@ -135,13 +135,16 @@ function StatisticsPage() {
   );
   const metricTotals = useMemo(
     () =>
-      METRICS.map((metric) => ({
-        ...metric,
-        value: USERS.reduce(
-          (sum, user) => sum + metricValue(metric.key, user.role, timesheets, companies),
-          0,
-        ),
-      })),
+      METRICS.map((metric) => {
+        const bruger1Value = metricValue(metric.key, "bruger", timesheets, companies);
+        const bruger2Value = metricValue(metric.key, "bruger2", timesheets, companies);
+        return {
+          ...metric,
+          value: bruger1Value + bruger2Value,
+          bruger1Value,
+          bruger2Value,
+        };
+      }),
     [companies, timesheets],
   );
   const invoiceOverview = useMemo(
@@ -170,19 +173,24 @@ function StatisticsPage() {
       }}
     >
       <div className="space-y-5">
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
           {metricTotals.map((metric) => (
             <StatisticKpiCard
               key={metric.key}
               label={kpiLabel(metric.label)}
               value={metric.value}
+              bruger1Value={metric.bruger1Value}
+              bruger2Value={metric.bruger2Value}
               icon={METRIC_ICONS[metric.key]}
               tone={METRIC_TONES[metric.key]}
+              active={visibleMetrics[metric.key]}
+              onClick={() => toggleMetric(metric.key)}
             />
           ))}
+          <UserScopeCard visibleUsers={visibleUsers} onToggleUser={toggleUser} />
         </section>
 
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-5">
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div>
@@ -255,34 +263,6 @@ function StatisticsPage() {
               <span>Fordelt på synlige brugere og valgte metrikker.</span>
             </div>
           </section>
-
-          <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Filtre</h2>
-            <div className="mt-4 space-y-5">
-              <FilterGroup title="Sammenlign brugere">
-                {USERS.map((user) => (
-                  <FilterCheckbox
-                    key={user.key}
-                    label={`Vis ${user.label}`}
-                    color={USER_COLORS[user.key]}
-                    checked={visibleUsers[user.key]}
-                    onChange={() => toggleUser(user.key)}
-                  />
-                ))}
-              </FilterGroup>
-
-              <FilterGroup title="Metrikker">
-                {METRICS.map((metric) => (
-                  <FilterCheckbox
-                    key={metric.key}
-                    label={metric.label}
-                    checked={visibleMetrics[metric.key]}
-                    onChange={() => toggleMetric(metric.key)}
-                  />
-                ))}
-              </FilterGroup>
-            </div>
-          </aside>
         </div>
 
         <div className="grid gap-5 xl:grid-cols-2">
@@ -347,27 +327,113 @@ function StatisticsPage() {
 function StatisticKpiCard({
   label,
   value,
+  bruger1Value,
+  bruger2Value,
   icon: Icon,
   tone,
+  active,
+  onClick,
 }: {
   label: string;
   value: number;
+  bruger1Value: number;
+  bruger2Value: number;
   icon: LucideIcon;
   tone: DashboardTone;
+  active: boolean;
+  onClick: () => void;
 }) {
+  const total = bruger1Value + bruger2Value;
+  const bruger1Width = total > 0 ? (bruger1Value / total) * 100 : 50;
+  const bruger2Width = 100 - bruger1Width;
+
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "group rounded-xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+        active ? "border-slate-200" : "border-slate-200 opacity-55",
+      )}
+    >
       <div className="flex items-start gap-4">
         <div className={cn("grid h-12 w-12 place-items-center rounded-full", toneIconClass(tone))}>
           <Icon className="h-5 w-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-slate-900">{label}</div>
           <div className="mt-2 text-3xl font-semibold leading-none text-slate-950 tabular-nums">
             {value}
           </div>
         </div>
       </div>
+      <div className="mt-4">
+        <div className="flex h-2 overflow-hidden rounded-full bg-slate-100">
+          <span className="bg-blue-600" style={{ width: `${bruger1Width}%` }} aria-hidden="true" />
+          <span className="bg-red-600" style={{ width: `${bruger2Width}%` }} aria-hidden="true" />
+        </div>
+        <div className="mt-2 flex items-center justify-between gap-3 text-xs font-medium text-slate-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-blue-600" />
+            Bruger 1 {bruger1Value}
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-red-600" />
+            Bruger 2 {bruger2Value}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function UserScopeCard({
+  visibleUsers,
+  onToggleUser,
+}: {
+  visibleUsers: Record<UserKey, boolean>;
+  onToggleUser: (key: UserKey) => void;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div>
+        <div className="text-sm font-semibold text-slate-900">Visning</div>
+        <div className="mt-2 text-3xl font-semibold leading-none text-slate-950 tabular-nums">
+          Brugere
+        </div>
+      </div>
+      <div className="mt-4 grid grid-cols-2 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 p-1">
+        <button
+          type="button"
+          aria-pressed={visibleUsers.bruger1}
+          onClick={() => onToggleUser("bruger1")}
+          className={cn(
+            "rounded-md px-2.5 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
+            visibleUsers.bruger1
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-slate-500 hover:bg-white",
+          )}
+        >
+          Bruger 1
+        </button>
+        <button
+          type="button"
+          aria-pressed={visibleUsers.bruger2}
+          onClick={() => onToggleUser("bruger2")}
+          className={cn(
+            "rounded-md px-2.5 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500",
+            visibleUsers.bruger2
+              ? "bg-red-600 text-white shadow-sm"
+              : "text-slate-500 hover:bg-white",
+          )}
+        >
+          Bruger 2
+        </button>
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        Slå en bruger fra for at ekskludere ved visning.
+      </p>
     </article>
   );
 }
@@ -393,15 +459,6 @@ function LegendPill({ color, label }: { color: string; label: string }) {
       <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
       {label}
     </span>
-  );
-}
-
-function FilterGroup({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="border-b border-slate-200 pb-5 last:border-b-0 last:pb-0">
-      <h3 className="text-sm font-semibold text-slate-950">{title}</h3>
-      <div className="mt-3 space-y-2">{children}</div>
-    </section>
   );
 }
 
@@ -463,33 +520,6 @@ function statusToneClass(tone: StatusTone): string {
   if (tone === "warning") return "border-amber-200 bg-amber-50/70";
   if (tone === "done") return "border-emerald-200 bg-emerald-50/70";
   return "border-slate-200 bg-slate-50";
-}
-
-function FilterCheckbox({
-  label,
-  checked,
-  onChange,
-  color,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-  color?: string;
-}) {
-  return (
-    <label className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700">
-      <span className="flex min-w-0 items-center gap-2">
-        {color && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: color }} />}
-        <span className="truncate">{label}</span>
-      </span>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="h-4 w-4 rounded border-slate-300 accent-blue-600"
-      />
-    </label>
-  );
 }
 
 function metricValue(

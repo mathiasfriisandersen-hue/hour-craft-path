@@ -3656,7 +3656,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-const TEST_DATA_PREFIX = "testdata-2026-07-06-v5";
+const TEST_DATA_PREFIX = "testdata-2026-07-06-v6";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 const TEST_DATA_BASE_DATE = "2026-07-06";
 const TEST_DATA_ACTIVE_PROJECT_END_DATE = "2026-08-03";
@@ -3927,6 +3927,23 @@ function testPayrollSentDate(projectIndex: number): string {
   return projectIndex >= 17 && projectIndex < 20 ? "2026-07-02" : "";
 }
 
+function testCancelledShiftDayIndex(
+  ownerRole: "bruger" | "bruger2",
+  workerIndex: number,
+): number | null {
+  const cancelledByWorker =
+    ownerRole === "bruger"
+      ? new Map([
+          [3, 1],
+          [11, 3],
+        ])
+      : new Map([
+          [4, 2],
+          [14, 4],
+        ]);
+  return cancelledByWorker.get(workerIndex) ?? null;
+}
+
 function testWorkerCode(globalIndex: number): string {
   return `VIK-${String(globalIndex + 1).padStart(3, "0")}`;
 }
@@ -4022,6 +4039,7 @@ function buildOwnerTestSeed(
     );
     const times = testWorkPeriodTimes(project.workPeriod);
     const globalIndex = globalWorkerOffset + workerIndex;
+    const cancelledDayIndex = testCancelledShiftDayIndex(ownerRole, workerIndex);
     const timesheet = createTimesheetForWorker({
       ownerRole,
       vikar: worker.name,
@@ -4068,6 +4086,28 @@ function buildOwnerTestSeed(
       id: testDataId("timesheet", ownerRole, workerIndex),
       vikarAddress: testWorkerAddress(globalIndex),
       vikarCpr: testWorkerCpr(globalIndex),
+      days: timesheet.days.map((day, dayIndex) =>
+        dayIndex === cancelledDayIndex
+          ? {
+              ...day,
+              start: "",
+              end: "",
+              pause: 0,
+              pauseStart: "",
+              pauseEnd: "",
+              pause2Start: "",
+              pause2End: "",
+              dayWorkStart: "",
+              dayWorkEnd: "",
+              eveningWorkStart: "",
+              eveningWorkEnd: "",
+              nightWorkStart: "",
+              nightWorkEnd: "",
+              absence: "dayoff",
+              comment: "Aflyst vagt",
+            }
+          : day,
+      ),
       status: testTimesheetStatus(project.projectIndex),
       invoiceSentDate: testInvoiceSentDate(project.projectIndex),
       payrollSentDate: testPayrollSentDate(project.projectIndex),

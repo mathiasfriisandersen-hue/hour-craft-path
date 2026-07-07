@@ -38,6 +38,14 @@ export const Route = createFileRoute("/admin/invoice-payroll")({
 
 type StatusTone = "red" | "orange" | "green";
 type DashboardTone = "blue" | "amber" | "green" | "slate";
+type StatusFilter =
+  | "all"
+  | "invoice-soon"
+  | "invoice-now"
+  | "invoice-sent"
+  | "payroll-ready"
+  | "payroll-waiting"
+  | "payroll-sent";
 
 type WorkContext = {
   timesheet: Timesheet;
@@ -88,12 +96,25 @@ const PAYMENT = {
 };
 const PAYROLL_SOCIAL_COST_RATE = 0.3888;
 
+const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "Alle statusser" },
+  { value: "invoice-soon", label: "Skal snart håndteres" },
+  { value: "invoice-now", label: "Skal håndteres nu" },
+  { value: "invoice-sent", label: "Faktura sendt" },
+  { value: "payroll-ready", label: "Klar til bogholderi" },
+  { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
+  { value: "payroll-sent", label: "Sendt til bogholderi" },
+];
+
 function InvoicePayrollPage() {
   const timesheets = useTimesheets();
   const [companies, setCompanies] = useState(listCompanies);
   const [preview, setPreview] = useState<WorkContext | null>(null);
   const [payrollPreview, setPayrollPreview] = useState<WorkContext | null>(null);
   const [view, setView] = useState<"invoice" | "payroll">("invoice");
+  const [periodFilter, setPeriodFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -108,33 +129,72 @@ function InvoicePayrollPage() {
         .map((timesheet) => buildWorkContext(timesheet, companies)),
     [companies, timesheets],
   );
+  const periodOptions = useMemo(() => buildPeriodOptions(rows), [rows]);
+  const companyOptions = useMemo(() => buildCompanyOptions(rows), [rows]);
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (periodFilter !== "all" && row.timesheet.weekStart !== periodFilter) return false;
+        if (companyFilter !== "all" && companyFilterKey(row) !== companyFilter) return false;
+        return true;
+      }),
+    [companyFilter, periodFilter, rows],
+  );
 
-  const invoiceRows = rows
+  const invoiceRows = filteredRows
     .filter((row) => row.timesheet.status === "approved" && row.approvedHours > 0)
     .sort((a, b) => compareByUrgency(a, b, "invoice"));
-  const payrollRows = rows
+  const payrollRows = filteredRows
     .filter(
       (row) =>
         (row.timesheet.status === "sent" || row.timesheet.status === "approved") &&
         totalHours(row.timesheet.days) > 0,
     )
     .sort(comparePayrollRows);
-  const invoiceSentRows = invoiceRows.filter((row) => row.timesheet.invoiceSentDate);
+  const invoiceSentRows = invoiceRows.filter(
+    (row) => statusFilterMatches(statusFilter, "invoice-sent") && row.timesheet.invoiceSentDate,
+  );
   const invoiceNowRows = invoiceRows.filter(
-    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone === "red",
+    (row) =>
+      statusFilterMatches(statusFilter, "invoice-now") &&
+      !row.timesheet.invoiceSentDate &&
+      row.invoiceTone === "red",
   );
   const invoiceSoonRows = invoiceRows.filter(
-    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone !== "red",
+    (row) =>
+      statusFilterMatches(statusFilter, "invoice-soon") &&
+      !row.timesheet.invoiceSentDate &&
+      row.invoiceTone !== "red",
   );
-  const payrollSentRows = payrollRows.filter((row) => row.timesheet.payrollSentDate);
+  const payrollSentRows = payrollRows.filter(
+    (row) => statusFilterMatches(statusFilter, "payroll-sent") && row.timesheet.payrollSentDate,
+  );
   const payrollReadyRows = payrollRows.filter(
-    (row) => !row.timesheet.payrollSentDate && row.payrollTone === "red",
+    (row) =>
+      statusFilterMatches(statusFilter, "payroll-ready") &&
+      !row.timesheet.payrollSentDate &&
+      row.payrollTone === "red",
   );
   const payrollWaitingRows = payrollRows.filter(
-    (row) => !row.timesheet.payrollSentDate && row.payrollTone !== "red",
+    (row) =>
+      statusFilterMatches(statusFilter, "payroll-waiting") &&
+      !row.timesheet.payrollSentDate &&
+      row.payrollTone !== "red",
   );
+  const visibleInvoiceCount =
+    invoiceSoonRows.length + invoiceNowRows.length + invoiceSentRows.length;
+  const visiblePayrollCount =
+    payrollReadyRows.length + payrollWaitingRows.length + payrollSentRows.length;
   const sentCount = invoiceSentRows.length + payrollSentRows.length;
   const actionCount = invoiceNowRows.length + payrollReadyRows.length;
+  const activeFilterCount = [periodFilter, companyFilter, statusFilter].filter(
+    (value) => value !== "all",
+  ).length;
+  const resetFilters = () => {
+    setPeriodFilter("all");
+    setCompanyFilter("all");
+    setStatusFilter("all");
+  };
 
   return (
     <AppShell
@@ -148,7 +208,7 @@ function InvoicePayrollPage() {
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <FinanceKpiCard
             label="Samlede fakturaer"
-            value={invoiceRows.length}
+            value={visibleInvoiceCount}
             meta="Godkendte timesedler klar til faktura"
             icon={FileText}
             tone="blue"
@@ -189,10 +249,28 @@ function InvoicePayrollPage() {
             </Button>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-4">
-            <ScopeChip icon={CalendarDays} label="Periode" value="Alle eksisterende perioder" />
-            <ScopeChip icon={Building2} label="Virksomhed" value="Alle virksomheder" />
-            <ScopeChip icon={CheckCircle2} label="Status" value="Eksisterende statusser" />
-            <ScopeChip icon={Clock3} label="Filtre" value="Ingen aktive filtre på siden" />
+            <ScopeSelect
+              icon={CalendarDays}
+              label="Periode"
+              value={periodFilter}
+              onChange={setPeriodFilter}
+              options={[{ value: "all", label: "Alle eksisterende perioder" }, ...periodOptions]}
+            />
+            <ScopeSelect
+              icon={Building2}
+              label="Virksomhed"
+              value={companyFilter}
+              onChange={setCompanyFilter}
+              options={[{ value: "all", label: "Alle virksomheder" }, ...companyOptions]}
+            />
+            <ScopeSelect
+              icon={CheckCircle2}
+              label="Status"
+              value={statusFilter}
+              onChange={(value) => setStatusFilter(value as StatusFilter)}
+              options={STATUS_FILTER_OPTIONS}
+            />
+            <ScopeResetButton activeFilterCount={activeFilterCount} onClick={resetFilters} />
           </div>
         </section>
 
@@ -201,13 +279,13 @@ function InvoicePayrollPage() {
             active={view === "invoice"}
             onClick={() => setView("invoice")}
             label="Fakturaoverblik"
-            count={invoiceRows.length}
+            count={visibleInvoiceCount}
           />
           <ViewToggleButton
             active={view === "payroll"}
             onClick={() => setView("payroll")}
             label="Lønoverblik"
-            count={payrollRows.length}
+            count={visiblePayrollCount}
           />
         </div>
 
@@ -215,7 +293,7 @@ function InvoicePayrollPage() {
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <SectionHeader
               title="Fakturaoverblik"
-              count={invoiceRows.length}
+              count={visibleInvoiceCount}
               actionLabel="Se alle fakturaer"
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
@@ -267,7 +345,7 @@ function InvoicePayrollPage() {
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <SectionHeader
               title="Lønoverblik"
-              count={payrollRows.length}
+              count={visiblePayrollCount}
               actionLabel="Se alle lønoplysninger"
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
@@ -359,25 +437,66 @@ function FinanceKpiCard({
   );
 }
 
-function ScopeChip({
+function ScopeSelect({
   icon: Icon,
   label,
   value,
+  onChange,
+  options,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
+  onChange: (value: string) => void;
+  options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+    <label className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 transition-colors focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
       <div className="grid h-8 w-8 place-items-center rounded-md bg-white text-slate-500 shadow-sm">
         <Icon className="h-4 w-4" />
       </div>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-slate-500">{label}</div>
-        <div className="truncate text-sm font-semibold text-slate-900">{value}</div>
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-0.5 w-full truncate bg-transparent text-sm font-semibold text-slate-900 outline-none"
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
       </div>
-    </div>
+    </label>
+  );
+}
+
+function ScopeResetButton({
+  activeFilterCount,
+  onClick,
+}: {
+  activeFilterCount: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={activeFilterCount === 0}
+      className="flex min-w-0 items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-left transition-colors hover:border-blue-200 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-100 disabled:cursor-not-allowed disabled:opacity-70"
+    >
+      <div className="grid h-8 w-8 place-items-center rounded-md bg-white text-slate-500 shadow-sm">
+        <Clock3 className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs font-medium text-slate-500">Filtre</div>
+        <div className="truncate text-sm font-semibold text-slate-900">
+          {activeFilterCount > 0 ? `Nulstil ${activeFilterCount} filter` : "Ingen aktive filtre"}
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -471,6 +590,36 @@ function StatusColumn({
       )}
     </section>
   );
+}
+
+function statusFilterMatches(current: StatusFilter, target: Exclude<StatusFilter, "all">): boolean {
+  return current === "all" || current === target;
+}
+
+function companyFilterKey(row: WorkContext): string {
+  return row.company?.id || row.timesheet.companyId || row.timesheet.brugervirksomhed || "unknown";
+}
+
+function buildCompanyOptions(rows: WorkContext[]): Array<{ value: string; label: string }> {
+  const byKey = new Map<string, string>();
+  for (const row of rows) {
+    const key = companyFilterKey(row);
+    const label = row.company?.name || row.timesheet.brugervirksomhed || "Ukendt virksomhed";
+    if (!byKey.has(key)) byKey.set(key, label);
+  }
+  return [...byKey.entries()]
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, "da-DK"));
+}
+
+function buildPeriodOptions(rows: WorkContext[]): Array<{ value: string; label: string }> {
+  const periods = new Set(rows.map((row) => row.timesheet.weekStart).filter(Boolean));
+  return [...periods]
+    .sort((a, b) => b.localeCompare(a))
+    .map((value) => ({
+      value,
+      label: `Uge ${weekNumber(value)} · ${formatWeekRange(value)}`,
+    }));
 }
 
 function InvoiceCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () => void }) {

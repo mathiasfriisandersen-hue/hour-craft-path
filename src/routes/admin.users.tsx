@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState } from "react";
 import { CheckCircle2, ChevronRight, UsersRound, type LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { ADMIN_USERS } from "@/lib/admin-users";
@@ -13,7 +12,6 @@ export const Route = createFileRoute("/admin/users")({
 function AdminUsers() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const [search, setSearch] = useState("");
   if (pathname !== "/admin/users") return <Outlet />;
   const totalUsers = ADMIN_USERS.length;
   const activeUsers = ADMIN_USERS.length;
@@ -24,11 +22,6 @@ function AdminUsers() {
       dashboard={{
         title: "Brugere",
         subtitle: "Oversigt over brugere med adgang til systemet.",
-        search: {
-          value: search,
-          onChange: setSearch,
-          placeholder: "Søg efter bruger...",
-        },
       }}
     >
       <div className="space-y-6">
