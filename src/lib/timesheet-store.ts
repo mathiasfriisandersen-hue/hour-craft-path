@@ -292,6 +292,8 @@ const COMPANY_KEY = "timesheet-companies-v1";
 const APP_STATE_META_KEY = "timesheet-app-state-updated-at-v1";
 const DELETED_TIMESHEET_IDS_KEY = "timesheet-deleted-timesheet-ids-v1";
 const DELETED_COMPANY_IDS_KEY = "timesheet-deleted-company-ids-v1";
+const TIMESHEET_API_SYNC_STATUS_KEY = "timesheet-api-sync-status-v1";
+const TIMESHEET_API_PENDING_IDS_KEY = "timesheet-api-pending-ids-v1";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
 export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
 
@@ -904,6 +906,23 @@ function forgetDeletedId(key: string, id: string): void {
   setStorageItem(key, JSON.stringify([...ids]));
 }
 
+function readPendingTimesheetApiIds(): Set<string> {
+  return new Set(safeParse<string[]>(TIMESHEET_API_PENDING_IDS_KEY, []));
+}
+
+function rememberPendingTimesheetApiId(id: string): void {
+  if (!id) return;
+  const ids = readPendingTimesheetApiIds();
+  ids.add(id);
+  setStorageItem(TIMESHEET_API_PENDING_IDS_KEY, JSON.stringify([...ids]));
+}
+
+function forgetPendingTimesheetApiId(id: string): void {
+  const ids = readPendingTimesheetApiIds();
+  if (!ids.delete(id)) return;
+  setStorageItem(TIMESHEET_API_PENDING_IDS_KEY, JSON.stringify([...ids]));
+}
+
 function emit(): void {
   window.dispatchEvent(new Event("timesheets-changed"));
 }
@@ -928,8 +947,23 @@ function workerApiUrl(path: string, baseUrl: string): string {
 }
 
 const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
+const BUILD_TIME_TIMESHEET_API_URL = import.meta.env.VITE_TIMESHEET_API_URL?.trim() ?? "";
+const BUILD_TIME_TIMESHEET_API_TOKEN = import.meta.env.VITE_TIMESHEET_API_TOKEN?.trim() ?? "";
 let runtimeMailApiUrl: string | undefined;
 let runtimeConfigPromise: Promise<string> | undefined;
+let runtimeTimesheetApiConfig: TimesheetApiConfig | undefined;
+let runtimeTimesheetApiConfigPromise: Promise<TimesheetApiConfig> | undefined;
+
+type TimesheetApiConfig = {
+  url: string;
+  token: string;
+};
+
+type TimesheetApiSyncStatus = {
+  mode: "api" | "fallback";
+  message: string;
+  updatedAt: string;
+};
 
 async function loadRuntimeMailApiUrl(): Promise<string> {
   if (runtimeMailApiUrl !== undefined) return runtimeMailApiUrl;
@@ -953,6 +987,75 @@ async function appStateApiUrl(): Promise<string> {
   return mailApiUrl ? workerApiUrl("/app-state", mailApiUrl) : "";
 }
 
+async function loadRuntimeTimesheetApiConfig(): Promise<TimesheetApiConfig> {
+  if (runtimeTimesheetApiConfig) return runtimeTimesheetApiConfig;
+
+  runtimeTimesheetApiConfigPromise ??= fetch(`${import.meta.env.BASE_URL}timesheet-api-config.json`, {
+    cache: "no-store",
+  })
+    .then(async (response) => {
+      if (!response.ok) return { url: "", token: "" };
+      const config = (await response.json()) as {
+        timesheetApiUrl?: string;
+        timesheetApiToken?: string;
+      };
+      return {
+        url: config.timesheetApiUrl?.trim() ?? "",
+        token: config.timesheetApiToken?.trim() ?? "",
+      };
+    })
+    .catch(() => ({ url: "", token: "" }));
+
+  runtimeTimesheetApiConfig = await runtimeTimesheetApiConfigPromise;
+  return runtimeTimesheetApiConfig;
+}
+
+async function timesheetApiConfig(): Promise<TimesheetApiConfig> {
+  if (BUILD_TIME_TIMESHEET_API_URL || BUILD_TIME_TIMESHEET_API_TOKEN) {
+    return {
+      url: BUILD_TIME_TIMESHEET_API_URL,
+      token: BUILD_TIME_TIMESHEET_API_TOKEN,
+    };
+  }
+  return loadRuntimeTimesheetApiConfig();
+}
+
+async function timesheetApiUrl(path: string): Promise<string> {
+  const config = await timesheetApiConfig();
+  return config.url ? workerApiUrl(path, config.url) : "";
+}
+
+async function timesheetApiHeaders(): Promise<Record<string, string>> {
+  const config = await timesheetApiConfig();
+  return {
+    "content-type": "application/json",
+    ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
+  };
+}
+
+function setTimesheetApiSyncStatus(mode: TimesheetApiSyncStatus["mode"], message: string): void {
+  const status: TimesheetApiSyncStatus = {
+    mode,
+    message,
+    updatedAt: new Date().toISOString(),
+  };
+  setStorageItem(TIMESHEET_API_SYNC_STATUS_KEY, JSON.stringify(status));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("timesheet-api-sync-status-changed"));
+  }
+  if (mode === "fallback") {
+    console.warn(`[timesheet-api] ${message}`);
+  }
+}
+
+export function getTimesheetApiSyncStatus(): TimesheetApiSyncStatus {
+  return safeParse<TimesheetApiSyncStatus>(TIMESHEET_API_SYNC_STATUS_KEY, {
+    mode: "fallback",
+    message: "Timesheet API er ikke synkroniseret endnu. Local cache bruges midlertidigt.",
+    updatedAt: "",
+  });
+}
+
 function readTimesheets(): Timesheet[] {
   return safeParse<Timesheet[]>(TIMESHEET_KEY, []).map(normalizeTimesheet);
 }
@@ -961,7 +1064,6 @@ function writeTimesheets(list: Timesheet[], options: { syncRemote?: boolean } = 
   setStorageItem(TIMESHEET_KEY, JSON.stringify(list));
   if (options.syncRemote !== false) {
     markLocalUpdated();
-    queueRemoteAppStatePersist();
   }
   emit();
 }
@@ -1003,6 +1105,7 @@ export function upsert(t: Timesheet): Timesheet {
   else list.push(updated);
   forgetDeletedId(DELETED_TIMESHEET_IDS_KEY, updated.id);
   writeTimesheets(list);
+  queueTimesheetApiUpsert(updated);
   return updated;
 }
 
@@ -1022,7 +1125,9 @@ export function setWorkerInactive(workerKey: string, workerInactive: boolean): T
       : item,
   );
   writeTimesheets(updated);
-  return updated.filter((item) => knownWorkerKey(item) === key);
+  const changed = updated.filter((item) => knownWorkerKey(item) === key);
+  queueRemoteTimesheetPersist(changed);
+  return changed;
 }
 
 export function removeWorkerFromSystem(
@@ -1470,10 +1575,12 @@ export function saveCompany(company: Company): void {
 
 export function removeCompany(id: string): void {
   rememberDeletedId(DELETED_COMPANY_IDS_KEY, id);
+
   setStorageItem(
     COMPANY_KEY,
     JSON.stringify(listCompanies().filter((company) => company.id !== id)),
   );
+
   markLocalUpdated();
   queueRemoteAppStatePersist();
   emit();
@@ -1495,6 +1602,8 @@ type NormalizedAppState = {
 
 let remotePersistTimer: number | undefined;
 let remoteSyncPromise: Promise<void> | undefined;
+let timesheetApiPersistTimer: number | undefined;
+const pendingTimesheetApiUpserts = new Map<string, Timesheet>();
 
 function currentAppState(): NormalizedAppState {
   return {
@@ -1505,19 +1614,32 @@ function currentAppState(): NormalizedAppState {
   };
 }
 
-function mergeTimesheets(local: Timesheet[], remote: Timesheet[]): Timesheet[] {
+function mergeTimesheets(
+  local: Timesheet[],
+  remote: Timesheet[],
+  preferLocal = false,
+): Timesheet[] {
   const deletedIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
   const byId = new Map<string, Timesheet>();
-  for (const item of remote) {
-    if (!deletedIds.has(item.id)) byId.set(item.id, item);
-  }
-  for (const item of local) {
+
+  for (const item of preferLocal ? remote : local) {
     if (deletedIds.has(item.id)) continue;
+
     const existing = byId.get(item.id);
     if (!existing || item.updatedAt >= existing.updatedAt) {
       byId.set(item.id, item);
     }
   }
+
+  for (const item of preferLocal ? local : remote) {
+    if (deletedIds.has(item.id)) continue;
+
+    const existing = byId.get(item.id);
+    if (!existing || item.updatedAt >= existing.updatedAt) {
+      byId.set(item.id, item);
+    }
+  }
+
   return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
@@ -1553,6 +1675,21 @@ function applyAppState(state: RemoteAppState, updatedAt: string): void {
   emit();
 }
 
+function applyRemoteTimesheets(
+  timesheets: StoredTimesheet[],
+  updatedAt: string,
+  pendingLocalTimesheets: Timesheet[] = [],
+): void {
+  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
+  const remoteTimesheets = timesheets
+    .map((item) => normalizeTimesheet(item))
+    .filter((item) => !deletedTimesheetIds.has(item.id));
+  const mergedTimesheets = mergeTimesheets(pendingLocalTimesheets, remoteTimesheets);
+  writeTimesheets(mergedTimesheets, { syncRemote: false });
+  markLocalUpdated(updatedAt);
+  emit();
+}
+
 async function persistRemoteAppState(): Promise<void> {
   const url = await appStateApiUrl();
   if (!url) return;
@@ -1565,8 +1702,81 @@ async function persistRemoteAppState(): Promise<void> {
     headers: {
       "content-type": "application/json",
     },
-    body: JSON.stringify(state),
+    body: JSON.stringify({ ...state, timesheets: [] }),
   }).catch(() => undefined);
+}
+
+async function persistTimesheetToApi(timesheet: Timesheet): Promise<void> {
+  const url = await timesheetApiUrl("/api/timesheets");
+  const headers = await timesheetApiHeaders();
+  if (!url || !("authorization" in headers)) {
+    setTimesheetApiSyncStatus(
+      "fallback",
+      "Timesheet API mangler URL eller Bearer token. Local cache bruges som fallback.",
+    );
+    throw new Error("Timesheet API is not configured.");
+  }
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ timesheet }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Timesheet API returned ${response.status} on upsert.`);
+  }
+}
+
+async function flushPendingTimesheetApiUpserts(): Promise<void> {
+  const pending = [...pendingTimesheetApiUpserts.values()];
+  pendingTimesheetApiUpserts.clear();
+  if (pending.length === 0) return;
+
+  const failed: Timesheet[] = [];
+  const persisted: Timesheet[] = [];
+  for (const item of pending) {
+    try {
+      await persistTimesheetToApi(item);
+      persisted.push(item);
+    } catch {
+      failed.push(item);
+    }
+  }
+
+  for (const item of persisted) {
+    forgetPendingTimesheetApiId(item.id);
+  }
+
+  for (const item of failed) {
+    pendingTimesheetApiUpserts.set(item.id, item);
+  }
+
+  if (failed.length > 0) {
+    setTimesheetApiSyncStatus(
+      "fallback",
+      "Timesheet API svarede ikke. Appen bruger lokal cache og prøver igen ved næste ændring.",
+    );
+    return;
+  }
+
+  setTimesheetApiSyncStatus("api", "Timesheets er synkroniseret til Worker API.");
+}
+
+function queueTimesheetApiUpsert(timesheet: Timesheet): void {
+  if (typeof window === "undefined") return;
+  pendingTimesheetApiUpserts.set(timesheet.id, timesheet);
+  rememberPendingTimesheetApiId(timesheet.id);
+  if (timesheetApiPersistTimer) window.clearTimeout(timesheetApiPersistTimer);
+  timesheetApiPersistTimer = window.setTimeout(() => {
+    void flushPendingTimesheetApiUpserts();
+  }, 400);
+}
+
+function queueRemoteTimesheetPersist(list: Timesheet[]): void {
+  for (const item of list) {
+    queueTimesheetApiUpsert(item);
+  }
 }
 
 function queueRemoteAppStatePersist(): void {
@@ -1582,6 +1792,8 @@ export async function syncRemoteAppState(): Promise<void> {
   if (remoteSyncPromise) return remoteSyncPromise;
 
   remoteSyncPromise = (async () => {
+    await syncTimesheetsFromApi();
+
     const url = await appStateApiUrl();
     if (!url) return;
 
@@ -1595,27 +1807,10 @@ export async function syncRemoteAppState(): Promise<void> {
     const remoteUpdatedAt = body.state.updatedAt ?? "";
     const localState = currentAppState();
     const preferLocal = !remoteUpdatedAt || localState.updatedAt >= remoteUpdatedAt;
-    const remoteTimesheets = Array.isArray(body.state.timesheets)
-      ? body.state.timesheets.map((item) => normalizeTimesheet(item))
-      : [];
     const remoteCompanies = Array.isArray(body.state.companies)
       ? body.state.companies.map((item) => normalizeCompany(item))
       : [];
 
-    if (remoteUpdatedAt && (!localState.updatedAt || remoteUpdatedAt > localState.updatedAt)) {
-      applyAppState(
-        {
-          version: 1,
-          updatedAt: remoteUpdatedAt,
-          timesheets: remoteTimesheets,
-          companies: remoteCompanies,
-        },
-        remoteUpdatedAt,
-      );
-      return;
-    }
-
-    const mergedTimesheets = mergeTimesheets(localState.timesheets, remoteTimesheets);
     const mergedCompanies = mergeCompanies(localState.companies, remoteCompanies, preferLocal);
     const mergedUpdatedAt =
       [localState.updatedAt, remoteUpdatedAt].filter(Boolean).sort().at(-1) ||
@@ -1625,7 +1820,7 @@ export async function syncRemoteAppState(): Promise<void> {
       {
         version: 1,
         updatedAt: mergedUpdatedAt,
-        timesheets: mergedTimesheets,
+        timesheets: readTimesheets(),
         companies: mergedCompanies,
       },
       mergedUpdatedAt,
@@ -1633,7 +1828,6 @@ export async function syncRemoteAppState(): Promise<void> {
 
     if (
       localState.updatedAt !== remoteUpdatedAt ||
-      mergedTimesheets.length !== remoteTimesheets.length ||
       mergedCompanies.length !== remoteCompanies.length
     ) {
       await persistRemoteAppState();
@@ -1643,6 +1837,60 @@ export async function syncRemoteAppState(): Promise<void> {
   });
 
   return remoteSyncPromise;
+}
+
+async function syncTimesheetsFromApi(): Promise<void> {
+  const url = await timesheetApiUrl("/api/timesheets");
+  const headers = await timesheetApiHeaders();
+  if (!url || !("authorization" in headers)) {
+    setTimesheetApiSyncStatus(
+      "fallback",
+      "Timesheet API er ikke konfigureret. Appen viser lokal cache.",
+    );
+    return;
+  }
+
+  const response = await fetch(url, {
+    headers,
+    cache: "no-store",
+  }).catch(() => undefined);
+
+  if (!response?.ok) {
+    setTimesheetApiSyncStatus(
+      "fallback",
+      "Timesheet API svarede ikke ved load. Appen viser lokal cache.",
+    );
+    return;
+  }
+
+  const body = (await response.json().catch(() => undefined)) as
+    | { ok?: boolean; timesheets?: StoredTimesheet[] }
+    | undefined;
+  if (!body?.ok || !Array.isArray(body.timesheets)) {
+    setTimesheetApiSyncStatus(
+      "fallback",
+      "Timesheet API returnerede ikke gyldige timesheets. Appen viser lokal cache.",
+    );
+    return;
+  }
+
+  const remoteUpdatedAt =
+    body.timesheets
+      .map((item) => item.updatedAt ?? "")
+      .filter(Boolean)
+      .sort()
+      .at(-1) || new Date().toISOString();
+
+  const pendingIds = readPendingTimesheetApiIds();
+  const localTimesheets = readTimesheets();
+  const pendingLocalTimesheets = localTimesheets.filter((item) => pendingIds.has(item.id));
+
+  applyRemoteTimesheets(body.timesheets, remoteUpdatedAt, localTimesheets);
+  setTimesheetApiSyncStatus("api", "Timesheets er hentet fra Worker API.");
+
+  for (const item of pendingLocalTimesheets) {
+    queueTimesheetApiUpsert(item);
+  }
 }
 
 export type KnownWorker = {
@@ -1795,9 +2043,24 @@ export function setKnownWorkerInactive(worker: KnownWorker, inactive: boolean): 
       : item,
   );
   writeTimesheets(updated);
-  return updated.filter((item) => timesheetMatchesWorker(item, worker));
+  const changed = updated.filter((item) => timesheetMatchesWorker(item, worker));
+  queueRemoteTimesheetPersist(changed);
+  return changed;
 }
+export function deleteKnownWorker(worker: KnownWorker): Timesheet[] {
+  const list = readTimesheets();
+  const toDelete = list.filter((item) => timesheetMatchesWorker(item, worker));
+  const updated = list.filter((item) => !timesheetMatchesWorker(item, worker));
 
+  toDelete.forEach((item) => {
+    rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, item.id);
+  });
+
+  writeTimesheets(updated);
+  queueRemoteAppStatePersist();
+
+  return updated;
+}
 export function updateKnownWorker(
   worker: KnownWorker,
   patch: Pick<
@@ -1832,7 +2095,9 @@ export function updateKnownWorker(
       : item,
   );
   writeTimesheets(updated);
-  return updated.filter((item) => timesheetMatchesWorker(item, { ...worker, ...patch }));
+  const changed = updated.filter((item) => timesheetMatchesWorker(item, { ...worker, ...patch }));
+  queueRemoteTimesheetPersist(changed);
+  return changed;
 }
 
 export function timesheetRetentionWarning(
@@ -1886,7 +2151,9 @@ export function markWorkerConsentRenewalSent(workerKey: string): Timesheet[] {
       : item,
   );
   writeTimesheets(updated);
-  return updated.filter((item) => knownWorkerKey(item) === key);
+  const changed = updated.filter((item) => knownWorkerKey(item) === key);
+  queueRemoteTimesheetPersist(changed);
+  return changed;
 }
 
 export function renewWorkerConsent(workerName: string, workerEmail: string): Timesheet[] {
@@ -1903,11 +2170,13 @@ export function renewWorkerConsent(workerName: string, workerEmail: string): Tim
       : item;
   });
   writeTimesheets(updated);
-  return updated.filter((item) => {
+  const changed = updated.filter((item) => {
     const matchesName = nameKey && personLookupKey(item.vikar) === nameKey;
     const matchesEmail = emailKey && personLookupKey(item.vikarEmail) === emailKey;
     return Boolean(matchesName || matchesEmail);
   });
+  queueRemoteTimesheetPersist(changed);
+  return changed;
 }
 
 export function listKnownContacts(): KnownContact[] {
@@ -4133,26 +4402,88 @@ function buildTestDataSeed(): { companies: Company[]; timesheets: Timesheet[] } 
 
 function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): boolean {
   const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
+  const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
+  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
+
+  const requiredTestCompanies = testCompanies.filter(
+    (company) => !deletedCompanyIds.has(company.id),
+  );
+
+  const requiredTestTimesheets = testTimesheets.filter(
+    (timesheet) => !deletedTimesheetIds.has(timesheet.id),
+  );
+
   const companyIds = new Set(companies.map((company) => company.id));
   const timesheetIds = new Set(timesheets.map((timesheet) => timesheet.id));
   const projectIds = new Set(
     companies.flatMap((company) => company.projects.map((project) => project.id)),
   );
-  const testProjectIds = testCompanies.flatMap((company) =>
+
+  const requiredTestProjectIds = requiredTestCompanies.flatMap((company) =>
     company.projects.map((project) => project.id),
   );
 
   return (
-    companies.length === testCompanies.length &&
-    timesheets.length === testTimesheets.length &&
-    projectIds.size === testProjectIds.length &&
-    testCompanies.every((company) => companyIds.has(company.id)) &&
-    testProjectIds.every((projectId) => projectIds.has(projectId)) &&
-    testTimesheets.every((timesheet) => timesheetIds.has(timesheet.id))
+    requiredTestCompanies.every((company) => companyIds.has(company.id)) &&
+    requiredTestProjectIds.every((projectId) => projectIds.has(projectId)) &&
+    requiredTestTimesheets.every((timesheet) => timesheetIds.has(timesheet.id))
   );
 }
 
-// Kept as the single bootstrap hook for local demo data.
+function mergeTestDataSeed(
+  existingCompanies: Company[],
+  existingTimesheets: Timesheet[],
+): { companies: Company[]; timesheets: Timesheet[] } {
+  const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
+  const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
+  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
+
+  const companiesById = new Map(
+    existingCompanies
+      .filter((company) => !deletedCompanyIds.has(company.id))
+      .map((company) => [company.id, company]),
+  );
+
+  const timesheetsById = new Map(
+    existingTimesheets
+      .filter((timesheet) => !deletedTimesheetIds.has(timesheet.id))
+      .map((timesheet) => [timesheet.id, timesheet]),
+  );
+
+  for (const testCompany of testCompanies) {
+    if (deletedCompanyIds.has(testCompany.id)) continue;
+
+    const existingCompany = companiesById.get(testCompany.id);
+    if (!existingCompany) {
+      companiesById.set(testCompany.id, testCompany);
+      continue;
+    }
+
+    const projectIds = new Set(existingCompany.projects.map((project) => project.id));
+    const missingProjects = testCompany.projects.filter((project) => !projectIds.has(project.id));
+
+    if (missingProjects.length > 0) {
+      companiesById.set(testCompany.id, {
+        ...existingCompany,
+        projects: [...existingCompany.projects, ...missingProjects],
+      });
+    }
+  }
+
+  for (const testTimesheet of testTimesheets) {
+    if (deletedTimesheetIds.has(testTimesheet.id)) continue;
+
+    if (!timesheetsById.has(testTimesheet.id)) {
+      timesheetsById.set(testTimesheet.id, testTimesheet);
+    }
+  }
+
+  return {
+    companies: [...companiesById.values()],
+    timesheets: [...timesheetsById.values()],
+  };
+}
+
 export function seedIfEmpty(): void {
   const existingTimesheets = readTimesheets();
   const existingCompanies = listCompanies();
@@ -4163,7 +4494,7 @@ export function seedIfEmpty(): void {
     return;
   }
 
-  const { companies, timesheets } = buildTestDataSeed();
+  const { companies, timesheets } = mergeTestDataSeed(existingCompanies, existingTimesheets);
 
   setStorageItem(TIMESHEET_KEY, JSON.stringify(timesheets));
   setStorageItem(COMPANY_KEY, JSON.stringify(companies));

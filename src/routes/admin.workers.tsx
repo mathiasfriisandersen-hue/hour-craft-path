@@ -23,6 +23,7 @@ import {
   knownWorkersIncludingInactiveFromTimesheets,
   listCompanies,
   setKnownWorkerInactive,
+  deleteKnownWorker,
   TRADE_SKILLS,
   updateKnownWorker,
   WORKER_LANGUAGES,
@@ -174,6 +175,13 @@ export function WorkerOverviewContent({
     setActiveTab("inactive");
     setStatusFilter("all");
   };
+
+  const deleteWorker = (worker: KnownWorker) => {
+  deleteKnownWorker(worker);
+  setSelectedWorkerKey("");
+  setActiveTab("inactive");
+  setStatusFilter("all");
+};
 
   const selectTab = (tab: WorkerTab) => {
     setActiveTab(tab);
@@ -328,12 +336,13 @@ export function WorkerOverviewContent({
         </section>
 
         <WorkerDetailPanel
-          row={selectedRow}
-          activeTab={activeTab}
-          inactiveMode={activeTab === "inactive"}
-          onInactivate={inactivateWorker}
-          onRestore={restoreWorker}
-        />
+  row={selectedRow}
+  activeTab={activeTab}
+  inactiveMode={activeTab === "inactive"}
+  onInactivate={inactivateWorker}
+  onRestore={restoreWorker}
+  onDelete={deleteWorker}
+/>
       </div>
     </div>
   );
@@ -578,12 +587,14 @@ function WorkerDetailPanel({
   inactiveMode,
   onInactivate,
   onRestore,
+  onDelete,
 }: {
   row: WorkerRow | null;
   activeTab: WorkerTab;
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
+  onDelete?: (worker: KnownWorker) => void;
 }) {
   if (!row) {
     return (
@@ -636,12 +647,13 @@ function WorkerDetailPanel({
       </div>
 
       <WorkerDetails
-        row={row}
-        inactiveMode={inactiveMode}
-        onInactivate={onInactivate}
-        onRestore={onRestore}
-        variant="panel"
-      />
+  row={row}
+  inactiveMode={inactiveMode}
+  onInactivate={onInactivate}
+  onRestore={onRestore}
+  onDelete={onDelete}
+  variant="panel"
+/>
     </aside>
   );
 }
@@ -737,7 +749,12 @@ function filterWorkerRows(
 
   return rows.filter((row) => {
     if (filters.status !== "all" && filters.status !== filters.currentTab) return false;
-    if (filters.trade !== "all" && !row.worker.tradeSkills.includes(filters.trade)) return false;
+    if (
+  filters.trade !== "all" &&
+  !row.worker.tradeSkills.some((skill) => skill === filters.trade)
+) {
+  return false;
+}
     if (filters.company !== "all" && displayCompanyName(row) !== filters.company) return false;
 
     if (!query) return true;
@@ -763,12 +780,14 @@ function WorkerDetails({
   inactiveMode,
   onInactivate,
   onRestore,
+  onDelete,
   variant = "inline",
 }: {
   row: WorkerRow;
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
+  onDelete?: (worker: KnownWorker) => void;
   variant?: "inline" | "panel";
 }) {
   const [editing, setEditing] = useState(false);
@@ -847,22 +866,30 @@ function WorkerDetails({
             <DetailRow label="Fag" value={tradeSkills} />
             <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
           </dl>
-          <div className="mt-4 flex flex-wrap gap-2">
+
+                    <div className="mt-4 flex flex-wrap gap-2">
             {!inactiveMode && (
               <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
                 Rediger vikar
               </Button>
             )}
+
             {inactiveMode ? (
-              <Button size="sm" onClick={() => onRestore?.(row.worker)}>
-                <RotateCcw className="mr-1.5 h-4 w-4" />
-                Læg tilbage i ledige vikarer
-              </Button>
-            ) : (
-              <Button variant="destructive" size="sm" onClick={() => onInactivate?.(row.worker)}>
-                Slet vikar
-              </Button>
-            )}
+  <>
+    <Button size="sm" onClick={() => onRestore?.(row.worker)}>
+      <RotateCcw className="mr-1.5 h-4 w-4" />
+      Læg tilbage i ledige vikarer
+    </Button>
+
+    <Button variant="destructive" size="sm" onClick={() => onDelete?.(row.worker)}>
+      Slet vikar
+    </Button>
+  </>
+) : (
+  <Button variant="destructive" size="sm" onClick={() => onInactivate?.(row.worker)}>
+    Gør inaktiv
+  </Button>
+)}
           </div>
         </>
       )}
