@@ -1004,7 +1004,13 @@ async function loadRuntimeMailApiUrl(): Promise<string> {
 
 async function appStateApiUrl(): Promise<string> {
   const mailApiUrl = BUILD_TIME_MAIL_API_URL || (await loadRuntimeMailApiUrl());
-  return mailApiUrl ? workerApiUrl("/app-state", mailApiUrl) : "";
+
+  if (mailApiUrl) {
+    return workerApiUrl("/app-state", mailApiUrl);
+  }
+
+  const timesheetApi = await timesheetApiConfig();
+  return timesheetApi.url ? workerApiUrl("/app-state", timesheetApi.url) : "";
 }
 
 async function loadRuntimeTimesheetApiConfig(): Promise<TimesheetApiConfig> {
@@ -1823,23 +1829,46 @@ export async function syncRemoteAppState(): Promise<void> {
   if (remoteSyncPromise) return remoteSyncPromise;
 
   remoteSyncPromise = (async () => {
+    const url = await appStateApiUrl();
+    let remoteState: RemoteAppState | undefined;
+
+    if (url) {
+      const response = await fetch(url, { cache: "no-store" }).catch(() => undefined);
+      if (response?.ok) {
+        const body = (await response.json().catch(() => undefined)) as
+          | { ok?: boolean; state?: RemoteAppState }
+          | undefined;
+
+        if (body?.ok && body.state) {
+          remoteState = body.state;
+
+          const deletedTimesheetIds = new Set([
+            ...readDeletedIds(DELETED_TIMESHEET_IDS_KEY),
+            ...(Array.isArray(remoteState.deletedTimesheetIds)
+              ? remoteState.deletedTimesheetIds
+              : []),
+          ]);
+
+          const deletedCompanyIds = new Set([
+            ...readDeletedIds(DELETED_COMPANY_IDS_KEY),
+            ...(Array.isArray(remoteState.deletedCompanyIds) ? remoteState.deletedCompanyIds : []),
+          ]);
+
+          setStorageItem(DELETED_TIMESHEET_IDS_KEY, JSON.stringify([...deletedTimesheetIds]));
+          setStorageItem(DELETED_COMPANY_IDS_KEY, JSON.stringify([...deletedCompanyIds]));
+        }
+      }
+    }
+
     await syncTimesheetsFromApi();
 
-    const url = await appStateApiUrl();
-    if (!url) return;
+    if (!url || !remoteState) return;
 
-    const response = await fetch(url, { cache: "no-store" }).catch(() => undefined);
-    if (!response?.ok) return;
-    const body = (await response.json().catch(() => undefined)) as
-      | { ok?: boolean; state?: RemoteAppState }
-      | undefined;
-    if (!body?.ok || !body.state) return;
-
-    const remoteUpdatedAt = body.state.updatedAt ?? "";
+    const remoteUpdatedAt = remoteState.updatedAt ?? "";
     const localState = currentAppState();
     const preferLocal = !remoteUpdatedAt || localState.updatedAt >= remoteUpdatedAt;
-    const remoteCompanies = Array.isArray(body.state.companies)
-      ? body.state.companies.map((item) => normalizeCompany(item))
+    const remoteCompanies = Array.isArray(remoteState.companies)
+      ? remoteState.companies.map((item) => normalizeCompany(item))
       : [];
 
     const mergedCompanies = mergeCompanies(localState.companies, remoteCompanies, preferLocal);
@@ -1847,7 +1876,7 @@ export async function syncRemoteAppState(): Promise<void> {
       [localState.updatedAt, remoteUpdatedAt].filter(Boolean).sort().at(-1) ||
       new Date().toISOString();
 
-        applyAppState(
+    applyAppState(
       {
         version: 1,
         updatedAt: mergedUpdatedAt,
@@ -1856,15 +1885,15 @@ export async function syncRemoteAppState(): Promise<void> {
         deletedTimesheetIds: [
           ...new Set([
             ...localState.deletedTimesheetIds,
-            ...(Array.isArray(body.state.deletedTimesheetIds)
-              ? body.state.deletedTimesheetIds
+            ...(Array.isArray(remoteState.deletedTimesheetIds)
+              ? remoteState.deletedTimesheetIds
               : []),
           ]),
         ],
         deletedCompanyIds: [
           ...new Set([
             ...localState.deletedCompanyIds,
-            ...(Array.isArray(body.state.deletedCompanyIds) ? body.state.deletedCompanyIds : []),
+            ...(Array.isArray(remoteState.deletedCompanyIds) ? remoteState.deletedCompanyIds : []),
           ]),
         ],
       },
