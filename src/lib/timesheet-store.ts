@@ -162,6 +162,10 @@ export type DayRuleMarker = {
 };
 
 export type Timesheet = {
+  invoiceArchivedAt?: string;
+  calendarStatus?: "planned";
+  calendarSource?: "project-mail";
+  projectMailSentAt?: string;
   id: string;
   ownerRole?: "bruger" | "bruger2";
   vikar: string;
@@ -965,18 +969,34 @@ type TimesheetApiSyncStatus = {
   updatedAt: string;
 };
 
+async function fetchRuntimeJsonConfig<T>(fileName: string): Promise<T | undefined> {
+  const baseUrl = `${import.meta.env.BASE_URL}${fileName}`;
+  const rootUrl = `/${fileName}`;
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
+
+  const urls = [...new Set(isLocalhost ? [rootUrl, baseUrl] : [baseUrl, rootUrl])];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) continue;
+      return (await response.json()) as T;
+    } catch {
+      continue;
+    }
+  }
+
+  return undefined;
+}
+
 async function loadRuntimeMailApiUrl(): Promise<string> {
   if (runtimeMailApiUrl !== undefined) return runtimeMailApiUrl;
 
-  runtimeConfigPromise ??= fetch(`${import.meta.env.BASE_URL}mail-config.json`, {
-    cache: "no-store",
-  })
-    .then(async (response) => {
-      if (!response.ok) return "";
-      const config = (await response.json()) as { timesheetMailApiUrl?: string };
-      return config.timesheetMailApiUrl?.trim() ?? "";
-    })
-    .catch(() => "");
+  runtimeConfigPromise ??= fetchRuntimeJsonConfig<{ timesheetMailApiUrl?: string }>(
+    "mail-config.json",
+  ).then((config) => config?.timesheetMailApiUrl?.trim() ?? "");
 
   runtimeMailApiUrl = await runtimeConfigPromise;
   return runtimeMailApiUrl;
@@ -990,21 +1010,13 @@ async function appStateApiUrl(): Promise<string> {
 async function loadRuntimeTimesheetApiConfig(): Promise<TimesheetApiConfig> {
   if (runtimeTimesheetApiConfig) return runtimeTimesheetApiConfig;
 
-  runtimeTimesheetApiConfigPromise ??= fetch(`${import.meta.env.BASE_URL}timesheet-api-config.json`, {
-    cache: "no-store",
-  })
-    .then(async (response) => {
-      if (!response.ok) return { url: "", token: "" };
-      const config = (await response.json()) as {
-        timesheetApiUrl?: string;
-        timesheetApiToken?: string;
-      };
-      return {
-        url: config.timesheetApiUrl?.trim() ?? "",
-        token: config.timesheetApiToken?.trim() ?? "",
-      };
-    })
-    .catch(() => ({ url: "", token: "" }));
+  runtimeTimesheetApiConfigPromise ??= fetchRuntimeJsonConfig<{
+    timesheetApiUrl?: string;
+    timesheetApiToken?: string;
+  }>("timesheet-api-config.json").then((config) => ({
+    url: config?.timesheetApiUrl?.trim() ?? "",
+    token: config?.timesheetApiToken?.trim() ?? "",
+  }));
 
   runtimeTimesheetApiConfig = await runtimeTimesheetApiConfigPromise;
   return runtimeTimesheetApiConfig;
@@ -1179,6 +1191,7 @@ export function removeWorkerFromSystem(
 export function remove(id: string): void {
   rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, id);
   writeTimesheets(readTimesheets().filter((item) => item.id !== id));
+  queueRemoteAppStatePersist();
 }
 
 export function clearAll(): void {
@@ -1591,6 +1604,8 @@ type RemoteAppState = {
   updatedAt?: string;
   timesheets?: StoredTimesheet[];
   companies?: StoredCompany[];
+  deletedTimesheetIds?: string[];
+  deletedCompanyIds?: string[];
 };
 
 type NormalizedAppState = {
@@ -1598,6 +1613,8 @@ type NormalizedAppState = {
   updatedAt: string;
   timesheets: Timesheet[];
   companies: Company[];
+  deletedTimesheetIds: string[];
+  deletedCompanyIds: string[];
 };
 
 let remotePersistTimer: number | undefined;
@@ -1611,6 +1628,8 @@ function currentAppState(): NormalizedAppState {
     updatedAt: localUpdatedAt(),
     timesheets: readTimesheets(),
     companies: listCompanies(),
+    deletedTimesheetIds: [...readDeletedIds(DELETED_TIMESHEET_IDS_KEY)],
+    deletedCompanyIds: [...readDeletedIds(DELETED_COMPANY_IDS_KEY)],
   };
 }
 
@@ -1656,13 +1675,25 @@ function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolea
 }
 
 function applyAppState(state: RemoteAppState, updatedAt: string): void {
-  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
-  const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
+  const deletedTimesheetIds = new Set([
+    ...readDeletedIds(DELETED_TIMESHEET_IDS_KEY),
+    ...(Array.isArray(state.deletedTimesheetIds) ? state.deletedTimesheetIds : []),
+  ]);
+
+  const deletedCompanyIds = new Set([
+    ...readDeletedIds(DELETED_COMPANY_IDS_KEY),
+    ...(Array.isArray(state.deletedCompanyIds) ? state.deletedCompanyIds : []),
+  ]);
+
+  setStorageItem(DELETED_TIMESHEET_IDS_KEY, JSON.stringify([...deletedTimesheetIds]));
+  setStorageItem(DELETED_COMPANY_IDS_KEY, JSON.stringify([...deletedCompanyIds]));
+
   const timesheets = Array.isArray(state.timesheets)
     ? state.timesheets
         .map((item) => normalizeTimesheet(item))
         .filter((item) => !deletedTimesheetIds.has(item.id))
     : [];
+
   const companies = Array.isArray(state.companies)
     ? state.companies
         .map((item) => normalizeCompany(item))
@@ -1816,12 +1847,26 @@ export async function syncRemoteAppState(): Promise<void> {
       [localState.updatedAt, remoteUpdatedAt].filter(Boolean).sort().at(-1) ||
       new Date().toISOString();
 
-    applyAppState(
+        applyAppState(
       {
         version: 1,
         updatedAt: mergedUpdatedAt,
         timesheets: readTimesheets(),
         companies: mergedCompanies,
+        deletedTimesheetIds: [
+          ...new Set([
+            ...localState.deletedTimesheetIds,
+            ...(Array.isArray(body.state.deletedTimesheetIds)
+              ? body.state.deletedTimesheetIds
+              : []),
+          ]),
+        ],
+        deletedCompanyIds: [
+          ...new Set([
+            ...localState.deletedCompanyIds,
+            ...(Array.isArray(body.state.deletedCompanyIds) ? body.state.deletedCompanyIds : []),
+          ]),
+        ],
       },
       mergedUpdatedAt,
     );
@@ -4485,6 +4530,8 @@ function mergeTestDataSeed(
 }
 
 export function seedIfEmpty(): void {
+  const enableLocalTestDataSeed = import.meta.env.VITE_ENABLE_TEST_DATA_SEED === "true";
+  if (!enableLocalTestDataSeed) return;
   const existingTimesheets = readTimesheets();
   const existingCompanies = listCompanies();
   const hasSeededCurrentVersion =

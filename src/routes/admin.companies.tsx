@@ -1050,16 +1050,18 @@ function ensureProjectTimesheet(
   });
 
   if (existing) {
-    return upsert({
-      ...existing,
-      workerLanguage: existing.workerLanguage || worker.language,
-      workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
-      workerMustChangeAccessCode: existing.workerMustChangeAccessCode || !existing.workerAccessCode,
-    });
-  }
+  return upsert({
+    ...existing,
+    workerLanguage: existing.workerLanguage || worker.language,
+    workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
+    workerMustChangeAccessCode: existing.workerMustChangeAccessCode || !existing.workerAccessCode,
+    calendarStatus: "planned",
+    calendarSource: "project-mail",
+    projectMailSentAt: existing.projectMailSentAt || new Date().toISOString(),
+  });
+}
 
-  return upsert(
-    createTimesheetForWorker({
+  const timesheet = createTimesheetForWorker({
       vikar: worker.name,
       vikarCode: worker.code,
       vikarEmail: worker.email,
@@ -1097,8 +1099,14 @@ function ensureProjectTimesheet(
       workerAccessCode: generateOneTimeCode(),
       contactPersonAccessCode: generateOneTimeCode(),
       ownerRole: company.ownerRole,
-    }),
-  );
+   });
+
+  return upsert({
+    ...timesheet,
+    calendarStatus: "planned",
+    calendarSource: "project-mail",
+    projectMailSentAt: new Date().toISOString(),
+  });
 }
 
 function projectWorkerMatchesTimesheet(worker: KnownWorker, timesheet: Timesheet): boolean {

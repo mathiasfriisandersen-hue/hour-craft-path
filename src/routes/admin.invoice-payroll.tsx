@@ -111,10 +111,11 @@ function InvoicePayrollPage() {
   const [companies, setCompanies] = useState(listCompanies);
   const [preview, setPreview] = useState<WorkContext | null>(null);
   const [payrollPreview, setPayrollPreview] = useState<WorkContext | null>(null);
-  const [view, setView] = useState<"invoice" | "payroll">("invoice");
+  const [view, setView] = useState<"invoice" | "payroll" | "archive">("invoice");
   const [periodFilter, setPeriodFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [showArchivedInvoices, setShowArchivedInvoices] = useState(false);
 
   useEffect(() => {
     const refresh = () => setCompanies(listCompanies());
@@ -140,17 +141,43 @@ function InvoicePayrollPage() {
       }),
     [companyFilter, periodFilter, rows],
   );
+const invoiceRows = filteredRows
+  .filter(
+    (row) =>
+      row.timesheet.status === "approved" &&
+      row.approvedHours > 0 &&
+      !row.timesheet.invoiceArchivedAt,
+  )
+  .sort((a, b) => compareByUrgency(a, b, "invoice"));
 
-  const invoiceRows = filteredRows
-    .filter((row) => row.timesheet.status === "approved" && row.approvedHours > 0)
-    .sort((a, b) => compareByUrgency(a, b, "invoice"));
+const archivedInvoiceRows = filteredRows
+  .filter(
+    (row) =>
+      row.timesheet.status === "approved" &&
+      row.approvedHours > 0 &&
+      row.timesheet.invoiceArchivedAt,
+  )
+  .sort((a, b) =>
+    (b.timesheet.invoiceArchivedAt ?? "").localeCompare(a.timesheet.invoiceArchivedAt ?? ""),
+  );
   const payrollRows = filteredRows
-    .filter(
-      (row) =>
-        (row.timesheet.status === "sent" || row.timesheet.status === "approved") &&
-        totalHours(row.timesheet.days) > 0,
-    )
-    .sort(comparePayrollRows);
+  .filter((row) => {
+    const timesheet = row.timesheet as any;
+
+    const workerIsDeleted =
+      timesheet.workerDeleted === true ||
+      timesheet.deleted === true ||
+      timesheet.workerStatus === "deleted" ||
+      timesheet.workerStatus === "inactive" ||
+      timesheet.workerActive === false;
+
+    return (
+      (timesheet.status === "sent" || timesheet.status === "approved") &&
+      totalHours(timesheet.days) > 0 &&
+      !workerIsDeleted
+    );
+  })
+  .sort(comparePayrollRows);
   const invoiceSentRows = invoiceRows.filter(
     (row) => statusFilterMatches(statusFilter, "invoice-sent") && row.timesheet.invoiceSentDate,
   );
@@ -274,20 +301,43 @@ function InvoicePayrollPage() {
           </div>
         </section>
 
-        <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-          <ViewToggleButton
-            active={view === "invoice"}
-            onClick={() => setView("invoice")}
-            label="Fakturaoverblik"
-            count={visibleInvoiceCount}
-          />
-          <ViewToggleButton
-            active={view === "payroll"}
-            onClick={() => setView("payroll")}
-            label="Lønoverblik"
-            count={visiblePayrollCount}
-          />
-        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
+  <div className="flex flex-wrap gap-2">
+    <ViewToggleButton
+      active={view === "invoice"}
+      onClick={() => setView("invoice")}
+      label="Fakturaoverblik"
+      count={visibleInvoiceCount}
+    />
+    <ViewToggleButton
+      active={view === "payroll"}
+      onClick={() => setView("payroll")}
+      label="Lønoverblik"
+      count={visiblePayrollCount}
+    />
+  </div>
+
+  <button
+    type="button"
+    onClick={() => setView("archive")}
+    className={cn(
+      "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+      view === "archive"
+        ? "bg-blue-600 text-white shadow-sm"
+        : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-950",
+    )}
+  >
+    <span>Arkiverede dokumenter</span>
+    <span
+      className={cn(
+        "rounded-full px-2 py-0.5 text-xs",
+        view === "archive" ? "bg-white/20 text-white" : "bg-white text-slate-500",
+      )}
+    >
+      {archivedInvoiceRows.length}
+    </span>
+  </button>
+</div>
 
         {view === "invoice" ? (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -298,7 +348,7 @@ function InvoicePayrollPage() {
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               <StatusColumn
-                title="Skal snart håndteres"
+                title="Skal håndteres nu"
                 count={invoiceSoonRows.length}
                 tone="orange"
                 empty="Ingen fakturaer i denne status."
@@ -312,7 +362,7 @@ function InvoicePayrollPage() {
                 ))}
               </StatusColumn>
               <StatusColumn
-                title="Skal håndteres nu"
+                title="Skal snart håndteres"
                 count={invoiceNowRows.length}
                 tone="red"
                 empty="Ingen fakturaer kræver handling lige nu."
@@ -339,9 +389,23 @@ function InvoicePayrollPage() {
                   />
                 ))}
               </StatusColumn>
+              <StatusColumn
+  title="Arkiverede dokumenter"
+  count={archivedInvoiceRows.length}
+  tone="slate"
+  empty="Ingen arkiverede fakturaer."
+>
+  {archivedInvoiceRows.map((row) => (
+    <InvoiceCaseCard
+      key={`invoice-archived-${row.timesheet.id}`}
+      row={row}
+      onPreview={() => setPreview(row)}
+    />
+  ))}
+</StatusColumn>
             </div>
           </section>
-        ) : (
+        ) : view === "payroll" ? (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
             <SectionHeader
               title="Lønoverblik"
@@ -393,10 +457,106 @@ function InvoicePayrollPage() {
               </StatusColumn>
             </div>
           </section>
+                ) : (
+          <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+            <SectionHeader
+              title="Arkiverede dokumenter"
+              count={archivedInvoiceRows.length}
+              actionLabel="Arkiverede fakturaer"
+            />
+
+            <div className="grid gap-4 p-4 md:grid-cols-2 xl:grid-cols-3">
+              {archivedInvoiceRows.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3">
+                  Ingen arkiverede fakturaer.
+                </div>
+              ) : (
+                archivedInvoiceRows.map((row) => (
+                  <InvoiceCaseCard
+                    key={`invoice-archived-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPreview(row)}
+                  />
+                ))
+              )}
+            </div>
+          </section>
         )}
       </div>
 
-      {preview && <InvoicePreview row={preview} onClose={() => setPreview(null)} />}
+      {showArchivedInvoices && (
+  <div className="fixed inset-0 z-50 bg-black/30" onClick={() => setShowArchivedInvoices(false)}>
+    <aside
+      className="ml-auto h-full w-full max-w-md overflow-y-auto bg-white p-4 shadow-xl"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">Arkiverede dokumenter</h2>
+          <p className="mt-1 text-sm text-slate-500">Arkiverede fakturaer.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setShowArchivedInvoices(false)}
+        >
+          Luk
+        </Button>
+      </div>
+
+      {archivedInvoiceRows.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+          Ingen arkiverede fakturaer.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {archivedInvoiceRows.map((row) => (
+            <article
+              key={`archived-invoice-panel-${row.timesheet.id}`}
+              className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+            >
+              <div className="text-sm font-semibold text-slate-950">{row.invoiceNumber}</div>
+              <div className="mt-1 text-xs text-slate-500">
+                {row.company?.name || row.timesheet.brugervirksomhed} · {row.timesheet.vikar}
+              </div>
+
+              <dl className="mt-3 grid gap-2 text-sm">
+                <Fact label="Fakturadato" value={formatDate(row.invoiceDate)} />
+                <Fact label="Total inkl. moms" value={formatDkk(row.invoiceIncVat)} />
+              </dl>
+
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowArchivedInvoices(false);
+                    setPreview(row);
+                  }}
+                >
+                  Preview
+                </Button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </aside>
+  </div>
+)}
+
+      {preview && (
+  <InvoicePreview
+    row={preview}
+    onArchive={() => {
+      archiveInvoice(preview);
+      setPreview(null);
+    }}
+    onClose={() => setPreview(null)}
+  />
+)}
       {payrollPreview && (
         <PayrollPreview
           row={payrollPreview}
@@ -742,6 +902,13 @@ function updateTimesheetDate(
   value: string,
 ) {
   upsert({ ...timesheet, [field]: value });
+}
+
+function archiveInvoice(row: WorkContext) {
+  upsert({
+    ...row.timesheet,
+    invoiceArchivedAt: new Date().toISOString(),
+  });
 }
 
 function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkContext {
@@ -1152,7 +1319,15 @@ function PayrollPreview({
   );
 }
 
-function InvoicePreview({ row, onClose }: { row: WorkContext; onClose: () => void }) {
+function InvoicePreview({
+  row,
+  onArchive,
+  onClose,
+}: {
+  row: WorkContext;
+  onArchive: () => void;
+  onClose: () => void;
+}) {
   const t = row.timesheet;
   const customerName = row.company?.name || t.brugervirksomhed || "—";
   const contactName = t.kontaktperson || row.company?.contactName || "";
@@ -1169,11 +1344,14 @@ function InvoicePreview({ row, onClose }: { row: WorkContext; onClose: () => voi
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" onClick={() => downloadInvoicePdf(row)}>
-              Hent faktura som PDF
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Luk preview
-            </Button>
+  Hent faktura som PDF
+</Button>
+<Button type="button" variant="outline" size="sm" onClick={onArchive}>
+  Arkiver
+</Button>
+<Button type="button" variant="outline" size="sm" onClick={onClose}>
+  Luk preview
+</Button>
           </div>
         </div>
         <div className="grid gap-4 text-sm lg:grid-cols-2">

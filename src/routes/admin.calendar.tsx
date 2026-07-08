@@ -48,16 +48,20 @@ function AdminCalendar() {
   );
 
   const activeTimesheets = useMemo(
-    () =>
-      visibleTimesheets.filter(
-        (item) =>
-          item.status !== "draft" &&
-          !item.archived &&
-          !item.workerInactive &&
-          !item.workerConsentInactive,
-      ),
-    [visibleTimesheets],
-  );
+  () =>
+    visibleTimesheets.filter((item) => {
+      const isSubmittedOrActive = item.status !== "draft";
+      const isPlannedFromProjectMail = item.calendarStatus === "planned";
+
+      return (
+        (isSubmittedOrActive || isPlannedFromProjectMail) &&
+        !item.archived &&
+        !item.workerInactive &&
+        !item.workerConsentInactive
+      );
+    }),
+  [visibleTimesheets],
+);
 
   const workers = useMemo(
     () =>
