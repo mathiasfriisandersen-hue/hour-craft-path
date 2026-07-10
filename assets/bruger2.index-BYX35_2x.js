@@ -1,0 +1,1 @@
+import{vt as e}from"./sub-z-logo-BQRpZs61.js";import{p as t}from"./index-BMba2xRM.js";var n=e();function r(){return(0,n.jsx)(t,{role:`bruger2`,dashboardShell:!0})}export{r as component};

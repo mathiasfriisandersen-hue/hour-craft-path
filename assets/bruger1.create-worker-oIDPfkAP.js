@@ -1,0 +1,1 @@
+import{c as e}from"./index-BMba2xRM.js";var t=e;export{t as component};

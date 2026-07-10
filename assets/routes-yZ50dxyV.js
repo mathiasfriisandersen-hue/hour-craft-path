@@ -1,0 +1,1 @@
+import{vt as e}from"./sub-z-logo-BQRpZs61.js";import{t}from"./app-shell-DbFM5stv.js";import{a as n,o as r,r as i}from"./auth-CbuOAnvR.js";var a=e();function o(){let{role:e,ready:o}=n();return!o||!e?(0,a.jsx)(t,{}):(0,a.jsx)(r,{to:i[e],replace:!0})}export{o as component};
