@@ -901,7 +901,7 @@ export async function sendProjectConfirmationEmail(
       workerSubject,
       workerText,
       workerHtml,
-      sendAdminCopy: true,
+      sendAdminCopy: false,
     }),
   });
 
