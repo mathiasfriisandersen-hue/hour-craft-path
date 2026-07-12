@@ -79,6 +79,7 @@ type PayrollAllowanceRow = {
   label: string;
   hours: number;
   amount: number;
+  hourlyRateLabel?: string;
   quantityLabel?: string;
   amountLabel?: string;
 };
@@ -1202,6 +1203,7 @@ function payrollAllowanceRowsForCalculation(
   }).map((item) => ({
     ...item,
     amount: item.hours * hourlyWageWithSocial,
+    hourlyRateLabel: `${formatDkk(hourlyWageWithSocial)}/t`,
   }));
 
   if (calculation.delayedMealBreakDays > 0) {
@@ -1253,7 +1255,15 @@ function allowanceAmountLabel(item: PayrollAllowanceRow) {
 }
 
 function allowancePreviewValue(item: PayrollAllowanceRow) {
+  if (item.hourlyRateLabel) {
+    return `${allowanceQuantityLabel(item)} x ${item.hourlyRateLabel} = ${allowanceAmountLabel(item)}`;
+  }
   return `${allowanceQuantityLabel(item)} / ${allowanceAmountLabel(item)}`;
+}
+
+function allowancePdfAmountLabel(item: PayrollAllowanceRow) {
+  if (item.hourlyRateLabel) return `${item.hourlyRateLabel} = ${allowanceAmountLabel(item)}`;
+  return allowanceAmountLabel(item);
 }
 
 function PayrollPreview({
@@ -1699,7 +1709,7 @@ async function downloadPayrollPdf(row: WorkContext) {
     financials.allowanceRows.forEach((item) => {
       doc.text(item.label, 20, cursorY);
       doc.text(allowanceQuantityLabel(item), 145, cursorY, { align: "right" });
-      doc.text(allowanceAmountLabel(item), 190, cursorY, { align: "right" });
+      doc.text(allowancePdfAmountLabel(item), 190, cursorY, { align: "right" });
       cursorY += 8;
     });
   }
