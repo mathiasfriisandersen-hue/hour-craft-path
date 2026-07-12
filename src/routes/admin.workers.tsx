@@ -1,17 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import {
-  BriefcaseBusiness,
-  CalendarDays,
-  ChevronRight,
-  Mail,
-  Phone,
-  RotateCcw,
-  Search,
-  UserRoundCheck,
-  UserRoundX,
-  UsersRound,
-} from "lucide-react";
+import { ChevronDown, ChevronRight, RotateCcw, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,7 +77,6 @@ function WorkerOverview() {
 }
 
 type WorkerTab = "working" | "available" | "inactive";
-type WorkerTone = "blue" | "green" | "orange" | "purple";
 
 export function WorkerOverviewContent({
   role,
@@ -141,7 +129,6 @@ export function WorkerOverviewContent({
     }),
     [available, inactiveRows, working],
   );
-  const activeTimesheetWeeks = rows.reduce((total, row) => total + row.currentTimesheets.length, 0);
   const allRows = useMemo(() => [...rows, ...inactiveRows], [inactiveRows, rows]);
   const tradeOptions = useMemo(() => uniqueTradeOptions(allRows), [allRows]);
   const companyOptions = useMemo(() => uniqueCompanyOptions(allRows), [allRows]);
@@ -212,43 +199,6 @@ export function WorkerOverviewContent({
           </a>
         </div>
       )}
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <WorkerKpiCard
-          label="I arbejde"
-          value={working.length}
-          helper="Se alle i arbejde"
-          icon={UsersRound}
-          tone="blue"
-          active={activeTab === "working"}
-          onClick={() => selectTab("working")}
-        />
-        <WorkerKpiCard
-          label="Ledige"
-          value={available.length}
-          helper="Se alle ledige"
-          icon={UserRoundCheck}
-          tone="green"
-          active={activeTab === "available"}
-          onClick={() => selectTab("available")}
-        />
-        <WorkerKpiCard
-          label="Inaktive"
-          value={inactiveRows.length}
-          helper="Se alle inaktive"
-          icon={UserRoundX}
-          tone="orange"
-          active={activeTab === "inactive"}
-          onClick={() => selectTab("inactive")}
-        />
-        <WorkerKpiCard
-          label="Aktive timeseddeluger"
-          value={activeTimesheetWeeks}
-          helper="Aktive ugeforløb"
-          icon={CalendarDays}
-          tone="purple"
-        />
-      </section>
 
       <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]">
         <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -347,60 +297,6 @@ export function WorkerOverviewContent({
         />
       </div>
     </div>
-  );
-}
-
-function WorkerKpiCard({
-  label,
-  value,
-  helper,
-  icon: Icon,
-  tone,
-  active = false,
-  onClick,
-}: {
-  label: string;
-  value: number;
-  helper: string;
-  icon: typeof UsersRound;
-  tone: WorkerTone;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "group rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition-colors hover:border-blue-200 hover:bg-blue-50/30",
-        active && "border-blue-300 ring-2 ring-blue-100",
-        !onClick && "cursor-default hover:border-slate-200 hover:bg-white",
-      )}
-    >
-      <div className="flex items-center gap-4">
-        <span
-          className={cn(
-            "grid h-12 w-12 shrink-0 place-items-center rounded-full",
-            tone === "blue" && "bg-blue-100 text-blue-700",
-            tone === "green" && "bg-emerald-100 text-emerald-700",
-            tone === "orange" && "bg-orange-100 text-orange-700",
-            tone === "purple" && "bg-violet-100 text-violet-700",
-          )}
-        >
-          <Icon className="h-5 w-5" />
-        </span>
-        <span className="min-w-0">
-          <span className="block text-sm font-semibold text-slate-700">{label}</span>
-          <span className="mt-1 block text-3xl font-semibold leading-none text-slate-950">
-            {value}
-          </span>
-          <span className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-blue-600">
-            {helper}
-            <ChevronRight className="h-3.5 w-3.5" />
-          </span>
-        </span>
-      </div>
-    </button>
   );
 }
 
@@ -609,43 +505,36 @@ function WorkerDetailPanel({
   }
 
   return (
-    <aside className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <aside className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start gap-3">
-        <span className="grid h-14 w-14 shrink-0 place-items-center rounded-full bg-blue-100 text-lg font-semibold text-blue-700">
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-100 text-base font-semibold text-blue-700">
           {workerInitials(row.worker)}
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div>
-              <h2 className="text-base font-semibold text-slate-950">{row.worker.name || "—"}</h2>
-              <p className="mt-1 text-sm text-slate-500">{row.worker.email || "—"}</p>
-              <p className="mt-1 text-sm text-slate-500">{row.worker.phone || "—"}</p>
+          <div className="flex min-w-0 items-start justify-between gap-2">
+            <h2 className="min-w-0 truncate text-base font-semibold text-slate-950">
+              {row.worker.name || "—"}
+            </h2>
+            <WorkerStatusBadge status={workerStatus(row, activeTab)} />
+          </div>
+          <p className="mt-1 min-w-0 break-all text-sm text-slate-500">{row.worker.email || "—"}</p>
+          <div className="mt-2 grid gap-1 text-sm text-slate-600">
+            <div className="flex justify-between gap-3">
+              <span>Telefon</span>
+              <span className="font-medium text-slate-900">{row.worker.phone || "—"}</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm">
-        <PanelMetric label="Status" value={workerStatusLabel(workerStatus(row, activeTab))} />
-        <PanelMetric label="Startdato" value={formatDate(row.bookingStart)} />
-        <PanelMetric label="Slutdato" value={formatDate(row.bookingEnd)} />
-        <PanelMetric label="Aktive timeseddeluger" value={String(row.currentTimesheets.length)} />
-      </div>
-
-      <div className="rounded-xl border border-slate-200 p-4">
-        <h3 className="mb-3 text-sm font-semibold text-slate-950">Kontaktinformation</h3>
-        <div className="space-y-2 text-sm text-slate-600">
-          <div className="flex items-center gap-2">
-            <Mail className="h-4 w-4 text-slate-400" />
-            <span className="break-all">{row.worker.email || "—"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Phone className="h-4 w-4 text-slate-400" />
-            <span>{row.worker.phone || "—"}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <BriefcaseBusiness className="h-4 w-4 text-slate-400" />
-            <span>{displayCompanyName(row)}</span>
+            <div className="flex justify-between gap-3">
+              <span>Periode</span>
+              <span className="text-right font-medium text-slate-900">
+                {formatDate(row.bookingStart)} – {formatDate(row.bookingEnd)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span>Virksomhed</span>
+              <span className="min-w-0 truncate text-right font-medium text-slate-900">
+                {displayCompanyName(row)}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -660,15 +549,6 @@ function WorkerDetailPanel({
         variant="panel"
       />
     </aside>
-  );
-}
-
-function PanelMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-slate-500">{label}</span>
-      <span className="text-right font-semibold text-slate-900">{value}</span>
-    </div>
   );
 }
 
@@ -900,64 +780,8 @@ function WorkerDetails({
         <WorkerEditForm worker={row.worker} onClose={() => setEditing(false)} />
       ) : (
         <>
-          <dl className="text-sm">
-            <DetailRow label="Vikar" value={row.worker.name || "—"} />
-            <DetailRow label="Kode" value={row.worker.code || "—"} />
-            <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
-            <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
-            <DetailRow label="Adresse" value={row.worker.address || "—"} />
-            <DetailRow label="CPR-nr." value={row.worker.cpr || "—"} />
-            <DetailRow
-              label="Sprog"
-              value={
-                WORKER_LANGUAGES.find((item) => item.value === row.worker.language)?.label ||
-                "Dansk"
-              }
-            />
-            {hasActiveBooking ? (
-              <>
-                <DetailRow
-                  label="Brugervirksomhed"
-                  value={timesheet?.brugervirksomhed || assignment?.companyName || "—"}
-                />
-                <DetailRow
-                  label="Projekt"
-                  value={timesheet?.projectName || assignment?.projectName || "—"}
-                />
-                <DetailRow label="Kontaktperson" value={timesheet?.kontaktperson || "—"} />
-                <DetailRow
-                  label="Kontaktperson telefon"
-                  value={timesheet?.kontaktpersonPhone || "—"}
-                />
-                <DetailRow label="Mail" value={timesheet?.kontaktpersonEmail || "—"} />
-                <DetailRow label="Reference" value={timesheet?.referenceNo || "—"} />
-                <DetailRow label="Arbejdssted" value={timesheet?.arbejdssted || "—"} />
-                <DetailRow label="Periode" value={period} />
-                <DetailRow label="Overenskomst" value={timesheet?.overenskomst || "—"} />
-              </>
-            ) : hasFutureBooking ? (
-              <>
-                <DetailRow label="Booking" value="Ikke aktiv endnu" />
-                <DetailRow
-                  label="Brugervirksomhed"
-                  value={plannedAssignment?.companyName || nextTimesheet?.brugervirksomhed || "—"}
-                />
-                <DetailRow
-                  label="Projekt"
-                  value={plannedAssignment?.projectName || nextTimesheet?.projectName || "—"}
-                />
-                <DetailRow label="Periode" value={period} />
-                <DetailRow label="Overenskomst" value={nextTimesheet?.overenskomst || "—"} />
-              </>
-            ) : (
-              <DetailRow label="Booking" value="Ingen aktiv booking" />
-            )}
-            <DetailRow label="Fag" value={tradeSkills} />
-            <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
-          </dl>
-
           {!inactiveMode && (
-            <div className="mt-4 rounded-xl border border-slate-200 p-3">
+            <div className="rounded-xl border border-slate-200 p-3">
               <h3 className="text-sm font-semibold text-slate-950">Tilknyt til projekt</h3>
               <label className="mt-3 block">
                 <span className="sr-only">Søg virksomhed eller projekt</span>
@@ -1012,6 +836,68 @@ function WorkerDetails({
               </div>
             </div>
           )}
+
+          <details className="group mt-3 rounded-xl border border-slate-200">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-slate-950 marker:hidden">
+              <span>Vikar information</span>
+              <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+            </summary>
+            <dl className="border-t border-slate-200 px-3 pb-2 text-sm">
+              <DetailRow label="Vikar" value={row.worker.name || "—"} />
+              <DetailRow label="Kode" value={row.worker.code || "—"} />
+              <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
+              <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
+              <DetailRow label="Adresse" value={row.worker.address || "—"} />
+              <DetailRow label="CPR-nr." value={row.worker.cpr || "—"} />
+              <DetailRow
+                label="Sprog"
+                value={
+                  WORKER_LANGUAGES.find((item) => item.value === row.worker.language)?.label ||
+                  "Dansk"
+                }
+              />
+              {hasActiveBooking ? (
+                <>
+                  <DetailRow
+                    label="Brugervirksomhed"
+                    value={timesheet?.brugervirksomhed || assignment?.companyName || "—"}
+                  />
+                  <DetailRow
+                    label="Projekt"
+                    value={timesheet?.projectName || assignment?.projectName || "—"}
+                  />
+                  <DetailRow label="Kontaktperson" value={timesheet?.kontaktperson || "—"} />
+                  <DetailRow
+                    label="Kontaktperson telefon"
+                    value={timesheet?.kontaktpersonPhone || "—"}
+                  />
+                  <DetailRow label="Mail" value={timesheet?.kontaktpersonEmail || "—"} />
+                  <DetailRow label="Reference" value={timesheet?.referenceNo || "—"} />
+                  <DetailRow label="Arbejdssted" value={timesheet?.arbejdssted || "—"} />
+                  <DetailRow label="Periode" value={period} />
+                  <DetailRow label="Overenskomst" value={timesheet?.overenskomst || "—"} />
+                </>
+              ) : hasFutureBooking ? (
+                <>
+                  <DetailRow label="Booking" value="Ikke aktiv endnu" />
+                  <DetailRow
+                    label="Brugervirksomhed"
+                    value={plannedAssignment?.companyName || nextTimesheet?.brugervirksomhed || "—"}
+                  />
+                  <DetailRow
+                    label="Projekt"
+                    value={plannedAssignment?.projectName || nextTimesheet?.projectName || "—"}
+                  />
+                  <DetailRow label="Periode" value={period} />
+                  <DetailRow label="Overenskomst" value={nextTimesheet?.overenskomst || "—"} />
+                </>
+              ) : (
+                <DetailRow label="Booking" value="Ingen aktiv booking" />
+              )}
+              <DetailRow label="Fag" value={tradeSkills} />
+              <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
+            </dl>
+          </details>
 
           <div className="mt-4 flex flex-wrap gap-2">
             {!inactiveMode && (
