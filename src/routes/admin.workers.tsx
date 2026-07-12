@@ -571,18 +571,25 @@ function workerProjectMatches(
   company: Company;
   project: CompanyProject;
   attached: boolean;
+  endedAttachment: boolean;
+  projectEnded: boolean;
   conflict: string;
 }> {
   const normalizedQuery = query.trim().toLowerCase();
+  const today = localISODate(new Date());
 
   return companies
     .flatMap((company) =>
       company.projects.map((project) => {
-        const attached = projectHasWorker(project, worker);
+        const hasWorker = projectHasWorker(project, worker);
+        const projectEnded = isProjectEnded(project, today);
+        const attached = hasWorker && !projectEnded;
         return {
           company,
           project,
           attached,
+          endedAttachment: hasWorker && projectEnded,
+          projectEnded,
           conflict: attached ? "" : workerProjectOverlap(company, project, worker, companies),
         };
       }),
@@ -759,33 +766,49 @@ function WorkerDetails({
                   {projectMatches.length === 0 ? (
                     <div className="text-xs text-slate-500">Ingen projekter matcher søgningen.</div>
                   ) : (
-                    projectMatches.map(({ company, project, attached, conflict }) => (
-                      <div
-                        key={`${company.id}:${project.id}`}
-                        className="rounded-lg border border-slate-200 p-3 text-sm"
-                      >
-                        <div className="font-semibold text-slate-950">
-                          {company.name} / {project.name || "Projekt"}
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          {formatDate(project.startDate)} – {formatDate(project.endDate)}
-                        </div>
-                        {conflict && (
-                          <div className="mt-2 text-xs text-status-rejected-fg">
-                            Optaget i perioden.
-                          </div>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          disabled={attached || Boolean(conflict)}
-                          onClick={() => attachWorkerToProject(company, project)}
+                    projectMatches.map(
+                      ({ company, project, attached, endedAttachment, projectEnded, conflict }) => (
+                        <div
+                          key={`${company.id}:${project.id}`}
+                          className="rounded-lg border border-slate-200 p-3 text-sm"
                         >
-                          {attached ? "Allerede tilknyttet" : "Tilknyt vikar"}
-                        </Button>
-                      </div>
-                    ))
+                          <div className="font-semibold text-slate-950">
+                            {company.name} / {project.name || "Projekt"}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                          </div>
+                          {endedAttachment && (
+                            <div className="mt-2 text-xs text-slate-500">
+                              Tilknytningen sluttede {formatDate(project.endDate)}.
+                            </div>
+                          )}
+                          {projectEnded && !endedAttachment && (
+                            <div className="mt-2 text-xs text-slate-500">
+                              Projektet er afsluttet.
+                            </div>
+                          )}
+                          {conflict && (
+                            <div className="mt-2 text-xs text-status-rejected-fg">
+                              Optaget i perioden.
+                            </div>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="mt-2"
+                            disabled={attached || projectEnded || Boolean(conflict)}
+                            onClick={() => attachWorkerToProject(company, project)}
+                          >
+                            {attached
+                              ? "Allerede tilknyttet"
+                              : projectEnded
+                                ? "Afsluttet"
+                                : "Tilknyt vikar"}
+                          </Button>
+                        </div>
+                      ),
+                    )
                   )}
                 </div>
               </div>
@@ -1225,6 +1248,10 @@ function isProjectBookingActiveToday(project: CompanyProject, today: string): bo
   return Boolean(
     project.startDate && project.endDate && project.startDate <= today && today <= project.endDate,
   );
+}
+
+function isProjectEnded(project: CompanyProject, today: string): boolean {
+  return Boolean(project.endDate && project.endDate < today);
 }
 
 function projectHasWorker(project: CompanyProject, worker: KnownWorker): boolean {
