@@ -35,6 +35,14 @@ export const Route = createFileRoute("/admin/companies")({
 
 type CompanyKpiFilter = "companies" | "projects" | "localAgreements" | "contacts";
 
+type ContactRow = {
+  company: Company;
+  title: string;
+  subtitle: string;
+  phone: string;
+  email: string;
+};
+
 function blankProject(): CompanyProject {
   return {
     id: crypto.randomUUID(),
@@ -82,6 +90,55 @@ function workPeriodTimes(workPeriod: WorkPeriod): { start: string; end: string }
   return { start: "07:00", end: "15:00" };
 }
 
+function compareAlphabeticText(a: string, b: string): number {
+  const left = a.trim();
+  const right = b.trim();
+  if (!left && !right) return 0;
+  if (!left) return 1;
+  if (!right) return -1;
+  return left.localeCompare(right, "da-DK", { sensitivity: "base" });
+}
+
+function compareCompanies(a: Company, b: Company): number {
+  return (
+    compareAlphabeticText(a.name, b.name) ||
+    compareAlphabeticText(a.cvrNumber, b.cvrNumber) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+function compareProjectRows(
+  a: { company: Company; project: CompanyProject },
+  b: { company: Company; project: CompanyProject },
+): number {
+  return (
+    compareAlphabeticText(a.project.name, b.project.name) ||
+    compareCompanies(a.company, b.company) ||
+    a.project.id.localeCompare(b.project.id)
+  );
+}
+
+function compareLocalAgreementRows(
+  a: { company: Company; agreement: Company["localAgreements"][number] },
+  b: { company: Company; agreement: Company["localAgreements"][number] },
+): number {
+  return (
+    compareAlphabeticText(a.agreement.name, b.agreement.name) ||
+    compareCompanies(a.company, b.company) ||
+    a.agreement.id.localeCompare(b.agreement.id)
+  );
+}
+
+function compareContactRows(a: ContactRow, b: ContactRow): number {
+  return (
+    compareAlphabeticText(a.title, b.title) ||
+    compareCompanies(a.company, b.company) ||
+    compareAlphabeticText(a.subtitle, b.subtitle) ||
+    compareAlphabeticText(a.email, b.email) ||
+    compareAlphabeticText(a.phone, b.phone)
+  );
+}
+
 export function CompaniesPage() {
   const { role } = useAuth();
   const [companies, setCompanies] = useState(listCompanies);
@@ -90,38 +147,40 @@ export function CompaniesPage() {
   const [activeFilter, setActiveFilter] = useState<CompanyKpiFilter>("companies");
   const knownWorkers = listKnownWorkers();
   const refresh = () => setCompanies(listCompanies());
-  const visibleCompanies = companiesVisibleForRole(companies, role);
+  const visibleCompanies = [...companiesVisibleForRole(companies, role)].sort(compareCompanies);
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const projectRows = visibleCompanies.flatMap((company) =>
-    company.projects.map((project) => ({ company, project })),
-  );
-  const localAgreementRows = visibleCompanies.flatMap((company) =>
-    company.localAgreements.map((agreement) => ({ company, agreement })),
-  );
-  const contactRows = visibleCompanies.flatMap((company) => {
-    const rows = [];
-    if (company.contactName || company.contactPhone || company.contactEmail) {
-      rows.push({
-        company,
-        title: company.contactName || "Kontaktperson",
-        subtitle: "Virksomhed",
-        phone: company.contactPhone,
-        email: company.contactEmail,
-      });
-    }
-    company.projects.forEach((project) => {
-      if (project.contactName || project.contactPhone || project.contactEmail) {
+  const projectRows = visibleCompanies
+    .flatMap((company) => company.projects.map((project) => ({ company, project })))
+    .sort(compareProjectRows);
+  const localAgreementRows = visibleCompanies
+    .flatMap((company) => company.localAgreements.map((agreement) => ({ company, agreement })))
+    .sort(compareLocalAgreementRows);
+  const contactRows = visibleCompanies
+    .flatMap((company) => {
+      const rows: ContactRow[] = [];
+      if (company.contactName || company.contactPhone || company.contactEmail) {
         rows.push({
           company,
-          title: project.contactName || "Kontaktperson",
-          subtitle: project.name || "Projekt",
-          phone: project.contactPhone,
-          email: project.contactEmail,
+          title: company.contactName || "Kontaktperson",
+          subtitle: "Virksomhed",
+          phone: company.contactPhone,
+          email: company.contactEmail,
         });
       }
-    });
-    return rows;
-  });
+      company.projects.forEach((project) => {
+        if (project.contactName || project.contactPhone || project.contactEmail) {
+          rows.push({
+            company,
+            title: project.contactName || "Kontaktperson",
+            subtitle: project.name || "Projekt",
+            phone: project.contactPhone,
+            email: project.contactEmail,
+          });
+        }
+      });
+      return rows;
+    })
+    .sort(compareContactRows);
   const filteredCompanies = visibleCompanies.filter(
     (company) => !normalizedSearch || companySearchText(company).includes(normalizedSearch),
   );
