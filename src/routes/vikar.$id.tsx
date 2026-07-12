@@ -38,6 +38,7 @@ function VikarEdit() {
   const [errors, setErrors] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [sendingMail, setSendingMail] = useState(false);
+  const [showAssignmentDetails, setShowAssignmentDetails] = useState(false);
   const companies = listCompanies();
 
   useEffect(() => {
@@ -99,7 +100,10 @@ function VikarEdit() {
   const handleSend = async () => {
     const validationErrors = validate(t);
     setErrors(validationErrors);
-    if (validationErrors.length) return;
+    if (validationErrors.length) {
+      setShowAssignmentDetails(true);
+      return;
+    }
     const saved = upsert({ ...t, status: "sent", rejectionComment: undefined });
     setT(saved);
 
@@ -121,12 +125,12 @@ function VikarEdit() {
 
   return (
     <AppShell allow={["vikar"]}>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3 sm:mb-6">
         <div>
           <Link to="/vikar" className="text-sm text-muted-foreground hover:text-foreground">
             ← Mine timesedler
           </Link>
-          <h1 className="mt-1 text-2xl font-semibold">
+          <h1 className="mt-1 text-xl font-semibold sm:text-2xl">
             Uge {weekNumber(t.weekStart)} · {formatWeekRange(t.weekStart)}
           </h1>
         </div>
@@ -150,9 +154,30 @@ function VikarEdit() {
         </div>
       )}
 
-      <section className="mb-6 rounded-lg border bg-card p-5 md:p-6">
-        <h2 className="mb-4 font-semibold">Opgave og virksomhed</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <section className="mb-4 rounded-lg border bg-card p-3 sm:mb-6 sm:p-5 md:p-6">
+        <div className="mb-3 flex items-start justify-between gap-3 sm:mb-4">
+          <div className="min-w-0">
+            <h2 className="font-semibold">Opgave og virksomhed</h2>
+            <p className="mt-1 truncate text-sm text-muted-foreground md:hidden">
+              {t.vikar || "Vikar"} · {t.brugervirksomhed || "Virksomhed"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0 md:hidden"
+            onClick={() => setShowAssignmentDetails((value) => !value)}
+          >
+            {showAssignmentDetails ? "Skjul" : "Ret"}
+          </Button>
+        </div>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2",
+            !showAssignmentDetails && "hidden md:grid",
+          )}
+        >
           <Field label="Vikarnavn *">
             <Input
               value={t.vikar}
@@ -219,7 +244,7 @@ function VikarEdit() {
             />
           </Field>
           <Field label="Gælder der en lokalaftale?" className="md:col-span-2">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:flex">
               {[
                 { value: false, label: "Nej" },
                 { value: true, label: "Ja" },
@@ -259,14 +284,14 @@ function VikarEdit() {
         </div>
       </section>
 
-      <section className="mb-6 overflow-hidden rounded-lg border bg-card">
-        <div className="p-5 pb-3 md:p-6 md:pb-3">
+      <section className="mb-4 overflow-hidden rounded-lg border bg-card sm:mb-6">
+        <div className="p-3 pb-3 sm:p-5 md:p-6 md:pb-3">
           <h2 className="font-semibold">Registrering for ugen</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Udfyld start, slut og pause for de dage, du har arbejdet. Lørdag, søndag og helligdage
             markeres automatisk ud fra datoen.
           </p>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-2 hidden text-sm text-muted-foreground md:block">
             Arbejdstiderne er forudfyldt på baggrund af de oplysninger, vi har modtaget fra den
             virksomhed, du arbejder hos. Hvis du har arbejdet mere eller mindre end angivet, skal du
             rette registreringen i skemaet nedenfor, før du sender timesedlen. Ved indsendelse
@@ -279,25 +304,25 @@ function VikarEdit() {
             showDelayedMealBreak={showDelayedMealBreak}
           />
         </div>
-        <div className="space-y-4 border-t p-4 md:hidden">
+        <div className="space-y-3 border-t p-3 md:hidden">
           {WEEKDAYS.map((name, index) => {
             const day = t.days[index];
             const absent = day.absence !== "none";
             const date = addDaysToISODate(t.weekStart, index);
             return (
-              <article key={name} className="rounded-lg border bg-background p-4">
-                <div className="mb-4">
+              <article key={name} className="rounded-lg border bg-background p-3 shadow-sm">
+                <div className="mb-3">
                   <h3 className="font-medium">
                     {name} {formatShortDate(date)}
                   </h3>
                   <HolidayBadges isoDate={date} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <Field label="Start">
                     <Input
                       type="time"
-                      className="h-9 w-full"
+                      className="h-10 w-full"
                       step={300}
                       value={day.start}
                       disabled={locked || absent}
@@ -310,7 +335,7 @@ function VikarEdit() {
                   <Field label="Slut">
                     <Input
                       type="time"
-                      className="h-9 w-full"
+                      className="h-10 w-full"
                       step={300}
                       value={day.end}
                       disabled={locked || absent}
@@ -344,7 +369,7 @@ function VikarEdit() {
                   </Field>
                   <label
                     className={cn(
-                      "col-span-2 inline-flex min-h-9 items-center gap-2 rounded-md border border-input px-2 text-sm",
+                      "col-span-2 inline-flex min-h-10 items-center gap-2 rounded-md border border-input px-3 text-sm",
                       locked ? "cursor-not-allowed opacity-60" : "cursor-pointer hover:bg-accent",
                     )}
                   >
@@ -362,7 +387,7 @@ function VikarEdit() {
                   {showDelayedMealBreak && (
                     <label
                       className={cn(
-                        "col-span-2 inline-flex min-h-9 items-center gap-2 rounded-md border border-input px-2 text-xs leading-tight",
+                        "col-span-2 inline-flex min-h-10 items-center gap-2 rounded-md border border-input px-3 text-xs leading-tight",
                         locked || absent
                           ? "cursor-not-allowed opacity-60"
                           : "cursor-pointer hover:bg-accent",
@@ -545,14 +570,14 @@ function VikarEdit() {
         )}
       </section>
 
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="max-w-2xl text-sm text-muted-foreground">{message}</div>
         {!locked && (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleSave}>
+          <div className="grid grid-cols-2 gap-2 sm:flex">
+            <Button variant="outline" className="w-full sm:w-auto" onClick={handleSave}>
               Gem kladde
             </Button>
-            <Button onClick={handleSend} disabled={sendingMail}>
+            <Button className="w-full sm:w-auto" onClick={handleSend} disabled={sendingMail}>
               {sendingMail ? "Sender…" : "Send timeseddel"}
             </Button>
           </div>
@@ -695,10 +720,10 @@ function TimeRangeInputs({
   onEndChange: (value: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:inline-grid md:w-auto">
       <Input
         type="time"
-        className="h-8 w-24"
+        className="h-10 w-full min-w-0 md:h-8 md:w-24"
         step={300}
         value={start}
         disabled={disabled}
@@ -710,7 +735,7 @@ function TimeRangeInputs({
       <span className="text-muted-foreground">–</span>
       <Input
         type="time"
-        className="h-8 w-24"
+        className="h-10 w-full min-w-0 md:h-8 md:w-24"
         step={300}
         value={end}
         disabled={disabled}
