@@ -1037,13 +1037,18 @@ function toneRank(tone: StatusTone) {
 }
 
 function urgencyTone(deadline: string): StatusTone {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const due = new Date(`${deadline}T12:00:00`);
-  const days = Math.ceil((due.getTime() - today.getTime()) / 86400000);
+  const days = calendarDaysUntil(deadline);
   if (days <= 0) return "red";
   if (days <= 3) return "orange";
   return "green";
+}
+
+function calendarDaysUntil(isoDate: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${isoDate}T00:00:00`);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
 function formatMultiplier(row: WorkContext) {
