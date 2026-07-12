@@ -22,6 +22,7 @@ import {
   knownWorkersFromTimesheets,
   knownWorkersIncludingInactiveFromTimesheets,
   listCompanies,
+  saveCompany,
   setKnownWorkerInactive,
   deleteKnownWorker,
   TRADE_SKILLS,
@@ -177,11 +178,11 @@ export function WorkerOverviewContent({
   };
 
   const deleteWorker = (worker: KnownWorker) => {
-  deleteKnownWorker(worker);
-  setSelectedWorkerKey("");
-  setActiveTab("inactive");
-  setStatusFilter("all");
-};
+    deleteKnownWorker(worker);
+    setSelectedWorkerKey("");
+    setActiveTab("inactive");
+    setStatusFilter("all");
+  };
 
   const selectTab = (tab: WorkerTab) => {
     setActiveTab(tab);
@@ -336,13 +337,14 @@ export function WorkerOverviewContent({
         </section>
 
         <WorkerDetailPanel
-  row={selectedRow}
-  activeTab={activeTab}
-  inactiveMode={activeTab === "inactive"}
-  onInactivate={inactivateWorker}
-  onRestore={restoreWorker}
-  onDelete={deleteWorker}
-/>
+          row={selectedRow}
+          companies={companies}
+          activeTab={activeTab}
+          inactiveMode={activeTab === "inactive"}
+          onInactivate={inactivateWorker}
+          onRestore={restoreWorker}
+          onDelete={deleteWorker}
+        />
       </div>
     </div>
   );
@@ -583,6 +585,7 @@ function WorkerTable({
 
 function WorkerDetailPanel({
   row,
+  companies,
   activeTab,
   inactiveMode,
   onInactivate,
@@ -590,6 +593,7 @@ function WorkerDetailPanel({
   onDelete,
 }: {
   row: WorkerRow | null;
+  companies: Company[];
   activeTab: WorkerTab;
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
@@ -647,13 +651,14 @@ function WorkerDetailPanel({
       </div>
 
       <WorkerDetails
-  row={row}
-  inactiveMode={inactiveMode}
-  onInactivate={onInactivate}
-  onRestore={onRestore}
-  onDelete={onDelete}
-  variant="panel"
-/>
+        row={row}
+        companies={companies}
+        inactiveMode={inactiveMode}
+        onInactivate={onInactivate}
+        onRestore={onRestore}
+        onDelete={onDelete}
+        variant="panel"
+      />
     </aside>
   );
 }
@@ -723,6 +728,73 @@ function displayCompanyName(row: WorkerRow): string {
   );
 }
 
+function workerProjectMatches(
+  worker: KnownWorker,
+  companies: Company[],
+  query: string,
+): Array<{
+  company: Company;
+  project: CompanyProject;
+  attached: boolean;
+  conflict: string;
+}> {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return companies
+    .flatMap((company) =>
+      company.projects.map((project) => {
+        const attached = projectHasWorker(project, worker);
+        return {
+          company,
+          project,
+          attached,
+          conflict: attached ? "" : workerProjectOverlap(company, project, worker, companies),
+        };
+      }),
+    )
+    .filter(({ company, project }) => {
+      if (!normalizedQuery) return true;
+      return [company.name, company.cvrNumber, project.name, project.referenceNo]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    })
+    .sort((a, b) => {
+      if (a.attached !== b.attached) return a.attached ? -1 : 1;
+      return `${a.company.name} ${a.project.name}`.localeCompare(
+        `${b.company.name} ${b.project.name}`,
+        "da-DK",
+      );
+    });
+}
+
+function workerProjectOverlap(
+  targetCompany: Company,
+  targetProject: CompanyProject,
+  worker: KnownWorker,
+  companies: Company[],
+): string {
+  if (!targetProject.startDate || !targetProject.endDate) return "";
+
+  for (const company of companies) {
+    for (const project of company.projects) {
+      if (company.id === targetCompany.id && project.id === targetProject.id) continue;
+      if (!projectHasWorker(project, worker)) continue;
+      if (projectPeriodsOverlap(targetProject, project)) {
+        return `${company.name} / ${project.name || "projekt"}`;
+      }
+    }
+  }
+
+  return "";
+}
+
+function projectPeriodsOverlap(a: CompanyProject, b: CompanyProject): boolean {
+  if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
+  return a.startDate <= b.endDate && b.startDate <= a.endDate;
+}
+
 function uniqueTradeOptions(rows: WorkerRow[]): string[] {
   return [...new Set(rows.flatMap((row) => row.worker.tradeSkills))].sort((a, b) =>
     a.localeCompare(b, "da-DK"),
@@ -750,11 +822,11 @@ function filterWorkerRows(
   return rows.filter((row) => {
     if (filters.status !== "all" && filters.status !== filters.currentTab) return false;
     if (
-  filters.trade !== "all" &&
-  !row.worker.tradeSkills.some((skill) => skill === filters.trade)
-) {
-  return false;
-}
+      filters.trade !== "all" &&
+      !row.worker.tradeSkills.some((skill) => skill === filters.trade)
+    ) {
+      return false;
+    }
     if (filters.company !== "all" && displayCompanyName(row) !== filters.company) return false;
 
     if (!query) return true;
@@ -777,6 +849,7 @@ function filterWorkerRows(
 
 function WorkerDetails({
   row,
+  companies,
   inactiveMode,
   onInactivate,
   onRestore,
@@ -784,6 +857,7 @@ function WorkerDetails({
   variant = "inline",
 }: {
   row: WorkerRow;
+  companies: Company[];
   inactiveMode: boolean;
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
@@ -791,6 +865,8 @@ function WorkerDetails({
   variant?: "inline" | "panel";
 }) {
   const [editing, setEditing] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [assignmentMessage, setAssignmentMessage] = useState("");
   const timesheet = row.currentTimesheets[0];
   const assignment = row.assignments[0];
   const plannedAssignment = row.futureAssignments[0];
@@ -802,6 +878,19 @@ function WorkerDetails({
     row.bookingStart || row.bookingEnd
       ? `${formatDate(row.bookingStart)} – ${formatDate(row.bookingEnd)}`
       : "—";
+  const projectMatches = workerProjectMatches(row.worker, companies, projectSearch);
+
+  const attachWorkerToProject = (company: Company, project: CompanyProject) => {
+    const updatedProject = {
+      ...project,
+      workerEmails: [...new Set([...project.workerEmails, row.worker.key])],
+    };
+    saveCompany({
+      ...company,
+      projects: company.projects.map((item) => (item.id === project.id ? updatedProject : item)),
+    });
+    setAssignmentMessage(`Vikaren er tilknyttet ${company.name} / ${project.name || "projekt"}.`);
+  };
 
   return (
     <div
@@ -867,7 +956,64 @@ function WorkerDetails({
             <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
           </dl>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
+          {!inactiveMode && (
+            <div className="mt-4 rounded-xl border border-slate-200 p-3">
+              <h3 className="text-sm font-semibold text-slate-950">Tilknyt til projekt</h3>
+              <label className="mt-3 block">
+                <span className="sr-only">Søg virksomhed eller projekt</span>
+                <span className="relative block">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <Input
+                    value={projectSearch}
+                    onChange={(event) => {
+                      setProjectSearch(event.target.value);
+                      setAssignmentMessage("");
+                    }}
+                    placeholder="Søg virksomhed eller projekt"
+                    className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-9 text-sm"
+                  />
+                </span>
+              </label>
+              {assignmentMessage && (
+                <div className="mt-2 text-xs font-medium text-emerald-700">{assignmentMessage}</div>
+              )}
+              <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
+                {projectMatches.length === 0 ? (
+                  <div className="text-xs text-slate-500">Ingen projekter matcher søgningen.</div>
+                ) : (
+                  projectMatches.map(({ company, project, attached, conflict }) => (
+                    <div
+                      key={`${company.id}:${project.id}`}
+                      className="rounded-lg border border-slate-200 p-3 text-sm"
+                    >
+                      <div className="font-semibold text-slate-950">
+                        {company.name} / {project.name || "Projekt"}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                      </div>
+                      {conflict && (
+                        <div className="mt-2 text-xs text-status-rejected-fg">
+                          Optaget i perioden.
+                        </div>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        disabled={attached || Boolean(conflict)}
+                        onClick={() => attachWorkerToProject(company, project)}
+                      >
+                        {attached ? "Allerede tilknyttet" : "Tilknyt vikar"}
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex flex-wrap gap-2">
             {!inactiveMode && (
               <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
                 Rediger vikar
@@ -875,21 +1021,21 @@ function WorkerDetails({
             )}
 
             {inactiveMode ? (
-  <>
-    <Button size="sm" onClick={() => onRestore?.(row.worker)}>
-      <RotateCcw className="mr-1.5 h-4 w-4" />
-      Læg tilbage i ledige vikarer
-    </Button>
+              <>
+                <Button size="sm" onClick={() => onRestore?.(row.worker)}>
+                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                  Læg tilbage i ledige vikarer
+                </Button>
 
-    <Button variant="destructive" size="sm" onClick={() => onDelete?.(row.worker)}>
-      Slet vikar
-    </Button>
-  </>
-) : (
-  <Button variant="destructive" size="sm" onClick={() => onInactivate?.(row.worker)}>
-    Gør inaktiv
-  </Button>
-)}
+                <Button variant="destructive" size="sm" onClick={() => onDelete?.(row.worker)}>
+                  Slet vikar
+                </Button>
+              </>
+            ) : (
+              <Button variant="destructive" size="sm" onClick={() => onInactivate?.(row.worker)}>
+                Gør inaktiv
+              </Button>
+            )}
           </div>
         </>
       )}

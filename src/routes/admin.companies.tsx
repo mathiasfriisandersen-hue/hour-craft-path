@@ -608,9 +608,6 @@ function ProjectsSection({
 }) {
   const [projectMailMessage, setProjectMailMessage] = useState("");
   const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
-  const [pendingWorkerReferencesByProjectId, setPendingWorkerReferencesByProjectId] = useState<
-    Record<string, string[]>
-  >({});
   const updateProject = (index: number, patch: Partial<CompanyProject>) => {
     setCompany({
       ...company,
@@ -619,31 +616,15 @@ function ProjectsSection({
       ),
     });
   };
-  const updatePendingWorkerReference = (
-    projectId: string,
-    worker: KnownWorker,
-    checked: boolean,
-  ) => {
-    setPendingWorkerReferencesByProjectId((current) => {
-      const currentReferences = current[projectId] ?? [];
-      const nextReferences = checked
-        ? [...new Set([...currentReferences, worker.key])]
-        : currentReferences.filter((reference) => reference !== worker.key);
-      return {
-        ...current,
-        [projectId]: nextReferences,
-      };
-    });
-  };
   const sendProjectMail = async (project: CompanyProject) => {
     setSendingProjectId(project.id);
     setProjectMailMessage("Sender projektbekræftelse…");
     try {
       saveCompany(company);
-      const pendingReferences = pendingWorkerReferencesByProjectId[project.id] ?? [];
-      const workers = pendingReferences
+      const workers = project.workerEmails
         .map((reference) => findWorkerByProjectReference(knownWorkers, reference))
-        .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker));
+        .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker))
+        .filter((worker) => !findExistingProjectTimesheet(company, project, worker));
 
       if (workers.length === 0) {
         if (project.workerEmails.length === 0) {
@@ -665,7 +646,6 @@ function ProjectsSection({
           });
         }
       }
-      setPendingWorkerReferencesByProjectId((current) => ({ ...current, [project.id]: [] }));
       setProjectMailMessage("Projektbekræftelse sendt.");
     } catch {
       setProjectMailMessage("Projektbekræftelsen kunne ikke sendes automatisk.");
@@ -710,19 +690,11 @@ function ProjectsSection({
               : knownWorkers.filter((worker) =>
                   worker.tradeSkills.some((skill) => project.tradeSkills.includes(skill)),
                 );
-          const pendingReferences = pendingWorkerReferencesByProjectId[project.id] ?? [];
-          const visibleWorkers = matchingWorkers.filter((worker) => {
-            const isAttached = project.workerEmails.some((reference) =>
+          const attachedWorkers = matchingWorkers.filter((worker) =>
+            project.workerEmails.some((reference) =>
               projectReferenceMatchesWorker(reference, worker, knownWorkers),
-            );
-            const isPending = pendingReferences.some((reference) =>
-              projectReferenceMatchesWorker(reference, worker, knownWorkers),
-            );
-            const hasConflict = Boolean(
-              workerProjectConflict(companies, company.id, project, worker, knownWorkers),
-            );
-            return (isAttached || isPending || !hasConflict) && !(hasConflict && !isPending);
-          });
+            ),
+          );
           return (
             <details key={project.id} className="rounded-md border p-3" open>
               <summary className="cursor-pointer font-medium">
@@ -887,72 +859,25 @@ function ProjectsSection({
                   <span className="mb-1.5 block text-sm font-medium">Tilknyttede vikarer</span>
                   <div className="rounded-md border p-3">
                     <p className="mb-2 text-xs text-muted-foreground">
-                      Viser vikarer med matchende fag. Hvis projektet ikke har fag, vises alle
-                      tidligere oprettede vikarer.
+                      Viser vikarer, der allerede er tilknyttet projektet.
                     </p>
-                    {visibleWorkers.length === 0 ? (
+                    {attachedWorkers.length === 0 ? (
                       <div className="text-sm text-muted-foreground">
-                        Ingen ledige vikarer matcher de valgte fag.
+                        Ingen vikarer er tilknyttet projektet endnu. Tilknyt en vikar fra
+                        vikaroversigten.
                       </div>
                     ) : (
                       <div className="grid gap-2 md:grid-cols-2">
-                        {visibleWorkers.map((worker) => {
-                          const conflict = workerProjectConflict(
-                            companies,
-                            company.id,
-                            project,
-                            worker,
-                            knownWorkers,
-                          );
-                          const disabled = Boolean(conflict);
-                          const isAttached = project.workerEmails.some((reference) =>
-                            projectReferenceMatchesWorker(reference, worker, knownWorkers),
-                          );
-                          const isPending = pendingReferences.some((reference) =>
-                            projectReferenceMatchesWorker(reference, worker, knownWorkers),
-                          );
-                          const showAsAttached = isAttached && !isPending;
+                        {attachedWorkers.map((worker) => {
                           return (
-                            <div
-                              key={worker.key}
-                              className="flex items-start gap-2 text-sm"
-                              title={conflict ? `Vikaren er allerede tilknyttet ${conflict}` : ""}
-                            >
-                              {showAsAttached ? (
-                                <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                              ) : (
-                                <input
-                                  type="checkbox"
-                                  checked={isPending}
-                                  disabled={disabled && !isAttached}
-                                  onChange={(e) => {
-                                    updatePendingWorkerReference(
-                                      project.id,
-                                      worker,
-                                      e.target.checked,
-                                    );
-                                    const workerEmails = e.target.checked
-                                      ? [...new Set([...project.workerEmails, worker.key])]
-                                      : project.workerEmails.filter(
-                                          (reference) =>
-                                            !projectReferenceMatchesWorker(
-                                              reference,
-                                              worker,
-                                              knownWorkers,
-                                            ),
-                                        );
-                                    updateProject(index, { workerEmails });
-                                  }}
-                                />
-                              )}
+                            <div key={worker.key} className="flex items-start gap-2 text-sm">
+                              <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                               <span className="min-w-0 flex-1">
                                 <span className="flex items-start justify-between gap-2">
                                   <span className="font-medium">{worker.name}</span>
-                                  {showAsAttached && (
-                                    <span className="shrink-0 whitespace-nowrap text-xs font-medium text-emerald-700">
-                                      Er tilknyttet til projektet
-                                    </span>
-                                  )}
+                                  <span className="shrink-0 whitespace-nowrap text-xs font-medium text-emerald-700">
+                                    Er tilknyttet til projektet
+                                  </span>
                                 </span>
                                 <span className="block text-xs text-muted-foreground">
                                   {worker.tradeSkills.join(", ") || "Ingen fag"}
@@ -960,11 +885,6 @@ function ProjectsSection({
                                 {worker.competencies && (
                                   <span className="block text-xs text-muted-foreground">
                                     Kompetencer: {worker.competencies}
-                                  </span>
-                                )}
-                                {conflict && (
-                                  <span className="block text-xs text-status-rejected-fg">
-                                    Optaget på {conflict} i projektperioden.
                                   </span>
                                 )}
                               </span>
@@ -1008,11 +928,6 @@ function ProjectsSection({
   );
 }
 
-function projectDatesOverlap(a: CompanyProject, b: CompanyProject): boolean {
-  if (!a.startDate || !a.endDate || !b.startDate || !b.endDate) return false;
-  return a.startDate <= b.endDate && b.startDate <= a.endDate;
-}
-
 function formatProjectBilling(project: CompanyProject): string {
   const hourlyWage = Number(project.billingHourlyWage) || 0;
   const factor = Number(project.billingFactor) || 0;
@@ -1041,32 +956,6 @@ function companyHasAttachedWorker(
       knownWorkers.some((worker) => projectReferenceMatchesWorker(reference, worker, knownWorkers)),
     ),
   );
-}
-
-function workerProjectConflict(
-  companies: Company[],
-  currentCompanyId: string,
-  currentProject: CompanyProject,
-  worker: ReturnType<typeof listKnownWorkers>[number],
-  knownWorkers: ReturnType<typeof listKnownWorkers>,
-): string {
-  if (!currentProject.startDate || !currentProject.endDate) return "";
-  for (const company of companies) {
-    for (const project of company.projects) {
-      if (company.id === currentCompanyId && project.id === currentProject.id) continue;
-      if (
-        !project.workerEmails.some((reference) =>
-          projectReferenceMatchesWorker(reference, worker, knownWorkers),
-        )
-      ) {
-        continue;
-      }
-      if (projectDatesOverlap(currentProject, project)) {
-        return `${company.name} / ${project.name || "unavngivet projekt"} (${formatDate(project.startDate)} – ${formatDate(project.endDate)})`;
-      }
-    }
-  }
-  return "";
 }
 
 function findWorkerByProjectReference(
