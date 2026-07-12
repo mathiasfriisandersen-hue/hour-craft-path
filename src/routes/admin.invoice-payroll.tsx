@@ -1158,9 +1158,13 @@ function StatusDateInput({
   );
 }
 
+function payrollHourlyWage(row: WorkContext) {
+  return row.timesheet.hourlyWage || row.project?.billingHourlyWage || 0;
+}
+
 function payrollFinancials(row: WorkContext) {
   const calculation = calculateTimesheet(row.timesheet);
-  const hourlyWage = row.timesheet.hourlyWage || 0;
+  const hourlyWage = payrollHourlyWage(row);
   const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
   const basePayrollAmount = row.approvedHours * hourlyWageWithSocial;
   const allowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
