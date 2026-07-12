@@ -1176,8 +1176,15 @@ function payrollFinancials(row: WorkContext) {
   const calculation = calculateTimesheet(row.timesheet);
   const hourlyWage = payrollHourlyWage(row);
   const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
-  const basePayrollAmount = row.approvedHours * hourlyWageWithSocial;
-  const allowanceRows = payrollAllowanceRowsForCalculation(row, calculation, hourlyWage);
+  const payrollOvertime = payrollOvertimeHoursForCalculation(row, calculation);
+  const basePayrollHours = Math.max(0, row.approvedHours - payrollOvertime);
+  const basePayrollAmount = basePayrollHours * hourlyWageWithSocial;
+  const allowanceRows = payrollAllowanceRowsForCalculation(
+    row,
+    calculation,
+    hourlyWage,
+    payrollOvertime,
+  );
   const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
@@ -1187,6 +1194,7 @@ function payrollFinancials(row: WorkContext) {
     agreementName: row.timesheet.overenskomst || row.timesheet.selectedAgreementId || "—",
     hourlyWage,
     hourlyWageWithSocial,
+    basePayrollHours,
     basePayrollAmount,
     allowanceRows,
     allowanceTotal,
@@ -1195,18 +1203,22 @@ function payrollFinancials(row: WorkContext) {
   };
 }
 
+function payrollOvertimeHoursForCalculation(
+  row: WorkContext,
+  calculation: ReturnType<typeof calculateTimesheet>,
+) {
+  const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
+  const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
+  return Math.max(calculation.overtime, overtimeHours(row.timesheet.days, weeklyLimit));
+}
+
 function payrollAllowanceRowsForCalculation(
   row: WorkContext,
   calculation: ReturnType<typeof calculateTimesheet>,
   hourlyWage: number,
+  payrollOvertime = payrollOvertimeHoursForCalculation(row, calculation),
 ): PayrollAllowanceRow[] {
-  const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
   const validationReport = getAgreementValidationReport(row.timesheet.selectedAgreementId);
-  const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
-  const payrollOvertime = Math.max(
-    calculation.overtime,
-    overtimeHours(row.timesheet.days, weeklyLimit),
-  );
   const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
     overtime: payrollOvertime,
   }).map((item) => {
@@ -1281,10 +1293,11 @@ function overtimeAllowanceRatePlan(
   const appliedTiers = allocateOvertimeHoursToTiers(hours, tiers);
   if (!appliedTiers.length) return undefined;
 
-  const amount = appliedTiers.reduce(
-    (sum, tier) => sum + tier.hours * tier.rate * (1 + PAYROLL_SOCIAL_COST_RATE),
+  const overtimePayrollAmount = appliedTiers.reduce(
+    (sum, tier) => sum + tier.hours * (hourlyWage + tier.rate),
     0,
   );
+  const amount = overtimePayrollAmount * (1 + PAYROLL_SOCIAL_COST_RATE);
   return {
     amount,
     label: `${appliedTiers
@@ -1294,7 +1307,9 @@ function overtimeAllowanceRatePlan(
             hourlyWage + tier.rate,
           )}/t (tillæg ${formatDkk(tier.rate)}/t)`,
       )
-      .join(" + ")}. Tillæg inkl. sociale omkostninger: ${formatDkk(amount)}`,
+      .join(" + ")} = ${formatDkk(overtimePayrollAmount)}. Inkl. sociale omkostninger: ${formatDkk(
+      amount,
+    )}`,
   };
 }
 
@@ -1387,7 +1402,7 @@ function allowanceRowsForCalculation(
 ): Omit<PayrollAllowanceRow, "amount">[] {
   return [
     {
-      label: "Overarbejdstillæg",
+      label: "Overarbejdsløn",
       hours: overrides.overtime ?? calculation.overtime,
       ruleKeys: ["overtime", "outside_normal_time"],
     },
@@ -1494,7 +1509,7 @@ function PayrollPreview({
         <div className="mt-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-3 font-medium">Grundløn</h3>
           <dl className="grid gap-2 md:grid-cols-2">
-            <PreviewRow label="Godkendte timer" value={`${row.approvedHours.toFixed(2)} t`} />
+            <PreviewRow label="Grundtimer" value={`${financials.basePayrollHours.toFixed(2)} t`} />
             <PreviewRow
               label="Grundløn inkl. sociale omkostninger"
               value={formatDkk(financials.basePayrollAmount)}
@@ -1851,6 +1866,7 @@ async function downloadPayrollPdf(row: WorkContext) {
     `Registreret timeløn: ${formatDkk(financials.hourlyWage)}`,
     "Sociale omkostninger: 38,88 %",
     `Timeløn inkl. sociale omkostninger: ${formatDkk(financials.hourlyWageWithSocial)}`,
+    `Grundtimer: ${financials.basePayrollHours.toFixed(2)} t`,
     `Grundløn inkl. sociale omkostninger: ${formatDkk(financials.basePayrollAmount)}`,
   ]);
 
