@@ -121,10 +121,10 @@ export function AppShell({
                   key={item.to}
                   to={item.to}
                   className={cn(
-                    "ml-[2mm] mr-[3mm] flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white",
+                      ? "ml-[2mm] mr-[3mm] w-auto bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                      : "ml-[10px] mr-[15px] text-slate-300 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
@@ -134,16 +134,14 @@ export function AppShell({
             })}
           </nav>
 
-          <div className="space-y-2 border-t border-white/10 py-4">
-            <div className="ml-[2mm] mr-[3mm]">
-              <button
-                onClick={logout}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
-              >
-                <LogOut className="h-4 w-4" />
-                Log ud
-              </button>
-            </div>
+          <div className="space-y-2 border-t border-white/10 py-4 pl-[10px] pr-[15px]">
+            <button
+              onClick={logout}
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <LogOut className="h-4 w-4" />
+              Log ud
+            </button>
           </div>
         </aside>
 
