@@ -246,7 +246,7 @@ export function AppShell({
           </header>
 
           <main
-            className={cn("w-full px-4 py-5 lg:py-6", role === "admin" ? "lg:px-0" : "lg:px-7")}
+            className={cn("w-full px-4 py-5 lg:py-6", role === "admin" ? "lg:px-[2mm]" : "lg:px-7")}
           >
             {content}
           </main>
