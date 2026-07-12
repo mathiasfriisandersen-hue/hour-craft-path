@@ -1238,6 +1238,7 @@ function payrollAllowanceRowsForCalculation(
         (rate
           ? `${formatDkk(rate)}/t + sociale omkostninger = ${formatDkk(amount)}`
           : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
+      breakdown: overtimeRatePlan?.breakdown,
     };
   });
 
