@@ -608,6 +608,9 @@ function ProjectsSection({
 }) {
   const [projectMailMessage, setProjectMailMessage] = useState("");
   const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
+  const [pendingWorkerReferencesByProjectId, setPendingWorkerReferencesByProjectId] = useState<
+    Record<string, string[]>
+  >({});
   const updateProject = (index: number, patch: Partial<CompanyProject>) => {
     setCompany({
       ...company,
@@ -616,17 +619,39 @@ function ProjectsSection({
       ),
     });
   };
+  const updatePendingWorkerReference = (
+    projectId: string,
+    worker: KnownWorker,
+    checked: boolean,
+  ) => {
+    setPendingWorkerReferencesByProjectId((current) => {
+      const currentReferences = current[projectId] ?? [];
+      const nextReferences = checked
+        ? [...new Set([...currentReferences, worker.key])]
+        : currentReferences.filter((reference) => reference !== worker.key);
+      return {
+        ...current,
+        [projectId]: nextReferences,
+      };
+    });
+  };
   const sendProjectMail = async (project: CompanyProject) => {
     setSendingProjectId(project.id);
     setProjectMailMessage("Sender projektbekræftelse…");
     try {
       saveCompany(company);
-      const workers = project.workerEmails
+      const pendingReferences = pendingWorkerReferencesByProjectId[project.id] ?? [];
+      const workers = pendingReferences
         .map((reference) => findWorkerByProjectReference(knownWorkers, reference))
         .filter((worker): worker is (typeof knownWorkers)[number] => Boolean(worker));
 
       if (workers.length === 0) {
-        await sendProjectConfirmationEmail({ company, project });
+        if (project.workerEmails.length === 0) {
+          await sendProjectConfirmationEmail({ company, project });
+        } else {
+          setProjectMailMessage("Ingen nye vikarer valgt til projektmail.");
+          return;
+        }
       } else {
         for (const worker of workers) {
           const timesheet = ensureProjectTimesheet(company, project, worker);
@@ -640,6 +665,7 @@ function ProjectsSection({
           });
         }
       }
+      setPendingWorkerReferencesByProjectId((current) => ({ ...current, [project.id]: [] }));
       setProjectMailMessage("Projektbekræftelse sendt.");
     } catch {
       setProjectMailMessage("Projektbekræftelsen kunne ikke sendes automatisk.");
@@ -684,6 +710,19 @@ function ProjectsSection({
               : knownWorkers.filter((worker) =>
                   worker.tradeSkills.some((skill) => project.tradeSkills.includes(skill)),
                 );
+          const pendingReferences = pendingWorkerReferencesByProjectId[project.id] ?? [];
+          const visibleWorkers = matchingWorkers.filter((worker) => {
+            const isAttached = project.workerEmails.some((reference) =>
+              projectReferenceMatchesWorker(reference, worker, knownWorkers),
+            );
+            const isPending = pendingReferences.some((reference) =>
+              projectReferenceMatchesWorker(reference, worker, knownWorkers),
+            );
+            const hasConflict = Boolean(
+              workerProjectConflict(companies, company.id, project, worker, knownWorkers),
+            );
+            return (isAttached || isPending || !hasConflict) && !(hasConflict && !isPending);
+          });
           return (
             <details key={project.id} className="rounded-md border p-3" open>
               <summary className="cursor-pointer font-medium">
@@ -851,13 +890,13 @@ function ProjectsSection({
                       Viser vikarer med matchende fag. Hvis projektet ikke har fag, vises alle
                       tidligere oprettede vikarer.
                     </p>
-                    {matchingWorkers.length === 0 ? (
+                    {visibleWorkers.length === 0 ? (
                       <div className="text-sm text-muted-foreground">
-                        Ingen tidligere vikarer matcher de valgte fag.
+                        Ingen ledige vikarer matcher de valgte fag.
                       </div>
                     ) : (
                       <div className="grid gap-2 md:grid-cols-2">
-                        {matchingWorkers.map((worker) => {
+                        {visibleWorkers.map((worker) => {
                           const conflict = workerProjectConflict(
                             companies,
                             company.id,
@@ -869,32 +908,52 @@ function ProjectsSection({
                           const isAttached = project.workerEmails.some((reference) =>
                             projectReferenceMatchesWorker(reference, worker, knownWorkers),
                           );
+                          const isPending = pendingReferences.some((reference) =>
+                            projectReferenceMatchesWorker(reference, worker, knownWorkers),
+                          );
+                          const showAsAttached = isAttached && !isPending;
                           return (
-                            <label
+                            <div
                               key={worker.key}
                               className="flex items-start gap-2 text-sm"
                               title={conflict ? `Vikaren er allerede tilknyttet ${conflict}` : ""}
                             >
-                              <input
-                                type="checkbox"
-                                checked={isAttached}
-                                disabled={disabled && !isAttached}
-                                onChange={(e) => {
-                                  const workerEmails = e.target.checked
-                                    ? [...new Set([...project.workerEmails, worker.key])]
-                                    : project.workerEmails.filter(
-                                        (reference) =>
-                                          !projectReferenceMatchesWorker(
-                                            reference,
-                                            worker,
-                                            knownWorkers,
-                                          ),
-                                      );
-                                  updateProject(index, { workerEmails });
-                                }}
-                              />
-                              <span>
-                                <span className="font-medium">{worker.name}</span>
+                              {showAsAttached ? (
+                                <span className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                              ) : (
+                                <input
+                                  type="checkbox"
+                                  checked={isPending}
+                                  disabled={disabled && !isAttached}
+                                  onChange={(e) => {
+                                    updatePendingWorkerReference(
+                                      project.id,
+                                      worker,
+                                      e.target.checked,
+                                    );
+                                    const workerEmails = e.target.checked
+                                      ? [...new Set([...project.workerEmails, worker.key])]
+                                      : project.workerEmails.filter(
+                                          (reference) =>
+                                            !projectReferenceMatchesWorker(
+                                              reference,
+                                              worker,
+                                              knownWorkers,
+                                            ),
+                                        );
+                                    updateProject(index, { workerEmails });
+                                  }}
+                                />
+                              )}
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-start justify-between gap-2">
+                                  <span className="font-medium">{worker.name}</span>
+                                  {showAsAttached && (
+                                    <span className="shrink-0 whitespace-nowrap text-xs font-medium text-emerald-700">
+                                      Er tilknyttet til projektet
+                                    </span>
+                                  )}
+                                </span>
                                 <span className="block text-xs text-muted-foreground">
                                   {worker.tradeSkills.join(", ") || "Ingen fag"}
                                 </span>
@@ -909,7 +968,7 @@ function ProjectsSection({
                                   </span>
                                 )}
                               </span>
-                            </label>
+                            </div>
                           );
                         })}
                       </div>
@@ -1053,7 +1112,74 @@ function ensureProjectTimesheet(
   project: CompanyProject,
   worker: KnownWorker,
 ): Timesheet {
-  const existing = listAll().find((timesheet) => {
+  const existing = findExistingProjectTimesheet(company, project, worker);
+
+  if (existing) {
+    return upsert({
+      ...existing,
+      workerLanguage: existing.workerLanguage || worker.language,
+      workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
+      workerMustChangeAccessCode: existing.workerMustChangeAccessCode || !existing.workerAccessCode,
+      calendarStatus: "planned",
+      calendarSource: "project-mail",
+      projectMailSentAt: existing.projectMailSentAt || new Date().toISOString(),
+    });
+  }
+
+  const timesheet = createTimesheetForWorker({
+    vikar: worker.name,
+    vikarCode: worker.code,
+    vikarEmail: worker.email,
+    vikarPhone: worker.phone,
+    workerLanguage: worker.language,
+    tradeSkills: project.tradeSkills.length ? project.tradeSkills : worker.tradeSkills,
+    competencies: project.competencies || worker.competencies,
+    brugervirksomhed: company.name,
+    companyId: company.id,
+    projectId: project.id,
+    projectName: project.name,
+    projectEndDate: project.endDate,
+    arbejdssted: company.address,
+    kontaktperson: project.contactName || company.contactName,
+    kontaktpersonPhone: project.contactPhone || company.contactPhone,
+    kontaktpersonEmail: project.contactEmail || company.contactEmail,
+    referenceNo: project.referenceNo,
+    selectedAgreementId: project.selectedAgreementId || company.selectedAgreementId || "",
+    hourlyWage: 0,
+    defaultStart: project.defaultStart,
+    defaultEnd: project.defaultEnd,
+    defaultPause: 0,
+    defaultPauseStart: project.pauseStart,
+    defaultPauseEnd: project.pauseEnd,
+    defaultPause2Start: project.pause2Start,
+    defaultPause2End: project.pause2End,
+    defaultDayWorkStart: project.workPeriod === "day" ? project.defaultStart : "",
+    defaultDayWorkEnd: project.workPeriod === "day" ? project.defaultEnd : "",
+    defaultEveningWorkStart: project.workPeriod === "evening" ? project.defaultStart : "",
+    defaultEveningWorkEnd: project.workPeriod === "evening" ? project.defaultEnd : "",
+    defaultNightWorkStart: project.workPeriod === "night" ? project.defaultStart : "",
+    defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
+    shiftWorkApplies: false,
+    startDate: project.startDate,
+    workerAccessCode: generateOneTimeCode(),
+    contactPersonAccessCode: generateOneTimeCode(),
+    ownerRole: company.ownerRole,
+  });
+
+  return upsert({
+    ...timesheet,
+    calendarStatus: "planned",
+    calendarSource: "project-mail",
+    projectMailSentAt: new Date().toISOString(),
+  });
+}
+
+function findExistingProjectTimesheet(
+  company: Company,
+  project: CompanyProject,
+  worker: KnownWorker,
+): Timesheet | undefined {
+  return listAll().find((timesheet) => {
     const workerMatch = projectWorkerMatchesTimesheet(worker, timesheet);
     const projectMatch =
       timesheet.projectId === project.id ||
@@ -1061,65 +1187,6 @@ function ensureProjectTimesheet(
         timesheet.projectName === project.name &&
         timesheet.projectEndDate === project.endDate);
     return workerMatch && projectMatch;
-  });
-
-  if (existing) {
-  return upsert({
-    ...existing,
-    workerLanguage: existing.workerLanguage || worker.language,
-    workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
-    workerMustChangeAccessCode: existing.workerMustChangeAccessCode || !existing.workerAccessCode,
-    calendarStatus: "planned",
-    calendarSource: "project-mail",
-    projectMailSentAt: existing.projectMailSentAt || new Date().toISOString(),
-  });
-}
-
-  const timesheet = createTimesheetForWorker({
-      vikar: worker.name,
-      vikarCode: worker.code,
-      vikarEmail: worker.email,
-      vikarPhone: worker.phone,
-      workerLanguage: worker.language,
-      tradeSkills: project.tradeSkills.length ? project.tradeSkills : worker.tradeSkills,
-      competencies: project.competencies || worker.competencies,
-      brugervirksomhed: company.name,
-      companyId: company.id,
-      projectId: project.id,
-      projectName: project.name,
-      projectEndDate: project.endDate,
-      arbejdssted: company.address,
-      kontaktperson: project.contactName || company.contactName,
-      kontaktpersonPhone: project.contactPhone || company.contactPhone,
-      kontaktpersonEmail: project.contactEmail || company.contactEmail,
-      referenceNo: project.referenceNo,
-      selectedAgreementId: project.selectedAgreementId || company.selectedAgreementId || "",
-      hourlyWage: 0,
-      defaultStart: project.defaultStart,
-      defaultEnd: project.defaultEnd,
-      defaultPause: 0,
-      defaultPauseStart: project.pauseStart,
-      defaultPauseEnd: project.pauseEnd,
-      defaultPause2Start: project.pause2Start,
-      defaultPause2End: project.pause2End,
-      defaultDayWorkStart: project.workPeriod === "day" ? project.defaultStart : "",
-      defaultDayWorkEnd: project.workPeriod === "day" ? project.defaultEnd : "",
-      defaultEveningWorkStart: project.workPeriod === "evening" ? project.defaultStart : "",
-      defaultEveningWorkEnd: project.workPeriod === "evening" ? project.defaultEnd : "",
-      defaultNightWorkStart: project.workPeriod === "night" ? project.defaultStart : "",
-      defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
-      shiftWorkApplies: false,
-      startDate: project.startDate,
-      workerAccessCode: generateOneTimeCode(),
-      contactPersonAccessCode: generateOneTimeCode(),
-      ownerRole: company.ownerRole,
-   });
-
-  return upsert({
-    ...timesheet,
-    calendarStatus: "planned",
-    calendarSource: "project-mail",
-    projectMailSentAt: new Date().toISOString(),
   });
 }
 
