@@ -1211,10 +1211,11 @@ function payrollAllowanceRowsForCalculation(
     overtime: payrollOvertime,
   }).map((item) => {
     const overtimeRatePlan = item.ruleKeys?.includes("overtime")
-      ? overtimeAllowanceRatePlan(row, validationReport, item.hours)
+      ? overtimeAllowanceRatePlan(row, validationReport, item.hours, hourlyWage)
       : undefined;
     const rate = overtimeRatePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
-    const amount = overtimeRatePlan?.amount ?? (rate ? item.hours * rate : 0);
+    const amount =
+      overtimeRatePlan?.amount ?? (rate ? item.hours * rate * (1 + PAYROLL_SOCIAL_COST_RATE) : 0);
     return {
       ...item,
       amount,
@@ -1222,19 +1223,24 @@ function payrollAllowanceRowsForCalculation(
       amountLabel:
         overtimeRatePlan?.label ??
         (rate
-          ? `${formatDkk(rate)}/t = ${formatDkk(amount)}`
+          ? `${formatDkk(rate)}/t + sociale omkostninger = ${formatDkk(amount)}`
           : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
     };
   });
 
   if (calculation.delayedMealBreakDays > 0) {
+    const delayedMealBreakAmount =
+      calculation.delayedMealBreakAmount * (1 + PAYROLL_SOCIAL_COST_RATE);
     rows.push({
       label: "Udsat spisepause",
       hours: 0,
       quantityLabel: `${calculation.delayedMealBreakDays} ${
         calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
       }`,
-      amount: calculation.delayedMealBreakAmount,
+      amount: delayedMealBreakAmount,
+      amountLabel: `${formatDkk(
+        calculation.delayedMealBreakAmount,
+      )} + sociale omkostninger = ${formatDkk(delayedMealBreakAmount)}`,
     });
   }
 
@@ -1265,6 +1271,7 @@ function overtimeAllowanceRatePlan(
   row: WorkContext,
   validationReport: ReturnType<typeof getAgreementValidationReport>,
   hours: number,
+  hourlyWage: number,
 ) {
   if (!validationReport?.validatedForCalculation || hours <= 0) return undefined;
   const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
@@ -1274,12 +1281,20 @@ function overtimeAllowanceRatePlan(
   const appliedTiers = allocateOvertimeHoursToTiers(hours, tiers);
   if (!appliedTiers.length) return undefined;
 
-  const amount = appliedTiers.reduce((sum, tier) => sum + tier.hours * tier.rate, 0);
+  const amount = appliedTiers.reduce(
+    (sum, tier) => sum + tier.hours * tier.rate * (1 + PAYROLL_SOCIAL_COST_RATE),
+    0,
+  );
   return {
     amount,
     label: `${appliedTiers
-      .map((tier) => `${tier.label}: ${tier.hours.toFixed(2)} t x ${formatDkk(tier.rate)}/t`)
-      .join(" + ")} = ${formatDkk(amount)}`,
+      .map(
+        (tier) =>
+          `${tier.label}: ${tier.hours.toFixed(2)} t x ${formatDkk(
+            hourlyWage + tier.rate,
+          )}/t (tillæg ${formatDkk(tier.rate)}/t)`,
+      )
+      .join(" + ")}. Tillæg inkl. sociale omkostninger: ${formatDkk(amount)}`,
   };
 }
 
