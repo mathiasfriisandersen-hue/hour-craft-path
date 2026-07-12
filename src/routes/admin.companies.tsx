@@ -154,8 +154,11 @@ export function CompaniesPage() {
 
   useEffect(() => {
     seedIfEmpty();
+    companiesVisibleForRole(listCompanies(), role)
+      .filter((company) => !companyHasAttachedWorker(company, listKnownWorkers()))
+      .forEach((company) => removeCompany(company.id));
     refresh();
-  }, []);
+  }, [role]);
 
   return (
     <AppShell
@@ -968,6 +971,17 @@ function formatNumber(value: number): string {
 
 function formatDkk(value: number): string {
   return `${formatNumber(value)} DKK`;
+}
+
+function companyHasAttachedWorker(
+  company: Company,
+  knownWorkers: ReturnType<typeof listKnownWorkers>,
+): boolean {
+  return company.projects.some((project) =>
+    project.workerEmails.some((reference) =>
+      knownWorkers.some((worker) => projectReferenceMatchesWorker(reference, worker, knownWorkers)),
+    ),
+  );
 }
 
 function workerProjectConflict(
