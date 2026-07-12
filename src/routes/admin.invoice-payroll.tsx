@@ -86,6 +86,7 @@ type PayrollAllowanceRow = {
   hourlyWageLabel?: string;
   quantityLabel?: string;
   amountLabel?: string;
+  breakdown?: Array<{ label: string; value: string }>;
   ruleKeys?: AgreementRuleCategory[];
 };
 
@@ -1300,16 +1301,19 @@ function overtimeAllowanceRatePlan(
   const amount = overtimePayrollAmount * (1 + PAYROLL_SOCIAL_COST_RATE);
   return {
     amount,
-    label: `${appliedTiers
-      .map(
-        (tier) =>
-          `${tier.label}: ${tier.hours.toFixed(2)} t x ${formatDkk(
-            hourlyWage + tier.rate,
-          )}/t (tillæg ${formatDkk(tier.rate)}/t)`,
-      )
-      .join(" + ")} = ${formatDkk(overtimePayrollAmount)}. Inkl. sociale omkostninger: ${formatDkk(
-      amount,
-    )}`,
+    label: formatDkk(amount),
+    breakdown: [
+      { label: "Timer", value: `${hours.toFixed(2)} t` },
+      { label: "Grundtimeløn", value: `${formatDkk(hourlyWage)}/t` },
+      ...appliedTiers.map((tier) => ({
+        label: tier.label,
+        value: `${tier.hours.toFixed(2)} t x ${formatDkk(hourlyWage + tier.rate)}/t = ${formatDkk(
+          tier.hours * (hourlyWage + tier.rate),
+        )}`,
+      })),
+      { label: "Før sociale omkostninger", value: formatDkk(overtimePayrollAmount) },
+      { label: "Inkl. sociale omkostninger", value: formatDkk(amount) },
+    ],
   };
 }
 
@@ -1434,18 +1438,38 @@ function allowanceAmountLabel(item: PayrollAllowanceRow) {
   return item.amountLabel ?? formatDkk(item.amount);
 }
 
-function allowancePreviewValue(item: PayrollAllowanceRow) {
-  if (item.hourlyWageLabel) {
-    return `${allowanceQuantityLabel(item)} · ${item.hourlyWageLabel} · ${allowanceAmountLabel(
-      item,
-    )}`;
-  }
-  return `${allowanceQuantityLabel(item)} / ${allowanceAmountLabel(item)}`;
-}
-
 function allowancePdfAmountLabel(item: PayrollAllowanceRow) {
   if (item.hourlyWageLabel) return `${item.hourlyWageLabel}; ${allowanceAmountLabel(item)}`;
   return allowanceAmountLabel(item);
+}
+
+function PayrollAllowancePreviewItem({ item }: { item: PayrollAllowanceRow }) {
+  return (
+    <div className="border-b pb-4 last:border-b-0 last:pb-0">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="text-xs uppercase text-muted-foreground">{item.label}</div>
+          <div className="mt-1 font-medium">{allowanceQuantityLabel(item)}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-xs uppercase text-muted-foreground">Beløb</div>
+          <div className="mt-1 font-semibold">{allowanceAmountLabel(item)}</div>
+        </div>
+      </div>
+      {item.breakdown?.length ? (
+        <dl className="mt-3 grid gap-x-6 gap-y-2 md:grid-cols-2">
+          {item.breakdown.map((line) => (
+            <div key={`${item.label}-${line.label}`} className="min-w-0">
+              <dt className="text-xs text-muted-foreground">{line.label}</dt>
+              <dd className="mt-0.5 break-words font-medium">{line.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : item.hourlyWageLabel ? (
+        <div className="mt-2 text-sm text-muted-foreground">{item.hourlyWageLabel}</div>
+      ) : null}
+    </div>
+  );
 }
 
 function PayrollPreview({
@@ -1522,11 +1546,11 @@ function PayrollPreview({
           {financials.allowanceRows.length === 0 ? (
             <p className="text-muted-foreground">Ingen registrerede tillæg i perioden.</p>
           ) : (
-            <dl className="grid gap-2">
+            <div className="grid gap-4">
               {financials.allowanceRows.map((item) => (
-                <PreviewRow key={item.label} label={item.label} value={allowancePreviewValue(item)} />
+                <PayrollAllowancePreviewItem key={item.label} item={item} />
               ))}
-            </dl>
+            </div>
           )}
         </div>
 
