@@ -58,6 +58,7 @@ type WorkContext = {
   company?: Company;
   project?: CompanyProject;
   approvedHours: number;
+  invoiceBaseHours: number;
   invoiceNumber: string;
   invoiceDate: string;
   invoiceDueDate: string;
@@ -934,7 +935,6 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
       ? project.billingHourlyWage * project.billingFactor
       : billingMultiplier;
   const calculation = calculateTimesheet(timesheet);
-  const invoiceBaseExVat = approvedHours * billingRate;
   const invoiceAllowanceRows = invoiceAllowanceRowsForCalculation(
     timesheet,
     calculation,
@@ -942,6 +942,12 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     billingRate,
     payrollPeriod.end,
   );
+  const invoiceOvertimeHours = invoiceAllowanceRows.reduce(
+    (sum, item) => sum + (item.ruleKeys?.includes("overtime") ? item.hours : 0),
+    0,
+  );
+  const invoiceBaseHours = Math.max(0, approvedHours - invoiceOvertimeHours);
+  const invoiceBaseExVat = invoiceBaseHours * billingRate;
   const invoiceAllowanceExVat = invoiceAllowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const invoiceExVat = invoiceBaseExVat + invoiceAllowanceExVat;
   const vat = invoiceExVat * 0.25;
@@ -952,6 +958,7 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     company,
     project,
     approvedHours,
+    invoiceBaseHours,
     invoiceNumber: timesheet.invoiceNumber || `F-${timesheet.id.slice(0, 8).toUpperCase()}`,
     invoiceDate,
     invoiceDueDate,
@@ -1232,6 +1239,12 @@ function invoiceAllowanceLabel(label: string) {
   return label === "Overarbejdsløn" ? "Overarbejdstillæg" : label;
 }
 
+function invoiceBaseLineLabel(row: WorkContext) {
+  return row.invoiceBaseHours < row.approvedHours
+    ? "Almindelige vikartimer"
+    : "Godkendte vikartimer";
+}
+
 function invoiceAllowanceRowsForCalculation(
   timesheet: Timesheet,
   calculation: ReturnType<typeof calculateTimesheet>,
@@ -1241,6 +1254,7 @@ function invoiceAllowanceRowsForCalculation(
 ): PayrollAllowanceRow[] {
   const validationReport = getAgreementValidationReport(timesheet.selectedAgreementId);
   const projectFactor = project?.billingFactor ?? 0;
+  const baseHourlyWage = project?.billingHourlyWage ?? 0;
 
   return allowanceRowsForCalculation(calculation, {
     overtime: effectiveOvertimeHours(timesheet, calculation),
@@ -1249,17 +1263,18 @@ function invoiceAllowanceRowsForCalculation(
       const overtimeRows = invoiceOvertimeAllowanceRows(
         validationReport,
         item.hours,
+        baseHourlyWage,
         projectFactor,
         periodEnd,
       );
       if (overtimeRows.length) return overtimeRows;
       const rate = allowanceRateForRule(validationReport, item.ruleKeys);
-      if (rate && projectFactor > 0) {
-        const unitPrice = rate * projectFactor;
+      if (rate && baseHourlyWage > 0 && projectFactor > 0) {
+        const unitPrice = (baseHourlyWage + rate) * projectFactor;
         return [
           {
             ...item,
-            label: invoiceAllowanceLabel(item.label),
+            label: "Overarbejde inkl. tillæg",
             unitPrice,
             amount: item.hours * unitPrice,
           },
@@ -1282,18 +1297,26 @@ function invoiceAllowanceRowsForCalculation(
 function invoiceOvertimeAllowanceRows(
   validationReport: ReturnType<typeof getAgreementValidationReport>,
   hours: number,
+  baseHourlyWage: number,
   projectFactor: number,
   periodEnd: string,
 ): PayrollAllowanceRow[] {
-  if (!validationReport?.validatedForCalculation || hours <= 0 || projectFactor <= 0) return [];
+  if (
+    !validationReport?.validatedForCalculation ||
+    hours <= 0 ||
+    baseHourlyWage <= 0 ||
+    projectFactor <= 0
+  ) {
+    return [];
+  }
   const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
   const tiers = overtimeRateTiersForDate(overtimeRule?.possibleRates ?? [], periodEnd);
   if (tiers.length < 3) return [];
 
   return allocateOvertimeHoursToTiers(hours, tiers).map((tier) => {
-    const unitPrice = tier.rate * projectFactor;
+    const unitPrice = (baseHourlyWage + tier.rate) * projectFactor;
     return {
-      label: `Overarbejdstillæg ${tier.label}`,
+      label: `Overarbejde ${tier.label}`,
       hours: tier.hours,
       unitPrice,
       amount: tier.hours * unitPrice,
@@ -1772,9 +1795,9 @@ function InvoicePreview({
               </thead>
               <tbody>
                 <tr>
-                  <td className="border-b px-3 py-3">Godkendte vikartimer</td>
+                  <td className="border-b px-3 py-3">{invoiceBaseLineLabel(row)}</td>
                   <td className="border-b px-3 py-3 text-right">
-                    {row.approvedHours.toFixed(2)} t
+                    {row.invoiceBaseHours.toFixed(2)} t
                   </td>
                   <td className="border-b px-3 py-3 text-right">{formatDkk(row.billingRate)}</td>
                   <td className="border-b px-3 py-3 text-right">
@@ -1898,8 +1921,8 @@ async function downloadInvoicePdf(row: WorkContext) {
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Godkendte vikartimer", 20, tableTop + 20);
-  doc.text(`${row.approvedHours.toFixed(2)} t`, 118, tableTop + 20, { align: "right" });
+  doc.text(invoiceBaseLineLabel(row), 20, tableTop + 20);
+  doc.text(`${row.invoiceBaseHours.toFixed(2)} t`, 118, tableTop + 20, { align: "right" });
   doc.text(formatDkk(row.billingRate), 153, tableTop + 20, { align: "right" });
   doc.text(formatDkk(row.invoiceBaseExVat), 190, tableTop + 20, { align: "right" });
 
