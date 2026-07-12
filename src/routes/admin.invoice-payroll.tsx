@@ -15,6 +15,10 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import subzLogo from "@/assets/sub-z-logo.png";
+import {
+  getAgreementValidationReport,
+  type AgreementRuleCategory,
+} from "@/lib/agreementValidation";
 import { addDaysToISODate } from "@/lib/danishHolidays";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
@@ -82,6 +86,7 @@ type PayrollAllowanceRow = {
   hourlyWageLabel?: string;
   quantityLabel?: string;
   amountLabel?: string;
+  ruleKeys?: AgreementRuleCategory[];
 };
 
 const SELLER = {
@@ -1196,6 +1201,7 @@ function payrollAllowanceRowsForCalculation(
   hourlyWage: number,
 ): PayrollAllowanceRow[] {
   const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
+  const validationReport = getAgreementValidationReport(row.timesheet.selectedAgreementId);
   const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
   const payrollOvertime = Math.max(
     calculation.overtime,
@@ -1203,12 +1209,18 @@ function payrollAllowanceRowsForCalculation(
   );
   const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
     overtime: payrollOvertime,
-  }).map((item) => ({
-    ...item,
-    amount: 0,
-    hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
-    amountLabel: "Tillægssats kræver manuel validering",
-  }));
+  }).map((item) => {
+    const rate = allowanceRateForRule(validationReport, item.ruleKeys);
+    const amount = rate ? item.hours * rate : 0;
+    return {
+      ...item,
+      amount,
+      hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
+      amountLabel: rate
+        ? `${formatDkk(rate)}/t = ${formatDkk(amount)}`
+        : allowanceRateStatusLabel(validationReport, item.ruleKeys),
+    };
+  });
 
   if (calculation.delayedMealBreakDays > 0) {
     rows.push({
@@ -1226,11 +1238,45 @@ function payrollAllowanceRowsForCalculation(
       label: "Lokalaftale",
       hours: calculation.localAgreement,
       amount: 0,
-      amountLabel: "Kræver manuel sats",
+      amountLabel: allowanceRateStatusLabel(validationReport, ["local_agreements"]),
+      ruleKeys: ["local_agreements"],
     });
   }
 
   return rows;
+}
+
+function allowanceRateForRule(
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+  ruleKeys: AgreementRuleCategory[] | undefined,
+) {
+  if (!validationReport || !ruleKeys?.length) return undefined;
+  const matchingRates = validationReport.rules
+    .filter(
+      (rule) =>
+        ruleKeys.includes(rule.ruleKey) &&
+        rule.reviewStatus === "approved" &&
+        rule.calculationType === "fixed_rate" &&
+        typeof rule.rate === "number" &&
+        Number.isFinite(rule.rate) &&
+        rule.rate > 0 &&
+        (rule.unit || "").toLowerCase().includes("kr"),
+    )
+    .map((rule) => rule.rate as number);
+  const uniqueRates = [...new Set(matchingRates)];
+  return uniqueRates.length === 1 ? uniqueRates[0] : undefined;
+}
+
+function allowanceRateStatusLabel(
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+  ruleKeys: AgreementRuleCategory[] | undefined,
+) {
+  if (!validationReport?.validatedForCalculation) return "Tillægssats kræver validering";
+  const matchingRules = validationReport.rules.filter((rule) => ruleKeys?.includes(rule.ruleKey));
+  if (matchingRules.some((rule) => rule.possibleRates.length > 1)) {
+    return "Valideret: flere satstrin i regelgrundlag";
+  }
+  return "Valideret: sats ikke struktureret som én timesats";
 }
 
 function allowanceRowsForCalculation(
@@ -1238,15 +1284,28 @@ function allowanceRowsForCalculation(
   overrides: { overtime?: number } = {},
 ): Omit<PayrollAllowanceRow, "amount">[] {
   return [
-    { label: "Overarbejdstillæg", hours: overrides.overtime ?? calculation.overtime },
+    {
+      label: "Overarbejdstillæg",
+      hours: overrides.overtime ?? calculation.overtime,
+      ruleKeys: ["overtime", "outside_normal_time"],
+    },
     {
       label: "Weekend-/søndagstillæg",
       hours: calculation.saturday + calculation.sunday + calculation.weekend,
+      ruleKeys: ["saturday_allowance", "sunday_allowance", "local_agreements"],
     },
-    { label: "Helligdagstillæg", hours: calculation.publicHoliday },
-    { label: "Aftentillæg", hours: calculation.evening },
-    { label: "Nattillæg", hours: calculation.night },
-    { label: "Skifteholdstillæg", hours: calculation.shift },
+    {
+      label: "Helligdagstillæg",
+      hours: calculation.publicHoliday,
+      ruleKeys: ["public_holiday", "sunday_allowance"],
+    },
+    {
+      label: "Aftentillæg",
+      hours: calculation.evening,
+      ruleKeys: ["evening_allowance", "staggered_time"],
+    },
+    { label: "Nattillæg", hours: calculation.night, ruleKeys: ["night_allowance"] },
+    { label: "Skifteholdstillæg", hours: calculation.shift, ruleKeys: ["shift_work"] },
   ].filter((item) => item.hours > 0);
 }
 
