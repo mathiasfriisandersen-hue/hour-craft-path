@@ -106,7 +106,10 @@ export function AppShell({
           role === "admin" ? "bg-white" : "bg-[#f5f7fb]",
         )}
       >
-        <aside className="hidden min-h-screen flex-col bg-[#071629] text-white shadow-2xl lg:flex">
+        <aside
+          style={{ marginLeft: "2mm", marginRight: "3mm", width: "auto" }}
+          className="hidden min-h-screen flex-col bg-[#071629] text-white shadow-2xl lg:flex"
+        >
           <Link to={home} className="flex h-20 items-center gap-3 px-5">
             <img src={subzLogo} alt="SUB-Z" className="h-8 w-auto" />
           </Link>
@@ -120,9 +123,6 @@ export function AppShell({
                 <Link
                   key={item.to}
                   to={item.to}
-                  style={
-                    active ? { marginLeft: "2mm", marginRight: "3mm", width: "auto" } : undefined
-                  }
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     active
