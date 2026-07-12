@@ -934,8 +934,11 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
       : billingMultiplier;
   const calculation = calculateTimesheet(timesheet);
   const invoiceBaseExVat = approvedHours * billingRate;
-  const invoiceAllowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
+  const invoiceAllowanceRows = allowanceRowsForCalculation(calculation, {
+    overtime: effectiveOvertimeHours(timesheet, calculation),
+  }).map((item) => ({
     ...item,
+    label: invoiceAllowanceLabel(item.label),
     amount: item.hours * billingRate,
   }));
   const invoiceAllowanceExVat = invoiceAllowanceRows.reduce((sum, item) => sum + item.amount, 0);
@@ -1212,9 +1215,20 @@ function payrollOvertimeHoursForCalculation(
   row: WorkContext,
   calculation: ReturnType<typeof calculateTimesheet>,
 ) {
-  const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
+  return effectiveOvertimeHours(row.timesheet, calculation);
+}
+
+function effectiveOvertimeHours(
+  timesheet: Timesheet,
+  calculation: ReturnType<typeof calculateTimesheet>,
+) {
+  const normalWeekHours = getRule(timesheet.selectedAgreementId)?.normalWeekHours;
   const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
-  return Math.max(calculation.overtime, overtimeHours(row.timesheet.days, weeklyLimit));
+  return Math.max(calculation.overtime, overtimeHours(timesheet.days, weeklyLimit));
+}
+
+function invoiceAllowanceLabel(label: string) {
+  return label === "Overarbejdsløn" ? "Overarbejdstillæg" : label;
 }
 
 function payrollAllowanceRowsForCalculation(
