@@ -22,6 +22,7 @@ import {
   formatDkk,
   formatWeekRange,
   listCompanies,
+  overtimeHours,
   totalHours,
   upsert,
   weekNumber,
@@ -1167,10 +1168,13 @@ function payrollFinancials(row: WorkContext) {
   const hourlyWage = payrollHourlyWage(row);
   const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
   const basePayrollAmount = row.approvedHours * hourlyWageWithSocial;
-  const allowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
-    ...item,
-    amount: item.hours * hourlyWageWithSocial,
-  }));
+  const payrollOvertime = Math.max(calculation.overtime, overtimeHours(row.timesheet.days));
+  const allowanceRows = allowanceRowsForCalculation(calculation, { overtime: payrollOvertime }).map(
+    (item) => ({
+      ...item,
+      amount: item.hours * hourlyWageWithSocial,
+    }),
+  );
   const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
@@ -1190,9 +1194,10 @@ function payrollFinancials(row: WorkContext) {
 
 function allowanceRowsForCalculation(
   calculation: ReturnType<typeof calculateTimesheet>,
+  overrides: { overtime?: number } = {},
 ): Omit<PayrollAllowanceRow, "amount">[] {
   return [
-    { label: "Overarbejdstillæg", hours: calculation.overtime },
+    { label: "Overarbejdstillæg", hours: overrides.overtime ?? calculation.overtime },
     {
       label: "Weekend-/søndagstillæg",
       hours: calculation.saturday + calculation.sunday + calculation.weekend,
