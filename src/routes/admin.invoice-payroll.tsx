@@ -423,6 +423,7 @@ const archivedInvoiceRows = filteredRows
                   <PayrollCaseCard
                     key={`payroll-ready-${row.timesheet.id}`}
                     row={row}
+                    hours={payrollCardHours(row, payrollRows)}
                     onPreview={() => setPayrollPreview(row)}
                   />
                 ))}
@@ -437,6 +438,7 @@ const archivedInvoiceRows = filteredRows
                   <PayrollCaseCard
                     key={`payroll-waiting-${row.timesheet.id}`}
                     row={row}
+                    hours={payrollCardHours(row, payrollRows)}
                     onPreview={() => setPayrollPreview(row)}
                   />
                 ))}
@@ -451,6 +453,7 @@ const archivedInvoiceRows = filteredRows
                   <PayrollCaseCard
                     key={`payroll-sent-${row.timesheet.id}`}
                     row={row}
+                    hours={payrollCardHours(row, payrollRows)}
                     onPreview={() => setPayrollPreview(row)}
                   />
                 ))}
@@ -828,7 +831,15 @@ function InvoiceCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
   );
 }
 
-function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () => void }) {
+function PayrollCaseCard({
+  row,
+  hours,
+  onPreview,
+}: {
+  row: WorkContext;
+  hours: number;
+  onPreview: () => void;
+}) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -840,7 +851,7 @@ function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
           </div>
         </div>
         <div className="text-right text-sm font-semibold text-slate-950">
-          {row.payrollBasisHours.toFixed(2)} t
+          {hours.toFixed(2)} t
         </div>
       </div>
 
@@ -964,6 +975,23 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     invoiceTone: urgencyTone(invoiceDueDate),
     payrollTone: payrollTone(timesheet, payrollPeriod.end),
   };
+}
+
+function payrollCardHours(row: WorkContext, rows: WorkContext[]): number {
+  const workerKey = payrollWorkerKey(row.timesheet);
+  const total = rows
+    .filter(
+      (item) =>
+        payrollWorkerKey(item.timesheet) === workerKey &&
+        item.payrollPeriodStart === row.payrollPeriodStart &&
+        item.payrollPeriodEnd === row.payrollPeriodEnd,
+    )
+    .reduce((sum, item) => sum + item.approvedHours, 0);
+  return Math.round(total * 100) / 100;
+}
+
+function payrollWorkerKey(timesheet: Timesheet): string {
+  return (timesheet.vikarEmail || timesheet.vikarCode || timesheet.vikar).trim().toLowerCase();
 }
 
 function findCompany(timesheet: Timesheet, companies: Company[]) {
