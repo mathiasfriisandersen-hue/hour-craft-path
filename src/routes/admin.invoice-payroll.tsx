@@ -48,6 +48,7 @@ type StatusFilter =
   | "all"
   | "invoice-soon"
   | "invoice-now"
+  | "invoice-waiting"
   | "invoice-sent"
   | "payroll-ready"
   | "payroll-waiting"
@@ -113,6 +114,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Alle statusser" },
   { value: "invoice-soon", label: "Skal snart håndteres" },
   { value: "invoice-now", label: "Skal håndteres nu" },
+  { value: "invoice-waiting", label: "Kræver ikke handling endnu" },
   { value: "invoice-sent", label: "Faktura sendt" },
   { value: "payroll-ready", label: "Klar til bogholderi" },
   { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
@@ -204,7 +206,13 @@ const archivedInvoiceRows = filteredRows
     (row) =>
       statusFilterMatches(statusFilter, "invoice-soon") &&
       !row.timesheet.invoiceSentDate &&
-      row.invoiceTone !== "red",
+      row.invoiceTone === "orange",
+  );
+  const invoiceWaitingRows = invoiceRows.filter(
+    (row) =>
+      statusFilterMatches(statusFilter, "invoice-waiting") &&
+      !row.timesheet.invoiceSentDate &&
+      row.invoiceTone === "green",
   );
   const payrollSentRows = payrollRows.filter(
     (row) => statusFilterMatches(statusFilter, "payroll-sent") && row.timesheet.payrollSentDate,
@@ -222,7 +230,10 @@ const archivedInvoiceRows = filteredRows
       row.payrollTone !== "red",
   );
   const visibleInvoiceCount =
-    invoiceSoonRows.length + invoiceNowRows.length + invoiceSentRows.length;
+    invoiceNowRows.length +
+    invoiceSoonRows.length +
+    invoiceWaitingRows.length +
+    invoiceSentRows.length;
   const visiblePayrollCount =
     payrollReadyRows.length + payrollWaitingRows.length + payrollSentRows.length;
   const sentCount = invoiceSentRows.length + payrollSentRows.length;
@@ -362,9 +373,23 @@ const archivedInvoiceRows = filteredRows
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               <StatusColumn
                 title="Skal håndteres nu"
+                count={invoiceNowRows.length}
+                tone="red"
+                empty="Ingen fakturaer kræver handling lige nu."
+              >
+                {invoiceNowRows.map((row) => (
+                  <InvoiceCaseCard
+                    key={`invoice-now-${row.timesheet.id}`}
+                    row={row}
+                    onPreview={() => setPreview(row)}
+                  />
+                ))}
+              </StatusColumn>
+              <StatusColumn
+                title="Skal snart håndteres"
                 count={invoiceSoonRows.length}
                 tone="orange"
-                empty="Ingen fakturaer i denne status."
+                empty="Ingen fakturaer skal snart håndteres."
               >
                 {invoiceSoonRows.map((row) => (
                   <InvoiceCaseCard
@@ -375,14 +400,14 @@ const archivedInvoiceRows = filteredRows
                 ))}
               </StatusColumn>
               <StatusColumn
-                title="Skal snart håndteres"
-                count={invoiceNowRows.length}
-                tone="red"
-                empty="Ingen fakturaer kræver handling lige nu."
+                title="Kræver ikke handling endnu"
+                count={invoiceWaitingRows.length}
+                tone="green"
+                empty="Ingen fakturaer afventer senere håndtering."
               >
-                {invoiceNowRows.map((row) => (
+                {invoiceWaitingRows.map((row) => (
                   <InvoiceCaseCard
-                    key={`invoice-now-${row.timesheet.id}`}
+                    key={`invoice-waiting-${row.timesheet.id}`}
                     row={row}
                     onPreview={() => setPreview(row)}
                   />
