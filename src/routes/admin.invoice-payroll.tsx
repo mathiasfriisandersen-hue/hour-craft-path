@@ -79,7 +79,7 @@ type PayrollAllowanceRow = {
   label: string;
   hours: number;
   amount: number;
-  hourlyRateLabel?: string;
+  hourlyWageLabel?: string;
   quantityLabel?: string;
   amountLabel?: string;
 };
@@ -1172,7 +1172,7 @@ function payrollFinancials(row: WorkContext) {
   const hourlyWage = payrollHourlyWage(row);
   const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
   const basePayrollAmount = row.approvedHours * hourlyWageWithSocial;
-  const allowanceRows = payrollAllowanceRowsForCalculation(row, calculation, hourlyWageWithSocial);
+  const allowanceRows = payrollAllowanceRowsForCalculation(row, calculation, hourlyWage);
   const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
@@ -1193,17 +1193,21 @@ function payrollFinancials(row: WorkContext) {
 function payrollAllowanceRowsForCalculation(
   row: WorkContext,
   calculation: ReturnType<typeof calculateTimesheet>,
-  hourlyWageWithSocial: number,
+  hourlyWage: number,
 ): PayrollAllowanceRow[] {
   const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
   const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
-  const payrollOvertime = Math.max(calculation.overtime, overtimeHours(row.timesheet.days, weeklyLimit));
+  const payrollOvertime = Math.max(
+    calculation.overtime,
+    overtimeHours(row.timesheet.days, weeklyLimit),
+  );
   const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
     overtime: payrollOvertime,
   }).map((item) => ({
     ...item,
-    amount: item.hours * hourlyWageWithSocial,
-    hourlyRateLabel: `${formatDkk(hourlyWageWithSocial)}/t`,
+    amount: 0,
+    hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
+    amountLabel: "Tillægssats kræver manuel validering",
   }));
 
   if (calculation.delayedMealBreakDays > 0) {
@@ -1255,14 +1259,16 @@ function allowanceAmountLabel(item: PayrollAllowanceRow) {
 }
 
 function allowancePreviewValue(item: PayrollAllowanceRow) {
-  if (item.hourlyRateLabel) {
-    return `${allowanceQuantityLabel(item)} x ${item.hourlyRateLabel} = ${allowanceAmountLabel(item)}`;
+  if (item.hourlyWageLabel) {
+    return `${allowanceQuantityLabel(item)} · ${item.hourlyWageLabel} · ${allowanceAmountLabel(
+      item,
+    )}`;
   }
   return `${allowanceQuantityLabel(item)} / ${allowanceAmountLabel(item)}`;
 }
 
 function allowancePdfAmountLabel(item: PayrollAllowanceRow) {
-  if (item.hourlyRateLabel) return `${item.hourlyRateLabel} = ${allowanceAmountLabel(item)}`;
+  if (item.hourlyWageLabel) return `${item.hourlyWageLabel}; ${allowanceAmountLabel(item)}`;
   return allowanceAmountLabel(item);
 }
 
