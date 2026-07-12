@@ -120,11 +120,14 @@ export function AppShell({
                 <Link
                   key={item.to}
                   to={item.to}
+                  style={
+                    active ? { marginLeft: "2mm", marginRight: "3mm", width: "auto" } : undefined
+                  }
                   className={cn(
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     active
-                      ? "ml-[2mm] mr-[3mm] w-auto bg-blue-600 text-white shadow-lg shadow-blue-950/30"
-                      : "ml-[2mm] mr-[3mm] w-auto text-slate-300 hover:bg-white/10 hover:text-white",
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                      : "text-slate-300 hover:bg-white/10 hover:text-white",
                   )}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
