@@ -1099,6 +1099,17 @@ function formatDateRange(start: string, end: string) {
   return `${formatDate(start)} – ${formatDate(end)}`;
 }
 
+function workDateRange(timesheet: Timesheet) {
+  const workDates = timesheet.days
+    .map((day, index) =>
+      day.absence === "none" && day.start && day.end ? addDaysToISODate(timesheet.weekStart, index) : "",
+    )
+    .filter(Boolean);
+  if (!workDates.length) return "—";
+  const sortedDates = workDates.sort();
+  return `Start ${formatDate(sortedDates[0])} · Slut ${formatDate(sortedDates.at(-1) ?? sortedDates[0])}`;
+}
+
 function sicknessBasis(timesheet: Timesheet, timesheets: Timesheet[]) {
   const workerKey = workerLookupKey(timesheet);
   const workerTimesheets = timesheets
@@ -1505,12 +1516,13 @@ function PayrollPreview({
           </div>
         </div>
 
-        <dl className="grid gap-3 text-sm md:grid-cols-2">
+        <dl className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
           <PreviewRow label="Vikar" value={row.timesheet.vikar || "—"} />
           <PreviewRow
             label="Lønperiode"
             value={formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd)}
           />
+          <PreviewRow label="Arbejdet" value={workDateRange(row.timesheet)} />
           <PreviewRow label="Virksomhed/projekt" value={financials.projectName || "—"} />
           <PreviewRow label="Godkendte timer" value={`${row.approvedHours.toFixed(2)} t`} />
           <PreviewRow label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
@@ -1876,6 +1888,7 @@ async function downloadPayrollPdf(row: WorkContext) {
   const workerBottom = drawInfoBox(doc, 16, 56, 84, "Vikar og periode", [
     `Vikar: ${row.timesheet.vikar || "—"}`,
     `Lønperiode: ${period}`,
+    `Arbejdet: ${workDateRange(row.timesheet)}`,
     `Virksomhed/projekt: ${financials.projectName || "—"}`,
     `Godkendte timer: ${row.approvedHours.toFixed(2)} t`,
   ]);
