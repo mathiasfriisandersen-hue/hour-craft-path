@@ -66,6 +66,7 @@ const USER_COLORS: Record<UserKey, string> = {
 type StatusOverview = {
   soon: number;
   now: number;
+  waiting: number;
   done: number;
 };
 
@@ -283,6 +284,12 @@ function StatisticsPage() {
                 value: invoiceOverview.now,
                 help: "Godkendte timesedler hvor fakturafristen er nået.",
                 tone: "warning",
+              },
+              {
+                label: "Kræver ikke handling endnu",
+                value: invoiceOverview.waiting,
+                help: "Godkendte timesedler med senere fakturafrist.",
+                tone: "neutral",
               },
               {
                 label: "Faktura sendt",
@@ -609,7 +616,7 @@ function countProjectsByContactOrCompany(companies: Company[], timesheets: Times
 }
 
 function buildInvoiceOverview(timesheets: Timesheet[], sentRange: DateRange): StatusOverview {
-  const overview: StatusOverview = { soon: 0, now: 0, done: 0 };
+  const overview: StatusOverview = { soon: 0, now: 0, waiting: 0, done: 0 };
   const seen = new Set<string>();
   for (const timesheet of timesheets) {
     if (seen.has(timesheet.id) || timesheet.archived) continue;
@@ -627,13 +634,14 @@ function buildInvoiceOverview(timesheets: Timesheet[], sentRange: DateRange): St
 
     const tone = deadlineTone(invoiceDueDateForTimesheet(timesheet.weekStart));
     if (tone === "now") overview.now += 1;
-    else overview.soon += 1;
+    else if (tone === "soon") overview.soon += 1;
+    else overview.waiting += 1;
   }
   return overview;
 }
 
 function buildPayrollOverview(timesheets: Timesheet[], sentRange: DateRange): StatusOverview {
-  const overview: StatusOverview = { soon: 0, now: 0, done: 0 };
+  const overview: StatusOverview = { soon: 0, now: 0, waiting: 0, done: 0 };
   const seen = new Set<string>();
   for (const timesheet of timesheets) {
     if (seen.has(timesheet.id) || timesheet.archived) continue;
@@ -686,12 +694,19 @@ function hasDoneStatus(timesheet: Timesheet, fields: string[]): boolean {
   });
 }
 
-function deadlineTone(deadline: string): "soon" | "now" {
+function deadlineTone(deadline: string): "waiting" | "soon" | "now" {
+  const days = calendarDaysUntil(deadline);
+  if (days <= 0) return "now";
+  if (days <= 3) return "soon";
+  return "waiting";
+}
+
+function calendarDaysUntil(isoDate: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const due = new Date(`${deadline}T12:00:00`);
-  const days = Math.ceil((due.getTime() - today.getTime()) / 86400000);
-  return days <= 0 ? "now" : "soon";
+  const target = new Date(`${isoDate}T00:00:00`);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
 function invoiceDueDateForTimesheet(weekStart: string): string {
