@@ -83,6 +83,7 @@ type PayrollAllowanceRow = {
   label: string;
   hours: number;
   amount: number;
+  unitPrice?: number;
   hourlyWageLabel?: string;
   quantityLabel?: string;
   amountLabel?: string;
@@ -934,13 +935,13 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
       : billingMultiplier;
   const calculation = calculateTimesheet(timesheet);
   const invoiceBaseExVat = approvedHours * billingRate;
-  const invoiceAllowanceRows = allowanceRowsForCalculation(calculation, {
-    overtime: effectiveOvertimeHours(timesheet, calculation),
-  }).map((item) => ({
-    ...item,
-    label: invoiceAllowanceLabel(item.label),
-    amount: item.hours * billingRate,
-  }));
+  const invoiceAllowanceRows = invoiceAllowanceRowsForCalculation(
+    timesheet,
+    calculation,
+    project,
+    billingRate,
+    payrollPeriod.end,
+  );
   const invoiceAllowanceExVat = invoiceAllowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const invoiceExVat = invoiceBaseExVat + invoiceAllowanceExVat;
   const vat = invoiceExVat * 0.25;
@@ -1229,6 +1230,76 @@ function effectiveOvertimeHours(
 
 function invoiceAllowanceLabel(label: string) {
   return label === "Overarbejdsløn" ? "Overarbejdstillæg" : label;
+}
+
+function invoiceAllowanceRowsForCalculation(
+  timesheet: Timesheet,
+  calculation: ReturnType<typeof calculateTimesheet>,
+  project: CompanyProject | undefined,
+  billingRate: number,
+  periodEnd: string,
+): PayrollAllowanceRow[] {
+  const validationReport = getAgreementValidationReport(timesheet.selectedAgreementId);
+  const projectFactor = project?.billingFactor ?? 0;
+
+  return allowanceRowsForCalculation(calculation, {
+    overtime: effectiveOvertimeHours(timesheet, calculation),
+  }).flatMap((item) => {
+    if (item.ruleKeys?.includes("overtime")) {
+      const overtimeRows = invoiceOvertimeAllowanceRows(
+        validationReport,
+        item.hours,
+        projectFactor,
+        periodEnd,
+      );
+      if (overtimeRows.length) return overtimeRows;
+      const rate = allowanceRateForRule(validationReport, item.ruleKeys);
+      if (rate && projectFactor > 0) {
+        const unitPrice = rate * projectFactor;
+        return [
+          {
+            ...item,
+            label: invoiceAllowanceLabel(item.label),
+            unitPrice,
+            amount: item.hours * unitPrice,
+          },
+        ];
+      }
+      return [];
+    }
+
+    return [
+      {
+        ...item,
+        label: invoiceAllowanceLabel(item.label),
+        unitPrice: billingRate,
+        amount: item.hours * billingRate,
+      },
+    ];
+  });
+}
+
+function invoiceOvertimeAllowanceRows(
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+  hours: number,
+  projectFactor: number,
+  periodEnd: string,
+): PayrollAllowanceRow[] {
+  if (!validationReport?.validatedForCalculation || hours <= 0 || projectFactor <= 0) return [];
+  const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
+  const tiers = overtimeRateTiersForDate(overtimeRule?.possibleRates ?? [], periodEnd);
+  if (tiers.length < 3) return [];
+
+  return allocateOvertimeHoursToTiers(hours, tiers).map((tier) => {
+    const unitPrice = tier.rate * projectFactor;
+    return {
+      label: `Overarbejdstillæg ${tier.label}`,
+      hours: tier.hours,
+      unitPrice,
+      amount: tier.hours * unitPrice,
+      ruleKeys: ["overtime", "outside_normal_time"],
+    };
+  });
 }
 
 function payrollAllowanceRowsForCalculation(
@@ -1714,7 +1785,9 @@ function InvoicePreview({
                   <tr key={item.label}>
                     <td className="border-b px-3 py-3">{item.label}</td>
                     <td className="border-b px-3 py-3 text-right">{item.hours.toFixed(2)} t</td>
-                    <td className="border-b px-3 py-3 text-right">{formatDkk(row.billingRate)}</td>
+                    <td className="border-b px-3 py-3 text-right">
+                      {formatDkk(item.unitPrice ?? row.billingRate)}
+                    </td>
                     <td className="border-b px-3 py-3 text-right">{formatDkk(item.amount)}</td>
                   </tr>
                 ))}
@@ -1835,7 +1908,9 @@ async function downloadInvoicePdf(row: WorkContext) {
     invoiceLineY += invoiceLineHeight;
     doc.text(item.label, 20, invoiceLineY);
     doc.text(`${item.hours.toFixed(2)} t`, 118, invoiceLineY, { align: "right" });
-    doc.text(formatDkk(row.billingRate), 153, invoiceLineY, { align: "right" });
+    doc.text(formatDkk(item.unitPrice ?? row.billingRate), 153, invoiceLineY, {
+      align: "right",
+    });
     doc.text(formatDkk(item.amount), 190, invoiceLineY, { align: "right" });
   });
 
