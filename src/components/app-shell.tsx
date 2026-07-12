@@ -100,7 +100,12 @@ export function AppShell({
 
   if (dashboard) {
     return (
-      <div className="min-h-screen bg-[#f5f7fb] text-slate-950 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]">
+      <div
+        className={cn(
+          "min-h-screen text-slate-950 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]",
+          role === "admin" ? "bg-white" : "bg-[#f5f7fb]",
+        )}
+      >
         <aside className="hidden min-h-screen flex-col bg-[#071629] text-white shadow-2xl lg:flex">
           <Link to={home} className="flex h-20 items-center gap-3 px-5">
             <img src={subzLogo} alt="SUB-Z" className="h-8 w-auto" />
