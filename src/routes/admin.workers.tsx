@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronRight, RotateCcw, Search } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { ChevronRight, RotateCcw, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -145,12 +145,10 @@ export function WorkerOverviewContent({
   );
 
   useEffect(() => {
+    if (!selectedWorkerKey) return;
     if (filteredRows.some((row) => row.worker.key === selectedWorkerKey)) return;
-    setSelectedWorkerKey(filteredRows[0]?.worker.key ?? "");
+    setSelectedWorkerKey("");
   }, [filteredRows, selectedWorkerKey]);
-
-  const selectedRow =
-    filteredRows.find((row) => row.worker.key === selectedWorkerKey) ?? filteredRows[0] ?? null;
 
   const restoreWorker = (worker: KnownWorker) => {
     setKnownWorkerInactive(worker, false);
@@ -181,6 +179,10 @@ export function WorkerOverviewContent({
     if (value !== "all") setActiveTab(value);
   };
 
+  const toggleWorker = (workerKey: string) => {
+    setSelectedWorkerKey((current) => (current === workerKey ? "" : workerKey));
+  };
+
   return (
     <div className="space-y-5">
       {!dashboardShell && (
@@ -200,102 +202,95 @@ export function WorkerOverviewContent({
         </div>
       )}
 
-      <div className="grid min-w-0 items-start gap-5 2xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 pt-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <WorkerTabButton
-                label="I arbejde"
-                count={working.length}
-                active={activeTab === "working"}
-                onClick={() => selectTab("working")}
-              />
-              <WorkerTabButton
-                label="Ledige"
-                count={available.length}
-                active={activeTab === "available"}
-                onClick={() => selectTab("available")}
-              />
-              <WorkerTabButton
-                label="Inaktive"
-                count={inactiveRows.length}
-                active={activeTab === "inactive"}
-                onClick={() => selectTab("inactive")}
-              />
-            </div>
-
-            <div className="mt-4 grid min-w-0 gap-3 border-t border-slate-100 py-4 lg:grid-cols-2 xl:grid-cols-[minmax(14rem,1.3fr)_minmax(9rem,0.8fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)]">
-              <label className="grid gap-1">
-                <span className="invisible text-xs font-medium text-slate-500">Søgning</span>
-                <span className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={searchValue}
-                    onChange={(event) => updateSearch(event.target.value)}
-                    placeholder="Søg efter navn, email eller tlf."
-                    className="h-11 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm"
-                  />
-                </span>
-              </label>
-
-              <FilterSelect
-                label="Fag"
-                value={tradeFilter}
-                onChange={setTradeFilter}
-                options={tradeOptions}
-                allLabel="Alle fag"
-              />
-              <FilterSelect
-                label="Virksomhed"
-                value={companyFilter}
-                onChange={setCompanyFilter}
-                options={companyOptions}
-                allLabel="Alle virksomheder"
-              />
-              <label className="grid gap-1">
-                <span className="text-xs font-medium text-slate-500">Status</span>
-                <select
-                  value={statusFilter}
-                  onChange={(event) => selectStatusFilter(event.target.value as WorkerTab | "all")}
-                  className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition-colors focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
-                >
-                  <option value="all">Alle statusser</option>
-                  <option value="working">I arbejde</option>
-                  <option value="available">Ledig</option>
-                  <option value="inactive">Inaktiv</option>
-                </select>
-              </label>
-            </div>
+      <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 px-5 pt-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <WorkerTabButton
+              label="I arbejde"
+              count={working.length}
+              active={activeTab === "working"}
+              onClick={() => selectTab("working")}
+            />
+            <WorkerTabButton
+              label="Ledige"
+              count={available.length}
+              active={activeTab === "available"}
+              onClick={() => selectTab("available")}
+            />
+            <WorkerTabButton
+              label="Inaktive"
+              count={inactiveRows.length}
+              active={activeTab === "inactive"}
+              onClick={() => selectTab("inactive")}
+            />
           </div>
 
-          <WorkerTable
-            rows={filteredRows}
-            activeTab={activeTab}
-            selectedWorkerKey={selectedRow?.worker.key ?? ""}
-            onSelectWorker={setSelectedWorkerKey}
-          />
+          <div className="mt-4 grid min-w-0 gap-3 border-t border-slate-100 py-4 lg:grid-cols-2 xl:grid-cols-[minmax(14rem,1.3fr)_minmax(9rem,0.8fr)_minmax(10rem,0.9fr)_minmax(9rem,0.8fr)]">
+            <label className="grid gap-1">
+              <span className="invisible text-xs font-medium text-slate-500">Søgning</span>
+              <span className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Input
+                  value={searchValue}
+                  onChange={(event) => updateSearch(event.target.value)}
+                  placeholder="Søg efter navn, email eller tlf."
+                  className="h-11 rounded-lg border-slate-200 bg-slate-50 pl-10 text-sm shadow-sm"
+                />
+              </span>
+            </label>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-500">
-            <span>
-              Viser {filteredRows.length === 0 ? 0 : 1}-{filteredRows.length} af{" "}
-              {rowsByTab[activeTab].length}
-            </span>
-            <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
-              {activeTabLabel(activeTab)}
-            </span>
+            <FilterSelect
+              label="Fag"
+              value={tradeFilter}
+              onChange={setTradeFilter}
+              options={tradeOptions}
+              allLabel="Alle fag"
+            />
+            <FilterSelect
+              label="Virksomhed"
+              value={companyFilter}
+              onChange={setCompanyFilter}
+              options={companyOptions}
+              allLabel="Alle virksomheder"
+            />
+            <label className="grid gap-1">
+              <span className="text-xs font-medium text-slate-500">Status</span>
+              <select
+                value={statusFilter}
+                onChange={(event) => selectStatusFilter(event.target.value as WorkerTab | "all")}
+                className="h-11 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 shadow-sm outline-none transition-colors focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">Alle statusser</option>
+                <option value="working">I arbejde</option>
+                <option value="available">Ledig</option>
+                <option value="inactive">Inaktiv</option>
+              </select>
+            </label>
           </div>
-        </section>
+        </div>
 
-        <WorkerDetailPanel
-          row={selectedRow}
+        <WorkerTable
+          rows={filteredRows}
           companies={companies}
           activeTab={activeTab}
           inactiveMode={activeTab === "inactive"}
+          selectedWorkerKey={selectedWorkerKey}
+          onToggleWorker={toggleWorker}
           onInactivate={inactivateWorker}
           onRestore={restoreWorker}
           onDelete={deleteWorker}
         />
-      </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4 text-sm text-slate-500">
+          <span>
+            Viser {filteredRows.length === 0 ? 0 : 1}-{filteredRows.length} af{" "}
+            {rowsByTab[activeTab].length}
+          </span>
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
+            {activeTabLabel(activeTab)}
+          </span>
+        </div>
+      </section>
     </div>
   );
 }
@@ -369,14 +364,24 @@ function FilterSelect({
 
 function WorkerTable({
   rows,
+  companies,
   activeTab,
+  inactiveMode,
   selectedWorkerKey,
-  onSelectWorker,
+  onToggleWorker,
+  onInactivate,
+  onRestore,
+  onDelete,
 }: {
   rows: WorkerRow[];
+  companies: Company[];
   activeTab: WorkerTab;
+  inactiveMode: boolean;
   selectedWorkerKey: string;
-  onSelectWorker: (workerKey: string) => void;
+  onToggleWorker: (workerKey: string) => void;
+  onInactivate?: (worker: KnownWorker) => void;
+  onRestore?: (worker: KnownWorker) => void;
+  onDelete?: (worker: KnownWorker) => void;
 }) {
   if (rows.length === 0) {
     return (
@@ -417,138 +422,81 @@ function WorkerTable({
           {rows.map((row) => {
             const selected = selectedWorkerKey === row.worker.key;
             return (
-              <tr
-                key={row.worker.key}
-                className={cn(
-                  "border-t border-slate-100 transition-colors hover:bg-blue-50/40",
-                  selected && "bg-blue-50/70",
-                )}
-              >
-                <td className="px-4 py-4">
-                  <button
-                    type="button"
-                    onClick={() => onSelectWorker(row.worker.key)}
-                    className="flex w-full min-w-0 items-center gap-3 text-left"
-                  >
-                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
-                      {workerInitials(row.worker)}
-                    </span>
-                    <span className="min-w-0 truncate font-semibold text-slate-950">
-                      {row.worker.name || "—"}
-                    </span>
-                  </button>
-                </td>
-                <td className="truncate px-4 py-4 text-slate-600">{row.worker.email || "—"}</td>
-                <td className="truncate px-4 py-4 text-slate-600">{row.worker.phone || "—"}</td>
-                <td className="truncate px-4 py-4 text-slate-600">
-                  {formatTradeSkills(row.worker)}
-                </td>
-                <td className="truncate px-4 py-4 font-medium text-slate-700">
-                  {displayCompanyName(row)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-slate-600">
-                  {formatDate(row.bookingStart)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-4 text-slate-600">
-                  {formatDate(row.bookingEnd)}
-                </td>
-                <td className="px-4 py-4">
-                  <WorkerStatusBadge status={workerStatus(row, activeTab)} />
-                </td>
-                <td
+              <Fragment key={row.worker.key}>
+                <tr
                   className={cn(
-                    "sticky right-0 z-10 px-1 py-4 text-right",
-                    selected ? "bg-blue-50" : "bg-white",
+                    "border-t border-slate-100 transition-colors hover:bg-blue-50/40",
+                    selected && "bg-blue-50/70",
                   )}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onSelectWorker(row.worker.key)}
-                    className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm font-semibold text-[#164a82] hover:bg-blue-50 hover:text-blue-700"
+                  <td className="px-4 py-4">
+                    <button
+                      type="button"
+                      onClick={() => onToggleWorker(row.worker.key)}
+                      className="flex w-full min-w-0 items-center gap-3 text-left"
+                    >
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                        {workerInitials(row.worker)}
+                      </span>
+                      <span className="min-w-0 truncate font-semibold text-slate-950">
+                        {row.worker.name || "—"}
+                      </span>
+                    </button>
+                  </td>
+                  <td className="truncate px-4 py-4 text-slate-600">{row.worker.email || "—"}</td>
+                  <td className="truncate px-4 py-4 text-slate-600">{row.worker.phone || "—"}</td>
+                  <td className="truncate px-4 py-4 text-slate-600">
+                    {formatTradeSkills(row.worker)}
+                  </td>
+                  <td className="truncate px-4 py-4 font-medium text-slate-700">
+                    {displayCompanyName(row)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                    {formatDate(row.bookingStart)}
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-4 text-slate-600">
+                    {formatDate(row.bookingEnd)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <WorkerStatusBadge status={workerStatus(row, activeTab)} />
+                  </td>
+                  <td
+                    className={cn(
+                      "sticky right-0 z-10 px-1 py-4 text-right",
+                      selected ? "bg-blue-50" : "bg-white",
+                    )}
                   >
-                    Åbn
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
+                    <button
+                      type="button"
+                      onClick={() => onToggleWorker(row.worker.key)}
+                      className="inline-flex min-h-9 items-center gap-1 rounded-md px-2 text-sm font-semibold text-[#164a82] hover:bg-blue-50 hover:text-blue-700"
+                      aria-expanded={selected}
+                    >
+                      {selected ? "Luk" : "Åbn"}
+                      <ChevronRight className={cn("h-4 w-4", selected && "rotate-90")} />
+                    </button>
+                  </td>
+                </tr>
+                {selected && (
+                  <tr className="border-t border-blue-100 bg-blue-50/40">
+                    <td colSpan={9} className="px-4 py-4">
+                      <WorkerDetails
+                        row={row}
+                        companies={companies}
+                        inactiveMode={inactiveMode}
+                        onInactivate={onInactivate}
+                        onRestore={onRestore}
+                        onDelete={onDelete}
+                      />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             );
           })}
         </tbody>
       </table>
     </div>
-  );
-}
-
-function WorkerDetailPanel({
-  row,
-  companies,
-  activeTab,
-  inactiveMode,
-  onInactivate,
-  onRestore,
-  onDelete,
-}: {
-  row: WorkerRow | null;
-  companies: Company[];
-  activeTab: WorkerTab;
-  inactiveMode: boolean;
-  onInactivate?: (worker: KnownWorker) => void;
-  onRestore?: (worker: KnownWorker) => void;
-  onDelete?: (worker: KnownWorker) => void;
-}) {
-  if (!row) {
-    return (
-      <aside className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
-        Vælg en vikar for at se oplysninger.
-      </aside>
-    );
-  }
-
-  return (
-    <aside className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start gap-3">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-blue-100 text-base font-semibold text-blue-700">
-          {workerInitials(row.worker)}
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-start justify-between gap-2">
-            <h2 className="min-w-0 truncate text-base font-semibold text-slate-950">
-              {row.worker.name || "—"}
-            </h2>
-            <WorkerStatusBadge status={workerStatus(row, activeTab)} />
-          </div>
-          <p className="mt-1 min-w-0 break-all text-sm text-slate-500">{row.worker.email || "—"}</p>
-          <div className="mt-2 grid gap-1 text-sm text-slate-600">
-            <div className="flex justify-between gap-3">
-              <span>Telefon</span>
-              <span className="font-medium text-slate-900">{row.worker.phone || "—"}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span>Periode</span>
-              <span className="text-right font-medium text-slate-900">
-                {formatDate(row.bookingStart)} – {formatDate(row.bookingEnd)}
-              </span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span>Virksomhed</span>
-              <span className="min-w-0 truncate text-right font-medium text-slate-900">
-                {displayCompanyName(row)}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <WorkerDetails
-        row={row}
-        companies={companies}
-        inactiveMode={inactiveMode}
-        onInactivate={onInactivate}
-        onRestore={onRestore}
-        onDelete={onDelete}
-        variant="panel"
-      />
-    </aside>
   );
 }
 
@@ -734,7 +682,6 @@ function WorkerDetails({
   onInactivate,
   onRestore,
   onDelete,
-  variant = "inline",
 }: {
   row: WorkerRow;
   companies: Company[];
@@ -742,7 +689,6 @@ function WorkerDetails({
   onInactivate?: (worker: KnownWorker) => void;
   onRestore?: (worker: KnownWorker) => void;
   onDelete?: (worker: KnownWorker) => void;
-  variant?: "inline" | "panel";
 }) {
   const [editing, setEditing] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
@@ -773,131 +719,132 @@ function WorkerDetails({
   };
 
   return (
-    <div
-      className={cn(variant === "panel" ? "border-t border-slate-200 pt-3" : "mt-4 border-t pt-3")}
-    >
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       {editing ? (
         <WorkerEditForm worker={row.worker} onClose={() => setEditing(false)} />
       ) : (
         <>
-          {!inactiveMode && (
-            <div className="rounded-xl border border-slate-200 p-3">
-              <h3 className="text-sm font-semibold text-slate-950">Tilknyt til projekt</h3>
-              <label className="mt-3 block">
-                <span className="sr-only">Søg virksomhed eller projekt</span>
-                <span className="relative block">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                  <Input
-                    value={projectSearch}
-                    onChange={(event) => {
-                      setProjectSearch(event.target.value);
-                      setAssignmentMessage("");
-                    }}
-                    placeholder="Søg virksomhed eller projekt"
-                    className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-9 text-sm"
-                  />
-                </span>
-              </label>
-              {assignmentMessage && (
-                <div className="mt-2 text-xs font-medium text-emerald-700">{assignmentMessage}</div>
-              )}
-              <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
-                {projectMatches.length === 0 ? (
-                  <div className="text-xs text-slate-500">Ingen projekter matcher søgningen.</div>
-                ) : (
-                  projectMatches.map(({ company, project, attached, conflict }) => (
-                    <div
-                      key={`${company.id}:${project.id}`}
-                      className="rounded-lg border border-slate-200 p-3 text-sm"
-                    >
-                      <div className="font-semibold text-slate-950">
-                        {company.name} / {project.name || "Projekt"}
-                      </div>
-                      <div className="mt-1 text-xs text-slate-500">
-                        {formatDate(project.startDate)} – {formatDate(project.endDate)}
-                      </div>
-                      {conflict && (
-                        <div className="mt-2 text-xs text-status-rejected-fg">
-                          Optaget i perioden.
-                        </div>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        disabled={attached || Boolean(conflict)}
-                        onClick={() => attachWorkerToProject(company, project)}
-                      >
-                        {attached ? "Allerede tilknyttet" : "Tilknyt vikar"}
-                      </Button>
-                    </div>
-                  ))
+          <div className={cn("grid gap-4", !inactiveMode && "xl:grid-cols-[20rem_minmax(0,1fr)]")}>
+            {!inactiveMode && (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <h3 className="text-sm font-semibold text-slate-950">Tilknyt til projekt</h3>
+                <label className="mt-3 block">
+                  <span className="sr-only">Søg virksomhed eller projekt</span>
+                  <span className="relative block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Input
+                      value={projectSearch}
+                      onChange={(event) => {
+                        setProjectSearch(event.target.value);
+                        setAssignmentMessage("");
+                      }}
+                      placeholder="Søg virksomhed eller projekt"
+                      className="h-10 rounded-lg border-slate-200 bg-slate-50 pl-9 text-sm"
+                    />
+                  </span>
+                </label>
+                {assignmentMessage && (
+                  <div className="mt-2 text-xs font-medium text-emerald-700">
+                    {assignmentMessage}
+                  </div>
                 )}
+                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
+                  {projectMatches.length === 0 ? (
+                    <div className="text-xs text-slate-500">Ingen projekter matcher søgningen.</div>
+                  ) : (
+                    projectMatches.map(({ company, project, attached, conflict }) => (
+                      <div
+                        key={`${company.id}:${project.id}`}
+                        className="rounded-lg border border-slate-200 p-3 text-sm"
+                      >
+                        <div className="font-semibold text-slate-950">
+                          {company.name} / {project.name || "Projekt"}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {formatDate(project.startDate)} – {formatDate(project.endDate)}
+                        </div>
+                        {conflict && (
+                          <div className="mt-2 text-xs text-status-rejected-fg">
+                            Optaget i perioden.
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          disabled={attached || Boolean(conflict)}
+                          onClick={() => attachWorkerToProject(company, project)}
+                        >
+                          {attached ? "Allerede tilknyttet" : "Tilknyt vikar"}
+                        </Button>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          <details className="group mt-3 rounded-xl border border-slate-200">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-slate-950 marker:hidden">
-              <span>Vikar information</span>
-              <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
-            </summary>
-            <dl className="border-t border-slate-200 px-3 pb-2 text-sm">
-              <DetailRow label="Vikar" value={row.worker.name || "—"} />
-              <DetailRow label="Kode" value={row.worker.code || "—"} />
-              <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
-              <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
-              <DetailRow label="Adresse" value={row.worker.address || "—"} />
-              <DetailRow label="CPR-nr." value={row.worker.cpr || "—"} />
-              <DetailRow
-                label="Sprog"
-                value={
-                  WORKER_LANGUAGES.find((item) => item.value === row.worker.language)?.label ||
-                  "Dansk"
-                }
-              />
-              {hasActiveBooking ? (
-                <>
-                  <DetailRow
-                    label="Brugervirksomhed"
-                    value={timesheet?.brugervirksomhed || assignment?.companyName || "—"}
-                  />
-                  <DetailRow
-                    label="Projekt"
-                    value={timesheet?.projectName || assignment?.projectName || "—"}
-                  />
-                  <DetailRow label="Kontaktperson" value={timesheet?.kontaktperson || "—"} />
-                  <DetailRow
-                    label="Kontaktperson telefon"
-                    value={timesheet?.kontaktpersonPhone || "—"}
-                  />
-                  <DetailRow label="Mail" value={timesheet?.kontaktpersonEmail || "—"} />
-                  <DetailRow label="Reference" value={timesheet?.referenceNo || "—"} />
-                  <DetailRow label="Arbejdssted" value={timesheet?.arbejdssted || "—"} />
-                  <DetailRow label="Periode" value={period} />
-                  <DetailRow label="Overenskomst" value={timesheet?.overenskomst || "—"} />
-                </>
-              ) : hasFutureBooking ? (
-                <>
-                  <DetailRow label="Booking" value="Ikke aktiv endnu" />
-                  <DetailRow
-                    label="Brugervirksomhed"
-                    value={plannedAssignment?.companyName || nextTimesheet?.brugervirksomhed || "—"}
-                  />
-                  <DetailRow
-                    label="Projekt"
-                    value={plannedAssignment?.projectName || nextTimesheet?.projectName || "—"}
-                  />
-                  <DetailRow label="Periode" value={period} />
-                  <DetailRow label="Overenskomst" value={nextTimesheet?.overenskomst || "—"} />
-                </>
-              ) : (
-                <DetailRow label="Booking" value="Ingen aktiv booking" />
-              )}
-              <DetailRow label="Fag" value={tradeSkills} />
-              <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
-            </dl>
-          </details>
+            <div className="rounded-xl border border-slate-200 p-3">
+              <h3 className="text-sm font-semibold text-slate-950">Vikar information</h3>
+              <dl className="mt-3 border-t border-slate-200 text-sm">
+                <DetailRow label="Vikar" value={row.worker.name || "—"} />
+                <DetailRow label="Kode" value={row.worker.code || "—"} />
+                <DetailRow label="Vikarens e-mail" value={row.worker.email || "—"} />
+                <DetailRow label="Vikarens telefon" value={row.worker.phone || "—"} />
+                <DetailRow label="Adresse" value={row.worker.address || "—"} />
+                <DetailRow label="CPR-nr." value={row.worker.cpr || "—"} />
+                <DetailRow
+                  label="Sprog"
+                  value={
+                    WORKER_LANGUAGES.find((item) => item.value === row.worker.language)?.label ||
+                    "Dansk"
+                  }
+                />
+                {hasActiveBooking ? (
+                  <>
+                    <DetailRow
+                      label="Brugervirksomhed"
+                      value={timesheet?.brugervirksomhed || assignment?.companyName || "—"}
+                    />
+                    <DetailRow
+                      label="Projekt"
+                      value={timesheet?.projectName || assignment?.projectName || "—"}
+                    />
+                    <DetailRow label="Kontaktperson" value={timesheet?.kontaktperson || "—"} />
+                    <DetailRow
+                      label="Kontaktperson telefon"
+                      value={timesheet?.kontaktpersonPhone || "—"}
+                    />
+                    <DetailRow label="Mail" value={timesheet?.kontaktpersonEmail || "—"} />
+                    <DetailRow label="Reference" value={timesheet?.referenceNo || "—"} />
+                    <DetailRow label="Arbejdssted" value={timesheet?.arbejdssted || "—"} />
+                    <DetailRow label="Periode" value={period} />
+                    <DetailRow label="Overenskomst" value={timesheet?.overenskomst || "—"} />
+                  </>
+                ) : hasFutureBooking ? (
+                  <>
+                    <DetailRow label="Booking" value="Ikke aktiv endnu" />
+                    <DetailRow
+                      label="Brugervirksomhed"
+                      value={
+                        plannedAssignment?.companyName || nextTimesheet?.brugervirksomhed || "—"
+                      }
+                    />
+                    <DetailRow
+                      label="Projekt"
+                      value={plannedAssignment?.projectName || nextTimesheet?.projectName || "—"}
+                    />
+                    <DetailRow label="Periode" value={period} />
+                    <DetailRow label="Overenskomst" value={nextTimesheet?.overenskomst || "—"} />
+                  </>
+                ) : (
+                  <DetailRow label="Booking" value="Ingen aktiv booking" />
+                )}
+                <DetailRow label="Fag" value={tradeSkills} />
+                <DetailRow label="Kompetencer" value={row.worker.competencies || "—"} />
+              </dl>
+            </div>
+          </div>
 
           <div className="mt-4 flex flex-wrap gap-2">
             {!inactiveMode && (
