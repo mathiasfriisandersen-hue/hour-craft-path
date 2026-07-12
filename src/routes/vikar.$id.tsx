@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -320,29 +321,19 @@ function VikarEdit() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Start">
-                    <Input
-                      type="time"
-                      className="h-10 w-full"
-                      step={300}
+                    <TimeInput
                       value={day.start}
                       disabled={locked || absent}
-                      onFocus={() => {
-                        if (!day.start) updateDay(index, { start: "07:00" });
-                      }}
-                      onChange={(e) => updateDay(index, { start: e.target.value })}
+                      defaultValue="07:00"
+                      onChange={(value) => updateDay(index, { start: value })}
                     />
                   </Field>
                   <Field label="Slut">
-                    <Input
-                      type="time"
-                      className="h-10 w-full"
-                      step={300}
+                    <TimeInput
                       value={day.end}
                       disabled={locked || absent}
-                      onFocus={() => {
-                        if (!day.end) updateDay(index, { end: "15:30" });
-                      }}
-                      onChange={(e) => updateDay(index, { end: e.target.value })}
+                      defaultValue="15:30"
+                      onChange={(value) => updateDay(index, { end: value })}
                     />
                   </Field>
                   <Field label="Pause 1" className="col-span-2">
@@ -454,29 +445,21 @@ function VikarEdit() {
                       <HolidayBadges isoDate={date} />
                     </td>
                     <td className="px-3 py-2">
-                      <Input
-                        type="time"
-                        className="h-8 w-28"
-                        step={300}
+                      <TimeInput
                         value={day.start}
                         disabled={locked || absent}
-                        onFocus={() => {
-                          if (!day.start) updateDay(index, { start: "07:00" });
-                        }}
-                        onChange={(e) => updateDay(index, { start: e.target.value })}
+                        defaultValue="07:00"
+                        onChange={(value) => updateDay(index, { start: value })}
+                        compact
                       />
                     </td>
                     <td className="px-3 py-2">
-                      <Input
-                        type="time"
-                        className="h-8 w-28"
-                        step={300}
+                      <TimeInput
                         value={day.end}
                         disabled={locked || absent}
-                        onFocus={() => {
-                          if (!day.end) updateDay(index, { end: "15:30" });
-                        }}
-                        onChange={(e) => updateDay(index, { end: e.target.value })}
+                        defaultValue="15:30"
+                        onChange={(value) => updateDay(index, { end: value })}
+                        compact
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -702,6 +685,58 @@ function Notice({ children }: { children: React.ReactNode }) {
   return <div className="mb-6 rounded-md border bg-muted/40 px-4 py-3 text-sm">{children}</div>;
 }
 
+function TimeInput({
+  value,
+  disabled,
+  defaultValue,
+  onChange,
+  compact = false,
+}: {
+  value: string;
+  disabled: boolean;
+  defaultValue: string;
+  onChange: (value: string) => void;
+  compact?: boolean;
+}) {
+  const canClear = Boolean(value) && !disabled;
+
+  return (
+    <div className={cn("flex min-w-0 items-center gap-1", compact && "md:w-32")}>
+      <Input
+        type="time"
+        className={cn("min-w-0 flex-1", compact ? "h-8" : "h-10 md:h-8")}
+        step={300}
+        value={value}
+        disabled={disabled}
+        title="Tryk Delete eller brug nulstil-knappen for at sætte feltet til --.--"
+        onFocus={() => {
+          if (!value) onChange(defaultValue);
+        }}
+        onKeyDown={(event) => {
+          if ((event.key === "Delete" || event.key === "Escape") && value) {
+            event.preventDefault();
+            onChange("");
+          }
+        }}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <button
+        type="button"
+        className={cn(
+          "inline-flex shrink-0 items-center justify-center rounded-md border border-input bg-background text-muted-foreground shadow-sm transition-colors hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-40",
+          compact ? "h-8 w-8" : "h-10 w-9 md:h-8 md:w-8",
+        )}
+        disabled={!canClear}
+        aria-label="Nulstil tidspunkt til --.--"
+        title="Nulstil til --.--"
+        onClick={() => onChange("")}
+      >
+        <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 function TimeRangeInputs({
   start,
   end,
@@ -721,28 +756,20 @@ function TimeRangeInputs({
 }) {
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 md:inline-grid md:w-auto">
-      <Input
-        type="time"
-        className="h-10 w-full min-w-0 md:h-8 md:w-24"
-        step={300}
+      <TimeInput
         value={start}
         disabled={disabled}
-        onFocus={() => {
-          if (!start) onStartChange(defaultStart);
-        }}
-        onChange={(e) => onStartChange(e.target.value)}
+        defaultValue={defaultStart}
+        onChange={onStartChange}
+        compact
       />
       <span className="text-muted-foreground">–</span>
-      <Input
-        type="time"
-        className="h-10 w-full min-w-0 md:h-8 md:w-24"
-        step={300}
+      <TimeInput
         value={end}
         disabled={disabled}
-        onFocus={() => {
-          if (!end) onEndChange(defaultEnd);
-        }}
-        onChange={(e) => onEndChange(e.target.value)}
+        defaultValue={defaultEnd}
+        onChange={onEndChange}
+        compact
       />
     </div>
   );
