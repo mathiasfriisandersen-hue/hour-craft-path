@@ -544,7 +544,7 @@ function metricValue(
   if (metric === "workers") return countWorkersByCodeNamePhone(roleTimesheets);
   if (metric === "tasks") return countProjectsByContactOrCompany(roleCompanies, roleTimesheets);
   if (metric === "sent")
-    return roleTimesheets.filter((timesheet) => timesheet.status === "sent").length;
+    return roleTimesheets.filter((timesheet) => timesheet.status !== "draft").length;
   return roleTimesheets.filter((timesheet) => timesheet.status === "approved").length;
 }
 
