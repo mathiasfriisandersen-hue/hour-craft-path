@@ -111,7 +111,7 @@ export function AppShell({
             <img src={subzLogo} alt="SUB-Z" className="h-8 w-auto" />
           </Link>
 
-          <nav className="flex-1 space-y-1 py-2 pl-[2mm] pr-[3mm]">
+          <nav className="flex-1 space-y-1 py-2 pl-[10px] pr-[15px]">
             {nav.map((item) => {
               const Icon = dashboardNavIcon(item.label);
               const active =
@@ -134,7 +134,7 @@ export function AppShell({
             })}
           </nav>
 
-          <div className="space-y-2 border-t border-white/10 py-4 pl-[2mm] pr-[3mm]">
+          <div className="space-y-2 border-t border-white/10 py-4 pl-[10px] pr-[15px]">
             <button
               onClick={logout}
               className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
