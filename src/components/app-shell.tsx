@@ -245,7 +245,11 @@ export function AppShell({
             </nav>
           </header>
 
-          <main className="w-full px-4 py-5 lg:px-7 lg:py-6">{content}</main>
+          <main
+            className={cn("w-full px-4 py-5 lg:py-6", role === "admin" ? "lg:px-0" : "lg:px-7")}
+          >
+            {content}
+          </main>
         </div>
       </div>
     );
