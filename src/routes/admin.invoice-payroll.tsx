@@ -855,24 +855,17 @@ function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
         </div>
       </div>
 
-      <dl className="mt-3 grid gap-2 text-sm">
-        <div className="grid grid-cols-2 gap-2">
-          <Fact
-            label="Lønperiode"
-            value={formatDateRange(row.payrollPeriodStart, row.payrollPeriodEnd)}
-          />
-          <Fact label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
-        </div>
-        <Fact label="Godkendelsesstatus" value={row.payrollApprovalStatus} />
-        <Fact label="Status" value={payrollStatusLabel(row)} />
+      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+        <Fact label="Godkendelse" value={row.payrollApprovalStatus} />
+        <Fact label="Frist bogholder" value={formatDate(row.payrollDeadline)} />
+      </dl>
+
+      <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
         <StatusDateInput
           label="Sendt til bogholderi"
           value={row.timesheet.payrollSentDate ?? ""}
           onChange={(value) => updateTimesheetDate(row.timesheet, "payrollSentDate", value)}
         />
-      </dl>
-
-      <div className="mt-3 flex justify-end">
         <Button type="button" variant="outline" size="sm" onClick={onPreview}>
           Preview
         </Button>
