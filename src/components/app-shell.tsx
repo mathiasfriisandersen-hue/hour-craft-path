@@ -24,6 +24,7 @@ import subzLogo from "@/assets/sub-z-logo.png";
 type DashboardShellOptions = {
   title: string;
   subtitle: string;
+  hideHeaderContent?: boolean;
   search?: {
     value: string;
     onChange: (value: string) => void;
@@ -141,19 +142,35 @@ export function AppShell({
 
         <div className="min-w-0">
           <header className="border-b border-slate-200 bg-white">
-            <div className="flex min-h-20 flex-wrap items-center justify-between gap-3 px-4 py-4 lg:flex-nowrap lg:px-7">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 lg:hidden">
+            <div
+              className={cn(
+                "flex min-h-20 flex-wrap items-center justify-between gap-3 px-4 py-4 lg:flex-nowrap lg:px-7",
+                dashboard.hideHeaderContent && "lg:min-h-16 lg:justify-end",
+              )}
+            >
+              {dashboard.hideHeaderContent ? (
+                <Link to={home} className="flex items-center gap-2 lg:hidden">
                   <img src={subzLogo} alt="SUB-Z" className="h-7 w-auto" />
+                </Link>
+              ) : (
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 lg:hidden">
+                    <img src={subzLogo} alt="SUB-Z" className="h-7 w-auto" />
+                  </div>
+                  <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950 lg:mt-0">
+                    {dashboard.title}
+                  </h1>
+                  <p className="mt-1 text-sm text-slate-500">{dashboard.subtitle}</p>
                 </div>
-                <h1 className="mt-2 text-2xl font-semibold tracking-normal text-slate-950 lg:mt-0">
-                  {dashboard.title}
-                </h1>
-                <p className="mt-1 text-sm text-slate-500">{dashboard.subtitle}</p>
-              </div>
+              )}
 
-              <div className="flex w-full flex-wrap items-center gap-3 lg:w-auto lg:flex-nowrap">
-                {dashboard.search && (
+              <div
+                className={cn(
+                  "flex flex-wrap items-center gap-3 lg:w-auto lg:flex-nowrap",
+                  dashboard.hideHeaderContent ? "w-auto" : "w-full",
+                )}
+              >
+                {dashboard.search && !dashboard.hideHeaderContent && (
                   <label className="relative min-w-0 flex-1 lg:w-[25rem] lg:flex-none">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input

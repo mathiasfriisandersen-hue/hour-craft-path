@@ -58,17 +58,14 @@ function WorkerOverview() {
       dashboard={{
         title: "Vikaroversigt",
         subtitle: "Overblik over aktive, ledige og inaktive vikarer.",
-        search: {
-          value: search,
-          onChange: setSearch,
-          placeholder: "Søg efter vikar, virksomhed, overenskomst...",
-        },
+        hideHeaderContent: true,
       }}
     >
       <WorkerOverviewContent
         role="admin"
         showBackLink
         dashboardShell
+        embeddedHeader
         searchQuery={search}
         onSearchQueryChange={setSearch}
       />
@@ -83,6 +80,7 @@ export function WorkerOverviewContent({
   showBackLink = false,
   backHref = "/admin",
   dashboardShell = false,
+  embeddedHeader = false,
   searchQuery,
   onSearchQueryChange,
 }: {
@@ -90,6 +88,7 @@ export function WorkerOverviewContent({
   showBackLink?: boolean;
   backHref?: string;
   dashboardShell?: boolean;
+  embeddedHeader?: boolean;
   searchQuery?: string;
   onSearchQueryChange?: (value: string) => void;
 }) {
@@ -203,6 +202,14 @@ export function WorkerOverviewContent({
       )}
 
       <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {embeddedHeader && (
+          <div className="border-b border-slate-200 px-5 py-5">
+            <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Vikaroversigt</h1>
+            <p className="mt-1 text-sm text-slate-500">
+              Overblik over aktive, ledige og inaktive vikarer.
+            </p>
+          </div>
+        )}
         <div className="border-b border-slate-200 px-5 pt-5">
           <div className="flex flex-wrap items-center gap-2">
             <WorkerTabButton
