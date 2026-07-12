@@ -21,6 +21,7 @@ import {
   calculateTimesheet,
   formatDkk,
   formatWeekRange,
+  getRule,
   listCompanies,
   overtimeHours,
   totalHours,
@@ -78,6 +79,8 @@ type PayrollAllowanceRow = {
   label: string;
   hours: number;
   amount: number;
+  quantityLabel?: string;
+  amountLabel?: string;
 };
 
 const SELLER = {
@@ -1168,13 +1171,7 @@ function payrollFinancials(row: WorkContext) {
   const hourlyWage = payrollHourlyWage(row);
   const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
   const basePayrollAmount = row.approvedHours * hourlyWageWithSocial;
-  const payrollOvertime = Math.max(calculation.overtime, overtimeHours(row.timesheet.days));
-  const allowanceRows = allowanceRowsForCalculation(calculation, { overtime: payrollOvertime }).map(
-    (item) => ({
-      ...item,
-      amount: item.hours * hourlyWageWithSocial,
-    }),
-  );
+  const allowanceRows = payrollAllowanceRowsForCalculation(row, calculation, hourlyWageWithSocial);
   const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
@@ -1192,6 +1189,44 @@ function payrollFinancials(row: WorkContext) {
   };
 }
 
+function payrollAllowanceRowsForCalculation(
+  row: WorkContext,
+  calculation: ReturnType<typeof calculateTimesheet>,
+  hourlyWageWithSocial: number,
+): PayrollAllowanceRow[] {
+  const normalWeekHours = getRule(row.timesheet.selectedAgreementId)?.normalWeekHours;
+  const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
+  const payrollOvertime = Math.max(calculation.overtime, overtimeHours(row.timesheet.days, weeklyLimit));
+  const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
+    overtime: payrollOvertime,
+  }).map((item) => ({
+    ...item,
+    amount: item.hours * hourlyWageWithSocial,
+  }));
+
+  if (calculation.delayedMealBreakDays > 0) {
+    rows.push({
+      label: "Udsat spisepause",
+      hours: 0,
+      quantityLabel: `${calculation.delayedMealBreakDays} ${
+        calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
+      }`,
+      amount: calculation.delayedMealBreakAmount,
+    });
+  }
+
+  if (calculation.localAgreement > 0) {
+    rows.push({
+      label: "Lokalaftale",
+      hours: calculation.localAgreement,
+      amount: 0,
+      amountLabel: "Kræver manuel sats",
+    });
+  }
+
+  return rows;
+}
+
 function allowanceRowsForCalculation(
   calculation: ReturnType<typeof calculateTimesheet>,
   overrides: { overtime?: number } = {},
@@ -1207,6 +1242,18 @@ function allowanceRowsForCalculation(
     { label: "Nattillæg", hours: calculation.night },
     { label: "Skifteholdstillæg", hours: calculation.shift },
   ].filter((item) => item.hours > 0);
+}
+
+function allowanceQuantityLabel(item: PayrollAllowanceRow) {
+  return item.quantityLabel ?? `${item.hours.toFixed(2)} t`;
+}
+
+function allowanceAmountLabel(item: PayrollAllowanceRow) {
+  return item.amountLabel ?? formatDkk(item.amount);
+}
+
+function allowancePreviewValue(item: PayrollAllowanceRow) {
+  return `${allowanceQuantityLabel(item)} / ${allowanceAmountLabel(item)}`;
 }
 
 function PayrollPreview({
@@ -1285,7 +1332,7 @@ function PayrollPreview({
           ) : (
             <dl className="grid gap-2">
               {financials.allowanceRows.map((item) => (
-                <PreviewRow key={item.label} label={item.label} value={formatDkk(item.amount)} />
+                <PreviewRow key={item.label} label={item.label} value={allowancePreviewValue(item)} />
               ))}
             </dl>
           )}
@@ -1651,8 +1698,8 @@ async function downloadPayrollPdf(row: WorkContext) {
   } else {
     financials.allowanceRows.forEach((item) => {
       doc.text(item.label, 20, cursorY);
-      doc.text(`${item.hours.toFixed(2)} t`, 145, cursorY, { align: "right" });
-      doc.text(formatDkk(item.amount), 190, cursorY, { align: "right" });
+      doc.text(allowanceQuantityLabel(item), 145, cursorY, { align: "right" });
+      doc.text(allowanceAmountLabel(item), 190, cursorY, { align: "right" });
       cursorY += 8;
     });
   }
