@@ -1210,15 +1210,20 @@ function payrollAllowanceRowsForCalculation(
   const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
     overtime: payrollOvertime,
   }).map((item) => {
-    const rate = allowanceRateForRule(validationReport, item.ruleKeys);
-    const amount = rate ? item.hours * rate : 0;
+    const overtimeRatePlan = item.ruleKeys?.includes("overtime")
+      ? overtimeAllowanceRatePlan(row, validationReport, item.hours)
+      : undefined;
+    const rate = overtimeRatePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
+    const amount = overtimeRatePlan?.amount ?? (rate ? item.hours * rate : 0);
     return {
       ...item,
       amount,
       hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
-      amountLabel: rate
-        ? `${formatDkk(rate)}/t = ${formatDkk(amount)}`
-        : allowanceRateStatusLabel(validationReport, item.ruleKeys),
+      amountLabel:
+        overtimeRatePlan?.label ??
+        (rate
+          ? `${formatDkk(rate)}/t = ${formatDkk(amount)}`
+          : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
     };
   });
 
@@ -1244,6 +1249,88 @@ function payrollAllowanceRowsForCalculation(
   }
 
   return rows;
+}
+
+type OvertimeRateTier = {
+  label: string;
+  hours: number;
+  rate: number;
+};
+
+type AppliedOvertimeRateTier = OvertimeRateTier & {
+  hours: number;
+};
+
+function overtimeAllowanceRatePlan(
+  row: WorkContext,
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+  hours: number,
+) {
+  if (!validationReport?.validatedForCalculation || hours <= 0) return undefined;
+  const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
+  const tiers = overtimeRateTiersForDate(overtimeRule?.possibleRates ?? [], row.payrollPeriodEnd);
+  if (tiers.length < 3) return undefined;
+
+  const appliedTiers = allocateOvertimeHoursToTiers(hours, tiers);
+  if (!appliedTiers.length) return undefined;
+
+  const amount = appliedTiers.reduce((sum, tier) => sum + tier.hours * tier.rate, 0);
+  return {
+    amount,
+    label: `${appliedTiers
+      .map((tier) => `${tier.label}: ${tier.hours.toFixed(2)} t x ${formatDkk(tier.rate)}/t`)
+      .join(" + ")} = ${formatDkk(amount)}`,
+  };
+}
+
+function overtimeRateTiersForDate(possibleRates: string[], isoDate: string): OvertimeRateTier[] {
+  const tierMatchers: Array<{ label: string; pattern: RegExp; hours: number }> = [
+    { label: "1.-2. klokketime", pattern: /første(?:\/|\s+og\s+)anden/i, hours: 2 },
+    { label: "3.-4. klokketime", pattern: /tredje(?:\/|\s+og\s+)fjerde/i, hours: 2 },
+    { label: "5.+ klokketime", pattern: /femte/i, hours: Number.POSITIVE_INFINITY },
+  ];
+  return tierMatchers.flatMap((tier) => {
+    const line = possibleRates.find((rateText) => tier.pattern.test(rateText));
+    const rate = line ? rateForDate(line, isoDate) : undefined;
+    return rate ? [{ label: tier.label, hours: tier.hours, rate }] : [];
+  });
+}
+
+function allocateOvertimeHoursToTiers(
+  hours: number,
+  tiers: OvertimeRateTier[],
+): AppliedOvertimeRateTier[] {
+  let remainingHours = hours;
+  return tiers.flatMap((tier) => {
+    if (remainingHours <= 0) return [];
+    const tierHours = Math.min(remainingHours, tier.hours);
+    remainingHours -= tierHours;
+    return [{ ...tier, hours: tierHours }];
+  });
+}
+
+function rateForDate(rateText: string, isoDate: string) {
+  const target = new Date(`${isoDate}T12:00:00`).getTime();
+  const matches = [
+    ...rateText.matchAll(
+      /(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(?:kr\.\s*)?(\d+(?:,\d+)?)(?:\s*kr\.)?/gi,
+    ),
+  ];
+  const rates = matches
+    .map((match) => {
+      const [, day, month, year, amount] = match;
+      const effectiveDate = new Date(
+        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T12:00:00`,
+      ).getTime();
+      return {
+        effectiveDate,
+        amount: Number(amount.replace(",", ".")),
+      };
+    })
+    .filter((item) => Number.isFinite(item.effectiveDate) && Number.isFinite(item.amount))
+    .sort((a, b) => a.effectiveDate - b.effectiveDate);
+  const currentRate = rates.filter((item) => item.effectiveDate <= target).at(-1) ?? rates[0];
+  return currentRate?.amount;
 }
 
 function allowanceRateForRule(
