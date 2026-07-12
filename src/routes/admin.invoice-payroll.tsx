@@ -371,76 +371,86 @@ const archivedInvoiceRows = filteredRows
               actionLabel="Se alle fakturaer"
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
-              <StatusColumn
-                title="Skal håndteres nu"
-                count={invoiceNowRows.length}
-                tone="red"
-                empty="Ingen fakturaer kræver handling lige nu."
-              >
-                {invoiceNowRows.map((row) => (
-                  <InvoiceCaseCard
-                    key={`invoice-now-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-                title="Skal snart håndteres"
-                count={invoiceSoonRows.length}
-                tone="orange"
-                empty="Ingen fakturaer skal snart håndteres."
-              >
-                {invoiceSoonRows.map((row) => (
-                  <InvoiceCaseCard
-                    key={`invoice-soon-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-                title="Kræver ikke handling endnu"
-                count={invoiceWaitingRows.length}
-                tone="green"
-                empty="Ingen fakturaer afventer senere håndtering."
-              >
-                {invoiceWaitingRows.map((row) => (
-                  <InvoiceCaseCard
-                    key={`invoice-waiting-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-                title="Faktura sendt"
-                count={invoiceSentRows.length}
-                tone="green"
-                empty="Ingen fakturaer er markeret sendt."
-              >
-                {invoiceSentRows.map((row) => (
-                  <InvoiceCaseCard
-                    key={`invoice-sent-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-  title="Arkiverede dokumenter"
-  count={archivedInvoiceRows.length}
-  tone="slate"
-  empty="Ingen arkiverede fakturaer."
->
-  {archivedInvoiceRows.map((row) => (
-    <InvoiceCaseCard
-      key={`invoice-archived-${row.timesheet.id}`}
-      row={row}
-      onPreview={() => setPreview(row)}
-    />
-  ))}
-</StatusColumn>
+              {statusFilterMatches(statusFilter, "invoice-now") && (
+                <StatusColumn
+                  title="Skal håndteres nu"
+                  count={invoiceNowRows.length}
+                  tone="red"
+                  empty="Ingen fakturaer kræver handling lige nu."
+                >
+                  {invoiceNowRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-now-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "invoice-soon") && (
+                <StatusColumn
+                  title="Skal snart håndteres"
+                  count={invoiceSoonRows.length}
+                  tone="orange"
+                  empty="Ingen fakturaer skal snart håndteres."
+                >
+                  {invoiceSoonRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-soon-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "invoice-waiting") && (
+                <StatusColumn
+                  title="Kræver ikke handling endnu"
+                  count={invoiceWaitingRows.length}
+                  tone="green"
+                  empty="Ingen fakturaer afventer senere håndtering."
+                >
+                  {invoiceWaitingRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-waiting-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "invoice-sent") && (
+                <StatusColumn
+                  title="Faktura sendt"
+                  count={invoiceSentRows.length}
+                  tone="green"
+                  empty="Ingen fakturaer er markeret sendt."
+                >
+                  {invoiceSentRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-sent-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilter === "all" && (
+                <StatusColumn
+                  title="Arkiverede dokumenter"
+                  count={archivedInvoiceRows.length}
+                  tone="slate"
+                  empty="Ingen arkiverede fakturaer."
+                >
+                  {archivedInvoiceRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-archived-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
             </div>
           </section>
         ) : view === "payroll" ? (
@@ -451,48 +461,54 @@ const archivedInvoiceRows = filteredRows
               actionLabel="Se alle lønoplysninger"
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
-              <StatusColumn
-                title="Klar til bogholderi"
-                count={payrollReadyRows.length}
-                tone="orange"
-                empty="Ingen lønsager er klar til bogholderi."
-              >
-                {payrollReadyRows.map((row) => (
-                  <PayrollCaseCard
-                    key={`payroll-ready-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPayrollPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-                title="Kræver ikke handling endnu"
-                count={payrollWaitingRows.length}
-                tone="slate"
-                empty="Ingen lønsager afventer."
-              >
-                {payrollWaitingRows.map((row) => (
-                  <PayrollCaseCard
-                    key={`payroll-waiting-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPayrollPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
-              <StatusColumn
-                title="Sendt til bogholderi"
-                count={payrollSentRows.length}
-                tone="green"
-                empty="Ingen lønsager er markeret sendt."
-              >
-                {payrollSentRows.map((row) => (
-                  <PayrollCaseCard
-                    key={`payroll-sent-${row.timesheet.id}`}
-                    row={row}
-                    onPreview={() => setPayrollPreview(row)}
-                  />
-                ))}
-              </StatusColumn>
+              {statusFilterMatches(statusFilter, "payroll-ready") && (
+                <StatusColumn
+                  title="Klar til bogholderi"
+                  count={payrollReadyRows.length}
+                  tone="orange"
+                  empty="Ingen lønsager er klar til bogholderi."
+                >
+                  {payrollReadyRows.map((row) => (
+                    <PayrollCaseCard
+                      key={`payroll-ready-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPayrollPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "payroll-waiting") && (
+                <StatusColumn
+                  title="Kræver ikke handling endnu"
+                  count={payrollWaitingRows.length}
+                  tone="slate"
+                  empty="Ingen lønsager afventer."
+                >
+                  {payrollWaitingRows.map((row) => (
+                    <PayrollCaseCard
+                      key={`payroll-waiting-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPayrollPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "payroll-sent") && (
+                <StatusColumn
+                  title="Sendt til bogholderi"
+                  count={payrollSentRows.length}
+                  tone="green"
+                  empty="Ingen lønsager er markeret sendt."
+                >
+                  {payrollSentRows.map((row) => (
+                    <PayrollCaseCard
+                      key={`payroll-sent-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPayrollPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
             </div>
           </section>
                 ) : (
