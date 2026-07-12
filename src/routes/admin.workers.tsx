@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronRight, RotateCcw, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, LogOut, RotateCcw, Search } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Role } from "@/lib/auth";
+import { ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import { cn } from "@/lib/utils";
 import {
@@ -100,6 +100,9 @@ export function WorkerOverviewContent({
   const [companyFilter, setCompanyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<WorkerTab | "all">("all");
   const [selectedWorkerKey, setSelectedWorkerKey] = useState("");
+  const [profileOpen, setProfileOpen] = useState(false);
+  const { role: activeRole, logout } = useAuth();
+  const profileRole = activeRole ?? role;
   const searchValue = searchQuery ?? localSearch;
   const updateSearch = onSearchQueryChange ?? setLocalSearch;
 
@@ -203,11 +206,49 @@ export function WorkerOverviewContent({
 
       <section className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {embeddedHeader && (
-          <div className="border-b border-slate-200 px-5 py-5">
-            <h1 className="text-2xl font-semibold tracking-normal text-slate-950">Vikaroversigt</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Overblik over aktive, ledige og inaktive vikarer.
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-5">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-semibold tracking-normal text-slate-950">
+                Vikaroversigt
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Overblik over aktive, ledige og inaktive vikarer.
+              </p>
+            </div>
+            <div className="relative flex shrink-0 items-center gap-3">
+              <div className="grid h-10 w-10 place-items-center rounded-full bg-[#164a82] text-sm font-semibold text-white">
+                {ROLE_LABEL[profileRole].slice(0, 1)}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-slate-950">
+                  {ROLE_LABEL[profileRole]}
+                </div>
+                <div className="text-xs text-slate-500">
+                  {workerOverviewRoleSubtitle(profileRole)}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setProfileOpen((open) => !open)}
+                className="rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-expanded={profileOpen}
+                aria-label="Åbn profilmenu"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </button>
+              {profileOpen && (
+                <div className="absolute right-0 top-12 z-30 min-w-36 rounded-lg border border-slate-200 bg-white p-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Log ud
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
         <div className="border-b border-slate-200 px-5 pt-5">
@@ -532,6 +573,13 @@ function workerStatusLabel(status: WorkerTab): string {
   if (status === "working") return "I arbejde";
   if (status === "inactive") return "Inaktiv";
   return "Ledig";
+}
+
+function workerOverviewRoleSubtitle(role: Role): string {
+  if (role === "admin") return "Administrator";
+  if (role === "vikar") return "Vikaradgang";
+  if (role === "kontaktperson") return "Kontaktperson";
+  return "Brugeradgang";
 }
 
 function activeTabLabel(tab: WorkerTab): string {
