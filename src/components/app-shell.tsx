@@ -102,15 +102,15 @@ export function AppShell({
     return (
       <div
         className={cn(
-          "min-h-screen text-slate-950 lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]",
+          "min-h-screen text-slate-950 lg:grid lg:grid-cols-[max-content_minmax(0,1fr)]",
           role === "admin" ? "bg-white" : "bg-[#f5f7fb]",
         )}
       >
         <aside
-          style={{ marginRight: "3mm", width: "auto" }}
+          style={{ paddingLeft: "1mm", paddingRight: "3mm", width: "max-content" }}
           className="hidden min-h-screen flex-col bg-[#071629] text-white shadow-2xl lg:flex"
         >
-          <Link to={home} className="flex h-20 items-center gap-3 px-5">
+          <Link to={home} className="flex h-20 items-center gap-3">
             <img src={subzLogo} alt="SUB-Z" className="h-8 w-auto" />
           </Link>
 
