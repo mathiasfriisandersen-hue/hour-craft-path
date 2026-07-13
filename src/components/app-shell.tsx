@@ -107,7 +107,7 @@ export function AppShell({
         )}
       >
         <aside
-          style={{ paddingLeft: "2mm", paddingRight: "3mm" }}
+          style={{ marginLeft: "2mm", marginRight: "3mm", width: "auto" }}
           className="hidden min-h-screen flex-col bg-[#071629] text-white shadow-2xl lg:flex"
         >
           <Link to={home} className="flex h-20 items-center gap-3 px-5">
