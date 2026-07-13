@@ -1416,19 +1416,24 @@ function payrollAllowanceRowsForCalculation(
     const overtimeRatePlan = item.ruleKeys?.includes("overtime")
       ? overtimeAllowanceRatePlan(row, validationReport, item.hours, hourlyWage)
       : undefined;
-    const rate = overtimeRatePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
+    const eveningRatePlan =
+      !overtimeRatePlan && item.ruleKeys?.includes("evening_allowance")
+        ? eveningAllowanceRatePlan(validationReport, item.hours, row.payrollPeriodEnd)
+        : undefined;
+    const ratePlan = overtimeRatePlan ?? eveningRatePlan;
+    const rate = ratePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
     const amount =
-      overtimeRatePlan?.amount ?? (rate ? item.hours * rate * (1 + PAYROLL_SOCIAL_COST_RATE) : 0);
+      ratePlan?.amount ?? (rate ? item.hours * rate * (1 + PAYROLL_SOCIAL_COST_RATE) : 0);
     return {
       ...item,
       amount,
       hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
       amountLabel:
-        overtimeRatePlan?.label ??
+        ratePlan?.label ??
         (rate
           ? `${formatDkk(rate)}/t + sociale omkostninger = ${formatDkk(amount)}`
           : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
-      breakdown: overtimeRatePlan?.breakdown,
+      breakdown: ratePlan?.breakdown,
     };
   });
 
@@ -1503,6 +1508,36 @@ function overtimeAllowanceRatePlan(
         )}`,
       })),
       { label: "Før sociale omkostninger", value: formatDkk(overtimePayrollAmount) },
+      { label: "Inkl. sociale omkostninger", value: formatDkk(amount) },
+    ],
+  };
+}
+
+function eveningAllowanceRatePlan(
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+  hours: number,
+  periodEnd: string,
+) {
+  if (!validationReport?.validatedForCalculation || hours <= 0) return undefined;
+  const eveningRule = validationReport.rules.find((rule) => rule.ruleKey === "evening_allowance");
+  const rateLine =
+    eveningRule?.possibleRates.find((rateText) => /till[æa]g\s*1|forskudt\s+tid/i.test(rateText)) ??
+    eveningRule?.possibleRates[0];
+  const rate = rateLine ? rateForDate(rateLine, periodEnd) : undefined;
+  if (!rate) return undefined;
+
+  const amountBeforeSocial = hours * rate;
+  const amount = amountBeforeSocial * (1 + PAYROLL_SOCIAL_COST_RATE);
+  return {
+    amount,
+    label: formatDkk(amount),
+    breakdown: [
+      { label: "Timer", value: `${hours.toFixed(2)} t` },
+      {
+        label: "Aftentillæg",
+        value: `${hours.toFixed(2)} t x ${formatDkk(rate)}/t = ${formatDkk(amountBeforeSocial)}`,
+      },
+      { label: "Før sociale omkostninger", value: formatDkk(amountBeforeSocial) },
       { label: "Inkl. sociale omkostninger", value: formatDkk(amount) },
     ],
   };
