@@ -1108,6 +1108,20 @@ function formatMultiplier(row: WorkContext) {
   return "Ikke sat";
 }
 
+function invoiceLineUnitPrice(row: WorkContext, item?: PayrollAllowanceRow) {
+  return item?.unitPrice ?? row.billingRate;
+}
+
+function invoiceLineHourlyWage(row: WorkContext, item?: PayrollAllowanceRow) {
+  const unitPrice = invoiceLineUnitPrice(row, item);
+  if (unitPrice > 0 && row.billingMultiplier > 0) return unitPrice / row.billingMultiplier;
+  return row.project?.billingHourlyWage ?? 0;
+}
+
+function invoiceLineFactor(row: WorkContext) {
+  return row.billingMultiplier > 0 ? formatDecimal(row.billingMultiplier) : "Ikke sat";
+}
+
 function invoiceDateForTimesheet(weekStart: string): string {
   return addDaysToISODate(weekStart, 8);
 }
@@ -1910,12 +1924,14 @@ function InvoicePreview({
             />
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[620px] border-collapse">
+            <table className="w-full min-w-[860px] border-collapse">
               <thead className="bg-muted/50 text-left text-muted-foreground">
                 <tr>
                   <th className="border-b px-3 py-2 font-medium">Beskrivelse</th>
                   <th className="border-b px-3 py-2 text-right font-medium">Antal timer</th>
-                  <th className="border-b px-3 py-2 text-right font-medium">Enhedspris</th>
+                  <th className="border-b px-3 py-2 text-right font-medium">Timeløn</th>
+                  <th className="border-b px-3 py-2 text-right font-medium">Faktor</th>
+                  <th className="border-b px-3 py-2 text-right font-medium">Totalpris</th>
                   <th className="border-b px-3 py-2 text-right font-medium">Beløb ekskl. moms</th>
                 </tr>
               </thead>
@@ -1925,7 +1941,13 @@ function InvoicePreview({
                   <td className="border-b px-3 py-3 text-right">
                     {row.invoiceBaseHours.toFixed(2)} t
                   </td>
-                  <td className="border-b px-3 py-3 text-right">{formatDkk(row.billingRate)}</td>
+                  <td className="border-b px-3 py-3 text-right">
+                    {formatDkk(invoiceLineHourlyWage(row))}
+                  </td>
+                  <td className="border-b px-3 py-3 text-right">{invoiceLineFactor(row)}</td>
+                  <td className="border-b px-3 py-3 text-right">
+                    {formatDkk(invoiceLineUnitPrice(row))}
+                  </td>
                   <td className="border-b px-3 py-3 text-right">
                     {formatDkk(row.invoiceBaseExVat)}
                   </td>
@@ -1935,7 +1957,11 @@ function InvoicePreview({
                     <td className="border-b px-3 py-3">{item.label}</td>
                     <td className="border-b px-3 py-3 text-right">{item.hours.toFixed(2)} t</td>
                     <td className="border-b px-3 py-3 text-right">
-                      {formatDkk(item.unitPrice ?? row.billingRate)}
+                      {formatDkk(invoiceLineHourlyWage(row, item))}
+                    </td>
+                    <td className="border-b px-3 py-3 text-right">{invoiceLineFactor(row)}</td>
+                    <td className="border-b px-3 py-3 text-right">
+                      {formatDkk(invoiceLineUnitPrice(row, item))}
                     </td>
                     <td className="border-b px-3 py-3 text-right">{formatDkk(item.amount)}</td>
                   </tr>
@@ -2039,25 +2065,33 @@ async function downloadInvoicePdf(row: WorkContext) {
   doc.rect(16, tableTop, 178, invoiceTableHeight);
   doc.line(16, tableTop + 10, 194, tableTop + 10);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.text("Beskrivelse", 20, tableTop + 7);
-  doc.text("Antal timer", 118, tableTop + 7, { align: "right" });
-  doc.text("Enhedspris", 153, tableTop + 7, { align: "right" });
-  doc.text("Beløb ekskl. moms", 190, tableTop + 7, { align: "right" });
+  doc.text("Timer", 92, tableTop + 7, { align: "right" });
+  doc.text("Timeløn", 118, tableTop + 7, { align: "right" });
+  doc.text("Faktor", 138, tableTop + 7, { align: "right" });
+  doc.text("Totalpris", 163, tableTop + 7, { align: "right" });
+  doc.text("Beløb", 190, tableTop + 7, { align: "right" });
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setFontSize(8);
   doc.text(invoiceBaseLineLabel(row), 20, tableTop + 20);
-  doc.text(`${row.invoiceBaseHours.toFixed(2)} t`, 118, tableTop + 20, { align: "right" });
-  doc.text(formatDkk(row.billingRate), 153, tableTop + 20, { align: "right" });
+  doc.text(`${row.invoiceBaseHours.toFixed(2)} t`, 92, tableTop + 20, { align: "right" });
+  doc.text(formatDkk(invoiceLineHourlyWage(row)), 118, tableTop + 20, { align: "right" });
+  doc.text(invoiceLineFactor(row), 138, tableTop + 20, { align: "right" });
+  doc.text(formatDkk(invoiceLineUnitPrice(row)), 163, tableTop + 20, { align: "right" });
   doc.text(formatDkk(row.invoiceBaseExVat), 190, tableTop + 20, { align: "right" });
 
   let invoiceLineY = tableTop + 20;
   row.invoiceAllowanceRows.forEach((item) => {
     invoiceLineY += invoiceLineHeight;
     doc.text(item.label, 20, invoiceLineY);
-    doc.text(`${item.hours.toFixed(2)} t`, 118, invoiceLineY, { align: "right" });
-    doc.text(formatDkk(item.unitPrice ?? row.billingRate), 153, invoiceLineY, {
+    doc.text(`${item.hours.toFixed(2)} t`, 92, invoiceLineY, { align: "right" });
+    doc.text(formatDkk(invoiceLineHourlyWage(row, item)), 118, invoiceLineY, {
+      align: "right",
+    });
+    doc.text(invoiceLineFactor(row), 138, invoiceLineY, { align: "right" });
+    doc.text(formatDkk(invoiceLineUnitPrice(row, item)), 163, invoiceLineY, {
       align: "right",
     });
     doc.text(formatDkk(item.amount), 190, invoiceLineY, { align: "right" });
