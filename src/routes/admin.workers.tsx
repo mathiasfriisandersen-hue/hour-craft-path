@@ -815,7 +815,7 @@ function WorkerDetails({
                     {assignmentMessage}
                   </div>
                 )}
-                <div className="mt-3 max-h-60 space-y-2 overflow-y-auto">
+                <div className="mt-3 space-y-2">
                   {projectMatches.length === 0 ? (
                     <div className="text-xs text-slate-500">Ingen projekter matcher søgningen.</div>
                   ) : (
