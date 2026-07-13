@@ -100,11 +100,43 @@ const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
 };
 
+const PRIVACY_POLICY_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="index, follow" />
+    <title>Privacy Policy - Timesheet GPT</title>
+  </head>
+  <body>
+    <main>
+      <h1>Privacy Policy for Timesheet GPT</h1>
+      <p>Last updated: 13 July 2026</p>
+      <h2>What data the GPT may access</h2>
+      <p>The GPT may access information from the timesheet system when needed to answer a user request. This can include timesheet status, work dates, start and end times, break duration, submitted hours, worker names or worker codes, company or project names, contact person details, comments, approval status and relevant system configuration.</p>
+      <h2>How the data is used</h2>
+      <p>The data is used only to help with timesheet-related tasks, such as finding information, explaining a timesheet, checking status, preparing support answers and helping users understand the workflow. The GPT should not be used to make final payroll, legal or collective-agreement decisions without manual validation.</p>
+      <h2>Data sharing and sale</h2>
+      <p>The information is not sold. Data is only used for the timesheet support purpose described above and is not shared with third parties for advertising or resale.</p>
+      <h2>Contact</h2>
+      <p>Questions about this privacy policy or the Timesheet GPT can be sent to <a href="mailto:mathiasfriisandersen@gmail.com">mathiasfriisandersen@gmail.com</a>.</p>
+    </main>
+  </body>
+</html>`;
+
 const VALID_STATUSES = new Set(["draft", "sent", "approved", "rejected"]);
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const cors = corsHeaders(request, env);
+    const url = new URL(request.url);
+
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      url.pathname === "/privacy-timesheet-gpt.html"
+    ) {
+      return privacyPolicyResponse(request.method === "HEAD");
+    }
 
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
@@ -117,8 +149,6 @@ export default {
     if (!isAuthorized(request, env)) {
       return errorResponse("unauthorized", "Authorization header with Bearer token is required.", 401, cors);
     }
-
-    const url = new URL(request.url);
 
     try {
       if (request.method === "POST" && url.pathname === "/api/timesheets") {
@@ -155,6 +185,16 @@ export default {
     }
   },
 };
+
+function privacyPolicyResponse(headOnly = false): Response {
+  return new Response(headOnly ? null : PRIVACY_POLICY_HTML, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=600",
+    },
+  });
+}
 
 async function upsertTimesheet(request: Request, env: Env, cors: HeadersInit): Promise<Response> {
   const payload = await readJson(request);
