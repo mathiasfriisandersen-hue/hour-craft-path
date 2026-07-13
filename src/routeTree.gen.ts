@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as PrivacyTimesheetGptRouteImport } from './routes/privacy-timesheet-gpt'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as VikarIndexRouteImport } from './routes/vikar.index'
 import { Route as KontaktpersonIndexRouteImport } from './routes/kontaktperson.index'
@@ -39,11 +38,6 @@ import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
 import { Route as AdminUsersIdRouteImport } from './routes/admin.users.$id'
 
-const PrivacyTimesheetGptRoute = PrivacyTimesheetGptRouteImport.update({
-  id: '/privacy-timesheet-gpt',
-  path: '/privacy-timesheet-gpt',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -187,7 +181,6 @@ const AdminUsersIdRoute = AdminUsersIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/privacy-timesheet-gpt': typeof PrivacyTimesheetGptRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
@@ -218,7 +211,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/privacy-timesheet-gpt': typeof PrivacyTimesheetGptRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
@@ -250,7 +242,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/privacy-timesheet-gpt': typeof PrivacyTimesheetGptRoute
   '/admin/$id': typeof AdminIdRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
@@ -283,7 +274,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/privacy-timesheet-gpt'
     | '/admin/$id'
     | '/admin/calendar'
     | '/admin/companies'
@@ -314,7 +304,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/privacy-timesheet-gpt'
     | '/admin/$id'
     | '/admin/calendar'
     | '/admin/companies'
@@ -345,7 +334,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/privacy-timesheet-gpt'
     | '/admin/$id'
     | '/admin/calendar'
     | '/admin/companies'
@@ -377,7 +365,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  PrivacyTimesheetGptRoute: typeof PrivacyTimesheetGptRoute
   AdminIdRoute: typeof AdminIdRoute
   AdminCalendarRoute: typeof AdminCalendarRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
@@ -408,13 +395,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/privacy-timesheet-gpt': {
-      id: '/privacy-timesheet-gpt'
-      path: '/privacy-timesheet-gpt'
-      fullPath: '/privacy-timesheet-gpt'
-      preLoaderRoute: typeof PrivacyTimesheetGptRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -628,7 +608,6 @@ const AdminUsersRouteWithChildren = AdminUsersRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  PrivacyTimesheetGptRoute: PrivacyTimesheetGptRoute,
   AdminIdRoute: AdminIdRoute,
   AdminCalendarRoute: AdminCalendarRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
