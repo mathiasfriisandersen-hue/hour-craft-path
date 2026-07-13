@@ -52,7 +52,8 @@ type StatusFilter =
   | "invoice-sent"
   | "payroll-ready"
   | "payroll-waiting"
-  | "payroll-sent";
+  | "payroll-sent"
+  | "payroll-approved";
 
 type WorkContext = {
   timesheet: Timesheet;
@@ -119,6 +120,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "payroll-ready", label: "Klar til bogholderi" },
   { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
   { value: "payroll-sent", label: "Sendt til bogholderi" },
+  { value: "payroll-approved", label: "Løn godkendt i bogholderi" },
 ];
 
 function InvoicePayrollPage() {
@@ -215,19 +217,29 @@ const archivedInvoiceRows = filteredRows
       row.invoiceTone === "green",
   );
   const payrollSentRows = payrollRows.filter(
-    (row) => statusFilterMatches(statusFilter, "payroll-sent") && row.timesheet.payrollSentDate,
+    (row) =>
+      statusFilterMatches(statusFilter, "payroll-sent") &&
+      row.timesheet.payrollSentDate &&
+      !row.timesheet.payrollBookkeepingApprovedDate,
   );
   const payrollReadyRows = payrollRows.filter(
     (row) =>
       statusFilterMatches(statusFilter, "payroll-ready") &&
+      !row.timesheet.payrollBookkeepingApprovedDate &&
       !row.timesheet.payrollSentDate &&
       row.payrollTone === "red",
   );
   const payrollWaitingRows = payrollRows.filter(
     (row) =>
       statusFilterMatches(statusFilter, "payroll-waiting") &&
+      !row.timesheet.payrollBookkeepingApprovedDate &&
       !row.timesheet.payrollSentDate &&
       row.payrollTone !== "red",
+  );
+  const payrollApprovedRows = payrollRows.filter(
+    (row) =>
+      statusFilterMatches(statusFilter, "payroll-approved") &&
+      row.timesheet.payrollBookkeepingApprovedDate,
   );
   const visibleInvoiceCount =
     invoiceNowRows.length +
@@ -235,7 +247,10 @@ const archivedInvoiceRows = filteredRows
     invoiceWaitingRows.length +
     invoiceSentRows.length;
   const visiblePayrollCount =
-    payrollReadyRows.length + payrollWaitingRows.length + payrollSentRows.length;
+    payrollReadyRows.length +
+    payrollWaitingRows.length +
+    payrollSentRows.length +
+    payrollApprovedRows.length;
   const sentCount = invoiceSentRows.length + payrollSentRows.length;
   const actionCount = invoiceNowRows.length + payrollReadyRows.length;
   const activeFilterCount = [periodFilter, companyFilter, statusFilter].filter(
@@ -447,13 +462,13 @@ const archivedInvoiceRows = filteredRows
                   type="button"
                   size="sm"
                   className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                  onClick={() => setStatusFilter("payroll-sent")}
+                  onClick={() => setStatusFilter("payroll-approved")}
                 >
                   Løn godkendt i bogholderi
                 </Button>
               }
             />
-            <div className="grid gap-4 p-4 xl:grid-cols-3">
+            <div className="grid gap-4 p-4 xl:grid-cols-4">
               {statusFilterMatches(statusFilter, "payroll-ready") && (
                 <StatusColumn
                   title="Klar til bogholderi"
@@ -496,6 +511,22 @@ const archivedInvoiceRows = filteredRows
                   {payrollSentRows.map((row) => (
                     <PayrollCaseCard
                       key={`payroll-sent-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPayrollPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilterMatches(statusFilter, "payroll-approved") && (
+                <StatusColumn
+                  title="Løn godkendt i bogholderi"
+                  count={payrollApprovedRows.length}
+                  tone="green"
+                  empty="Ingen lønsager er godkendt i bogholderi."
+                >
+                  {payrollApprovedRows.map((row) => (
+                    <PayrollCaseCard
+                      key={`payroll-approved-${row.timesheet.id}`}
                       row={row}
                       onPreview={() => setPayrollPreview(row)}
                     />
@@ -924,15 +955,15 @@ function toneTextClass(tone: DashboardTone): string {
 
 function updateTimesheetDate(
   timesheet: Timesheet,
-  field: "invoiceSentDate" | "payrollSentDate",
+  field: "invoiceSentDate" | "payrollSentDate" | "payrollBookkeepingApprovedDate",
   value: string,
 ) {
   upsert({ ...timesheet, [field]: value });
 }
 
 function approvePayrollInBookkeeping(row: WorkContext) {
-  if (row.timesheet.payrollSentDate) return;
-  updateTimesheetDate(row.timesheet, "payrollSentDate", localDateInputValue());
+  if (row.timesheet.payrollBookkeepingApprovedDate) return;
+  updateTimesheetDate(row.timesheet, "payrollBookkeepingApprovedDate", localDateInputValue());
 }
 
 function localDateInputValue(date = new Date()): string {
@@ -1633,6 +1664,8 @@ function PayrollPreview({
 }) {
   const sickness = sicknessBasis(row.timesheet, timesheets);
   const financials = payrollFinancials(row);
+  const canApproveInBookkeeping =
+    Boolean(row.timesheet.payrollSentDate) && !row.timesheet.payrollBookkeepingApprovedDate;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 p-4">
@@ -1651,7 +1684,7 @@ function PayrollPreview({
             <Button
               type="button"
               size="sm"
-              disabled={Boolean(row.timesheet.payrollSentDate)}
+              disabled={!canApproveInBookkeeping}
               className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
               onClick={onApprove}
             >

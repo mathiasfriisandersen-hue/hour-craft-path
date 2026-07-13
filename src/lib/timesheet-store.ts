@@ -211,6 +211,7 @@ export type Timesheet = {
   invoiceNumber?: string;
   invoiceSentDate?: string;
   payrollSentDate?: string;
+  payrollBookkeepingApprovedDate?: string;
   rejectionComment?: string;
   createdAt: string;
   updatedAt: string;
@@ -437,6 +438,7 @@ type StoredTimesheet = Omit<
   invoiceNumber?: string;
   invoiceSentDate?: string;
   payrollSentDate?: string;
+  payrollBookkeepingApprovedDate?: string;
   notes?: string;
 };
 
@@ -582,6 +584,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     invoiceNumber: value.invoiceNumber ?? "",
     invoiceSentDate: value.invoiceSentDate ?? "",
     payrollSentDate: value.payrollSentDate ?? "",
+    payrollBookkeepingApprovedDate: value.payrollBookkeepingApprovedDate ?? "",
     days,
     createdAt: value.createdAt ?? now,
     updatedAt: value.updatedAt ?? now,
