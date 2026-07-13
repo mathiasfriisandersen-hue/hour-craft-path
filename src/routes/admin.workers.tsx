@@ -638,7 +638,10 @@ function workerProjectMatches(
           attached,
           endedAttachment: hasWorker && projectEnded,
           projectEnded,
-          conflict: attached ? "" : workerProjectOverlap(company, project, worker, companies),
+          conflict:
+            attached || projectEnded
+              ? ""
+              : workerProjectOverlap(company, project, worker, companies, today),
         };
       }),
     )
@@ -664,6 +667,7 @@ function workerProjectOverlap(
   targetProject: CompanyProject,
   worker: KnownWorker,
   companies: Company[],
+  today: string,
 ): string {
   if (!targetProject.startDate || !targetProject.endDate) return "";
 
@@ -671,6 +675,7 @@ function workerProjectOverlap(
     for (const project of company.projects) {
       if (company.id === targetCompany.id && project.id === targetProject.id) continue;
       if (!projectHasWorker(project, worker)) continue;
+      if (isProjectEnded(project, today)) continue;
       if (projectPeriodsOverlap(targetProject, project)) {
         return `${company.name} / ${project.name || "projekt"}`;
       }
