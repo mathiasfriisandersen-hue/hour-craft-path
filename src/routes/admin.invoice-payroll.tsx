@@ -442,7 +442,16 @@ const archivedInvoiceRows = filteredRows
             <SectionHeader
               title="Lønoverblik"
               count={visiblePayrollCount}
-              actionLabel="Se alle lønoplysninger"
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                  onClick={() => setStatusFilter("payroll-sent")}
+                >
+                  Løn godkendt i bogholderi
+                </Button>
+              }
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "payroll-ready") && (
@@ -579,6 +588,10 @@ const archivedInvoiceRows = filteredRows
         <PayrollPreview
           row={payrollPreview}
           timesheets={timesheets}
+          onApprove={() => {
+            approvePayrollInBookkeeping(payrollPreview);
+            setPayrollPreview(null);
+          }}
           onClose={() => setPayrollPreview(null)}
         />
       )}
@@ -682,10 +695,12 @@ function SectionHeader({
   title,
   count,
   actionLabel,
+  action,
 }: {
   title: string;
   count: number;
-  actionLabel: string;
+  actionLabel?: string;
+  action?: ReactNode;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-4">
@@ -695,7 +710,7 @@ function SectionHeader({
           {count}
         </span>
       </div>
-      <span className="text-sm font-medium text-blue-600">{actionLabel}</span>
+      {action ?? <span className="text-sm font-medium text-blue-600">{actionLabel}</span>}
     </div>
   );
 }
@@ -913,6 +928,16 @@ function updateTimesheetDate(
   value: string,
 ) {
   upsert({ ...timesheet, [field]: value });
+}
+
+function approvePayrollInBookkeeping(row: WorkContext) {
+  if (row.timesheet.payrollSentDate) return;
+  updateTimesheetDate(row.timesheet, "payrollSentDate", localDateInputValue());
+}
+
+function localDateInputValue(date = new Date()): string {
+  const localTime = date.getTime() - date.getTimezoneOffset() * 60_000;
+  return new Date(localTime).toISOString().slice(0, 10);
 }
 
 function archiveInvoice(row: WorkContext) {
@@ -1598,10 +1623,12 @@ function PayrollAllowancePreviewItem({ item }: { item: PayrollAllowanceRow }) {
 function PayrollPreview({
   row,
   timesheets,
+  onApprove,
   onClose,
 }: {
   row: WorkContext;
   timesheets: Timesheet[];
+  onApprove: () => void;
   onClose: () => void;
 }) {
   const sickness = sicknessBasis(row.timesheet, timesheets);
@@ -1620,6 +1647,15 @@ function PayrollPreview({
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" onClick={() => downloadPayrollPdf(row)}>
               Hent løngrundlag som PDF
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={Boolean(row.timesheet.payrollSentDate)}
+              className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+              onClick={onApprove}
+            >
+              Godkendt i bogholderi
             </Button>
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Luk preview
