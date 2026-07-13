@@ -238,7 +238,7 @@ const archivedInvoiceRows = filteredRows
   );
   const payrollApprovedRows = payrollRows.filter(
     (row) =>
-      statusFilterMatches(statusFilter, "payroll-approved") &&
+      statusFilter === "payroll-approved" &&
       row.timesheet.payrollBookkeepingApprovedDate,
   );
   const visibleInvoiceCount =
@@ -250,7 +250,7 @@ const archivedInvoiceRows = filteredRows
     payrollReadyRows.length +
     payrollWaitingRows.length +
     payrollSentRows.length +
-    payrollApprovedRows.length;
+    (statusFilter === "payroll-approved" ? payrollApprovedRows.length : 0);
   const sentCount = invoiceSentRows.length + payrollSentRows.length;
   const actionCount = invoiceNowRows.length + payrollReadyRows.length;
   const activeFilterCount = [periodFilter, companyFilter, statusFilter].filter(
@@ -517,7 +517,7 @@ const archivedInvoiceRows = filteredRows
                   ))}
                 </StatusColumn>
               )}
-              {statusFilterMatches(statusFilter, "payroll-approved") && (
+              {statusFilter === "payroll-approved" && (
                 <StatusColumn
                   title="Løn godkendt i bogholderi"
                   count={payrollApprovedRows.length}
