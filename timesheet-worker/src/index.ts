@@ -154,7 +154,12 @@ export default {
     }
 
     if (!isAuthorized(request, env)) {
-      return errorResponse("unauthorized", "Authorization header with Bearer token is required.", 401, cors);
+      return errorResponse(
+        "unauthorized",
+        "Authorization header with Bearer token is required.",
+        401,
+        cors,
+      );
     }
 
     try {
@@ -289,7 +294,11 @@ async function listTimesheets(
   const timesheets = (result.results ?? [])
     .map((row) => JSON.parse(row.data) as Timesheet)
     .filter((timesheet) => !deletedIds.has(timesheet.id));
-  return jsonResponse({ ok: true, source: "d1", list: query.label, count: timesheets.length, timesheets }, 200, cors);
+  return jsonResponse(
+    { ok: true, source: "d1", list: query.label, count: timesheets.length, timesheets },
+    200,
+    cors,
+  );
 }
 
 async function listGptTimesheets(env: Env, cors: HeadersInit): Promise<Response> {
@@ -307,6 +316,8 @@ async function listGptTimesheets(env: Env, cors: HeadersInit): Promise<Response>
 }
 
 function toGptTimesheet(timesheet: Timesheet): Record<string, unknown> {
+  const registeredMinutes = totalMinutes(timesheet.days);
+
   return compactRecord({
     id: timesheet.id,
     ownerRole: timesheet.ownerRole,
@@ -330,6 +341,9 @@ function toGptTimesheet(timesheet: Timesheet): Record<string, unknown> {
     lokalaftale: (timesheet as Record<string, unknown>).lokalaftale,
     localAgreementId: (timesheet as Record<string, unknown>).localAgreementId,
     weekStart: timesheet.weekStart,
+    totalHours: round(registeredMinutes / 60),
+    totalMinutes: registeredMinutes,
+    registeredTime: formatRegisteredTime(registeredMinutes),
     days: (timesheet.days ?? []).map(toGptDay),
     notes: timesheet.notes,
     status: timesheet.status,
@@ -349,6 +363,8 @@ function toGptTimesheet(timesheet: Timesheet): Record<string, unknown> {
 
 function toGptDay(day: DayEntry): Record<string, unknown> {
   const source = day as Record<string, unknown>;
+  const registeredMinutes = dayMinutes(day);
+
   return compactRecord({
     start: day.start,
     end: day.end,
@@ -358,6 +374,9 @@ function toGptDay(day: DayEntry): Record<string, unknown> {
     pause2Start: day.pause2Start,
     pause2End: day.pause2End,
     absence: day.absence,
+    registeredHours: round(registeredMinutes / 60),
+    registeredMinutes,
+    registeredTime: formatRegisteredTime(registeredMinutes),
     taskType: source.taskType,
     comment: source.comment,
     shiftWork: source.shiftWork,
@@ -407,10 +426,14 @@ async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
       generatedAt: new Date().toISOString(),
       analytics: {
         totalTimesheets: timesheets.length,
-        totalHours: round(timesheets.reduce((sum, timesheet) => sum + totalHours(timesheet.days), 0)),
+        totalHours: round(
+          timesheets.reduce((sum, timesheet) => sum + totalHours(timesheet.days), 0),
+        ),
         sickLeaveTimesheets: timesheets.filter((timesheet) => hasSickLeave(timesheet.days)).length,
-        pendingTimesheets: timesheets.filter((timesheet) => isPendingApproval(timesheet, today)).length,
-        invoiceReadyTimesheets: invoiceOverview.now + invoiceOverview.soon + invoiceOverview.waiting,
+        pendingTimesheets: timesheets.filter((timesheet) => isPendingApproval(timesheet, today))
+          .length,
+        invoiceReadyTimesheets:
+          invoiceOverview.now + invoiceOverview.soon + invoiceOverview.waiting,
         payrollReadyTimesheets: payrollOverview.now,
         invoiceOverview,
         payrollOverview,
@@ -437,7 +460,10 @@ function statusCounts(timesheets: Timesheet[]): AnalyticsStatusRow[] {
 function buildInvoiceOverview(timesheets: Timesheet[]) {
   const overview = { soon: 0, now: 0, waiting: 0, done: 0 };
   for (const timesheet of timesheets) {
-    if (timesheet.invoiceSentDate || hasDoneStatus(timesheet, ["invoiceStatus", "invoiceState", "billingStatus"])) {
+    if (
+      timesheet.invoiceSentDate ||
+      hasDoneStatus(timesheet, ["invoiceStatus", "invoiceState", "billingStatus"])
+    ) {
       overview.done += 1;
       continue;
     }
@@ -453,7 +479,10 @@ function buildInvoiceOverview(timesheets: Timesheet[]) {
 function buildPayrollOverview(timesheets: Timesheet[]) {
   const overview = { soon: 0, now: 0, waiting: 0, done: 0 };
   for (const timesheet of timesheets) {
-    if (timesheet.payrollSentDate || hasDoneStatus(timesheet, ["payrollStatus", "payrollState", "bookkeepingStatus"])) {
+    if (
+      timesheet.payrollSentDate ||
+      hasDoneStatus(timesheet, ["payrollStatus", "payrollState", "bookkeepingStatus"])
+    ) {
       overview.done += 1;
       continue;
     }
@@ -483,10 +512,7 @@ function hasDoneStatus(timesheet: Timesheet, fields: string[]): boolean {
 }
 
 function isPendingApproval(timesheet: Timesheet, today: string): boolean {
-  return (
-    timesheet.status === "sent" &&
-    effectiveProjectEndDate(timesheet) < today
-  );
+  return timesheet.status === "sent" && effectiveProjectEndDate(timesheet) < today;
 }
 
 function effectiveProjectEndDate(timesheet: Timesheet): string {
@@ -680,18 +706,30 @@ function hasSickLeave(days: DayEntry[] | undefined): boolean {
 }
 
 function totalHours(days: DayEntry[] | undefined): number {
+  return round(totalMinutes(days) / 60);
+}
+
+function totalMinutes(days: DayEntry[] | undefined): number {
   if (!Array.isArray(days)) return 0;
-  return round(
-    days.reduce((sum, day) => {
-      if (!day || (day.absence && day.absence !== "none")) return sum;
-      const start = parseTime(day.start);
-      const end = parseTime(day.end);
-      if (start === undefined || end === undefined) return sum;
-      const endMinutes = end <= start ? end + 24 * 60 : end;
-      const pauseMinutes = pauseMinutesForDay(day);
-      return sum + Math.max(0, (endMinutes - start - pauseMinutes) / 60);
-    }, 0),
-  );
+  return days.reduce((sum, day) => sum + dayMinutes(day), 0);
+}
+
+function dayMinutes(day: DayEntry | undefined): number {
+  if (!day || (day.absence && day.absence !== "none")) return 0;
+  const start = parseTime(day.start);
+  const end = parseTime(day.end);
+  if (start === undefined || end === undefined) return 0;
+  const endMinutes = end <= start ? end + 24 * 60 : end;
+  return Math.max(0, Math.round(endMinutes - start - pauseMinutesForDay(day)));
+}
+
+function formatRegisteredTime(minutes: number): string {
+  const safeMinutes = Math.max(0, Math.round(minutes));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+  if (remainingMinutes === 0) return `${hours} t`;
+  if (hours === 0) return `${remainingMinutes} min`;
+  return `${hours} t ${remainingMinutes} min`;
 }
 
 function pauseMinutesForDay(day: DayEntry): number {
