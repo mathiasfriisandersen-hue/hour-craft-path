@@ -195,8 +195,9 @@ const archivedInvoiceRows = filteredRows
     );
   })
   .sort(comparePayrollRows);
+  const allInvoiceSentRows = invoiceRows.filter((row) => row.timesheet.invoiceSentDate);
   const invoiceSentRows = invoiceRows.filter(
-    (row) => statusFilterMatches(statusFilter, "invoice-sent") && row.timesheet.invoiceSentDate,
+    (row) => statusFilter === "invoice-sent" && row.timesheet.invoiceSentDate,
   );
   const invoiceNowRows = invoiceRows.filter(
     (row) =>
@@ -245,13 +246,15 @@ const archivedInvoiceRows = filteredRows
     invoiceNowRows.length +
     invoiceSoonRows.length +
     invoiceWaitingRows.length +
-    invoiceSentRows.length;
+    (statusFilter === "invoice-sent" ? invoiceSentRows.length : 0);
   const visiblePayrollCount =
     payrollReadyRows.length +
     payrollWaitingRows.length +
     payrollSentRows.length +
     (statusFilter === "payroll-approved" ? payrollApprovedRows.length : 0);
-  const sentCount = invoiceSentRows.length + payrollSentRows.length;
+  const sentCount =
+    (statusFilterMatches(statusFilter, "invoice-sent") ? allInvoiceSentRows.length : 0) +
+    payrollSentRows.length;
   const actionCount = invoiceNowRows.length + payrollReadyRows.length;
   const activeFilterCount = [periodFilter, companyFilter, statusFilter].filter(
     (value) => value !== "all",
@@ -383,7 +386,16 @@ const archivedInvoiceRows = filteredRows
             <SectionHeader
               title="Fakturaoverblik"
               count={visibleInvoiceCount}
-              actionLabel="Se alle fakturaer"
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                  onClick={() => setStatusFilter("invoice-sent")}
+                >
+                  Faktura sendt
+                </Button>
+              }
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "invoice-now") && (
@@ -434,7 +446,7 @@ const archivedInvoiceRows = filteredRows
                   ))}
                 </StatusColumn>
               )}
-              {statusFilterMatches(statusFilter, "invoice-sent") && (
+              {statusFilter === "invoice-sent" && (
                 <StatusColumn
                   title="Faktura sendt"
                   count={invoiceSentRows.length}
