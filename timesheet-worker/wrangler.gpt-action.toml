@@ -1,0 +1,12 @@
+name = "9f6995a0-hour-craft-timesheet-api"
+main = "src/index.ts"
+compatibility_date = "2026-07-07"
+
+[vars]
+ALLOWED_ORIGIN = "https://mathiasfriisandersen.dk,http://localhost:8081"
+
+[[d1_databases]]
+binding = "TIMESHEET_DB"
+database_name = "mathias_andersen"
+database_id = "2aa37479-6b01-4749-9ed1-38a5650c075f"
+migrations_dir = "migrations"

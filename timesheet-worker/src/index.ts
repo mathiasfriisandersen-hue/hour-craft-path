@@ -159,6 +159,10 @@ export default {
         return await listTimesheets(env, cors, allTimesheetsQuery());
       }
 
+      if (request.method === "GET" && url.pathname === "/api/gpt-timesheets") {
+        return await listGptTimesheets(env, cors);
+      }
+
       if (request.method === "GET" && url.pathname === "/api/timesheets/pending") {
         return await listTimesheets(env, cors, pendingTimesheetsQuery(todayIso()));
       }
@@ -276,6 +280,86 @@ async function listTimesheets(
     .all<TimesheetRow>();
   const timesheets = (result.results ?? []).map((row) => JSON.parse(row.data) as Timesheet);
   return jsonResponse({ ok: true, source: "d1", list: query.label, count: timesheets.length, timesheets }, 200, cors);
+}
+
+async function listGptTimesheets(env: Env, cors: HeadersInit): Promise<Response> {
+  const result = await env.TIMESHEET_DB.prepare(allTimesheetsQuery().sql).all<TimesheetRow>();
+  const timesheets = (result.results ?? [])
+    .map((row) => JSON.parse(row.data) as Timesheet)
+    .map(toGptTimesheet);
+  return jsonResponse(
+    { ok: true, source: "d1", list: "gpt-compact", count: timesheets.length, timesheets },
+    200,
+    cors,
+  );
+}
+
+function toGptTimesheet(timesheet: Timesheet): Record<string, unknown> {
+  return compactRecord({
+    id: timesheet.id,
+    ownerRole: timesheet.ownerRole,
+    vikar: timesheet.vikar,
+    vikarCode: timesheet.vikarCode,
+    workerLanguage: (timesheet as Record<string, unknown>).workerLanguage,
+    tradeSkills: (timesheet as Record<string, unknown>).tradeSkills,
+    competencies: (timesheet as Record<string, unknown>).competencies,
+    brugervirksomhed: timesheet.brugervirksomhed,
+    companyId: timesheet.companyId,
+    projectId: timesheet.projectId,
+    projectName: timesheet.projectName,
+    projectEndDate: timesheet.projectEndDate,
+    kontaktperson: timesheet.kontaktperson,
+    referenceNo: timesheet.referenceNo,
+    arbejdssted: timesheet.arbejdssted,
+    selectedAgreementId: timesheet.selectedAgreementId,
+    overenskomst: timesheet.overenskomst,
+    hourlyWage: timesheet.hourlyWage,
+    localAgreementApplies: (timesheet as Record<string, unknown>).localAgreementApplies,
+    lokalaftale: (timesheet as Record<string, unknown>).lokalaftale,
+    localAgreementId: (timesheet as Record<string, unknown>).localAgreementId,
+    weekStart: timesheet.weekStart,
+    days: (timesheet.days ?? []).map(toGptDay),
+    notes: timesheet.notes,
+    status: timesheet.status,
+    archived: timesheet.archived,
+    workerInactive: (timesheet as Record<string, unknown>).workerInactive,
+    workerConsentInactive: (timesheet as Record<string, unknown>).workerConsentInactive,
+    invoiceDueDate: (timesheet as Record<string, unknown>).invoiceDueDate,
+    payrollDeadline: (timesheet as Record<string, unknown>).payrollDeadline,
+    invoiceNumber: (timesheet as Record<string, unknown>).invoiceNumber,
+    invoiceSentDate: timesheet.invoiceSentDate,
+    payrollSentDate: timesheet.payrollSentDate,
+    rejectionComment: timesheet.rejectionComment,
+    createdAt: timesheet.createdAt,
+    updatedAt: timesheet.updatedAt,
+  });
+}
+
+function toGptDay(day: DayEntry): Record<string, unknown> {
+  const source = day as Record<string, unknown>;
+  return compactRecord({
+    start: day.start,
+    end: day.end,
+    pause: day.pause,
+    pauseStart: day.pauseStart,
+    pauseEnd: day.pauseEnd,
+    pause2Start: day.pause2Start,
+    pause2End: day.pause2End,
+    absence: day.absence,
+    taskType: source.taskType,
+    comment: source.comment,
+    shiftWork: source.shiftWork,
+  });
+}
+
+function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => {
+      if (value === undefined || value === null || value === "") return false;
+      if (Array.isArray(value) && value.length === 0) return false;
+      return true;
+    }),
+  );
 }
 
 async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
