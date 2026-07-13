@@ -1,7 +1,12 @@
 type Env = {
   TIMESHEET_DB: D1Database;
+  WORKER_INVITES?: KVNamespace;
   TIMESHEET_API_TOKEN?: string;
   ALLOWED_ORIGIN?: string;
+};
+
+type KVNamespace = {
+  get(key: string): Promise<string | null>;
 };
 
 type D1Database = {
@@ -99,6 +104,8 @@ type AnalyticsSummaryRow = {
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
 };
+
+const APP_STATE_KEY = "app-state-v1";
 
 const PRIVACY_POLICY_HTML = `<!doctype html>
 <html lang="en">
@@ -278,14 +285,19 @@ async function listTimesheets(
   const result = await env.TIMESHEET_DB.prepare(query.sql)
     .bind(...query.params)
     .all<TimesheetRow>();
-  const timesheets = (result.results ?? []).map((row) => JSON.parse(row.data) as Timesheet);
+  const deletedIds = await readDeletedTimesheetIds(env);
+  const timesheets = (result.results ?? [])
+    .map((row) => JSON.parse(row.data) as Timesheet)
+    .filter((timesheet) => !deletedIds.has(timesheet.id));
   return jsonResponse({ ok: true, source: "d1", list: query.label, count: timesheets.length, timesheets }, 200, cors);
 }
 
 async function listGptTimesheets(env: Env, cors: HeadersInit): Promise<Response> {
   const result = await env.TIMESHEET_DB.prepare(allTimesheetsQuery().sql).all<TimesheetRow>();
+  const deletedIds = await readDeletedTimesheetIds(env);
   const timesheets = (result.results ?? [])
     .map((row) => JSON.parse(row.data) as Timesheet)
+    .filter((timesheet) => !deletedIds.has(timesheet.id))
     .map(toGptTimesheet);
   return jsonResponse(
     { ok: true, source: "d1", list: "gpt-compact", count: timesheets.length, timesheets },
@@ -362,29 +374,31 @@ function compactRecord(record: Record<string, unknown>): Record<string, unknown>
   );
 }
 
-async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
-  const today = todayIso();
-  const summary = await env.TIMESHEET_DB.prepare(
-    `SELECT
-      COUNT(*) AS totalTimesheets,
-      COALESCE(SUM(total_hours), 0) AS totalHours,
-      SUM(CASE WHEN has_sick_leave = 1 THEN 1 ELSE 0 END) AS sickLeaveTimesheets,
-      SUM(CASE WHEN ${pendingSqlPredicate()} THEN 1 ELSE 0 END) AS pendingTimesheets,
-      SUM(CASE WHEN ${invoiceReadySqlPredicate()} THEN 1 ELSE 0 END) AS invoiceReadyTimesheets,
-      SUM(CASE WHEN ${payrollReadySqlPredicate()} THEN 1 ELSE 0 END) AS payrollReadyTimesheets
-    FROM timesheets
-    WHERE json_extract(data, '$.archived') IS NOT 1`,
-  )
-    .bind(today, today)
-    .first<AnalyticsSummaryRow>();
+async function readDeletedTimesheetIds(env: Env): Promise<Set<string>> {
+  const stored = await env.WORKER_INVITES?.get(APP_STATE_KEY).catch(() => null);
+  if (!stored) return new Set();
 
-  const statusRows = await env.TIMESHEET_DB.prepare(
-    `SELECT status, COUNT(*) AS count, COALESCE(SUM(total_hours), 0) AS totalHours
-    FROM timesheets
-    WHERE json_extract(data, '$.archived') IS NOT 1
-    GROUP BY status
-    ORDER BY status`,
-  ).all<AnalyticsStatusRow>();
+  try {
+    const state = JSON.parse(stored) as { deletedTimesheetIds?: unknown };
+    if (!Array.isArray(state.deletedTimesheetIds)) return new Set();
+    return new Set(
+      state.deletedTimesheetIds.filter((id): id is string => typeof id === "string" && id !== ""),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
+  const result = await env.TIMESHEET_DB.prepare(allTimesheetsQuery().sql).all<TimesheetRow>();
+  const deletedIds = await readDeletedTimesheetIds(env);
+  const today = todayIso();
+  const timesheets = (result.results ?? [])
+    .map((row) => JSON.parse(row.data) as Timesheet)
+    .filter((timesheet) => !deletedIds.has(timesheet.id) && timesheet.archived !== true);
+  const statusRows = statusCounts(timesheets);
+  const invoiceOverview = buildInvoiceOverview(timesheets);
+  const payrollOverview = buildPayrollOverview(timesheets);
 
   return jsonResponse(
     {
@@ -392,22 +406,139 @@ async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
       source: "d1",
       generatedAt: new Date().toISOString(),
       analytics: {
-        totalTimesheets: Number(summary?.totalTimesheets ?? 0),
-        totalHours: round(Number(summary?.totalHours ?? 0)),
-        sickLeaveTimesheets: Number(summary?.sickLeaveTimesheets ?? 0),
-        pendingTimesheets: Number(summary?.pendingTimesheets ?? 0),
-        invoiceReadyTimesheets: Number(summary?.invoiceReadyTimesheets ?? 0),
-        payrollReadyTimesheets: Number(summary?.payrollReadyTimesheets ?? 0),
-        statusCounts: (statusRows.results ?? []).map((row) => ({
-          status: row.status,
-          count: Number(row.count),
-          totalHours: round(Number(row.totalHours)),
-        })),
+        totalTimesheets: timesheets.length,
+        totalHours: round(timesheets.reduce((sum, timesheet) => sum + totalHours(timesheet.days), 0)),
+        sickLeaveTimesheets: timesheets.filter((timesheet) => hasSickLeave(timesheet.days)).length,
+        pendingTimesheets: timesheets.filter((timesheet) => isPendingApproval(timesheet, today)).length,
+        invoiceReadyTimesheets: invoiceOverview.now + invoiceOverview.soon + invoiceOverview.waiting,
+        payrollReadyTimesheets: payrollOverview.now,
+        invoiceOverview,
+        payrollOverview,
+        statusCounts: statusRows,
       },
     },
     200,
     cors,
   );
+}
+
+function statusCounts(timesheets: Timesheet[]): AnalyticsStatusRow[] {
+  const counts = new Map<Status, AnalyticsStatusRow>();
+  for (const timesheet of timesheets) {
+    const status = timesheet.status ?? "draft";
+    const existing = counts.get(status) ?? { status, count: 0, totalHours: 0 };
+    existing.count += 1;
+    existing.totalHours = round(existing.totalHours + totalHours(timesheet.days));
+    counts.set(status, existing);
+  }
+  return [...counts.values()].sort((a, b) => a.status.localeCompare(b.status));
+}
+
+function buildInvoiceOverview(timesheets: Timesheet[]) {
+  const overview = { soon: 0, now: 0, waiting: 0, done: 0 };
+  for (const timesheet of timesheets) {
+    if (timesheet.invoiceSentDate || hasDoneStatus(timesheet, ["invoiceStatus", "invoiceState", "billingStatus"])) {
+      overview.done += 1;
+      continue;
+    }
+
+    if (timesheet.status !== "approved" || totalHours(timesheet.days) <= 0) continue;
+
+    const tone = deadlineTone(invoiceDueDateForTimesheet(timesheet.weekStart ?? ""));
+    overview[tone] += 1;
+  }
+  return overview;
+}
+
+function buildPayrollOverview(timesheets: Timesheet[]) {
+  const overview = { soon: 0, now: 0, waiting: 0, done: 0 };
+  for (const timesheet of timesheets) {
+    if (timesheet.payrollSentDate || hasDoneStatus(timesheet, ["payrollStatus", "payrollState", "bookkeepingStatus"])) {
+      overview.done += 1;
+      continue;
+    }
+
+    if (
+      (timesheet.status !== "sent" && timesheet.status !== "approved") ||
+      totalHours(timesheet.days) <= 0
+    ) {
+      continue;
+    }
+
+    const period = payrollPeriodForWeek(timesheet.weekStart ?? "");
+    if (payrollReady(timesheet, period.end)) overview.now += 1;
+    else overview.soon += 1;
+  }
+  return overview;
+}
+
+function hasDoneStatus(timesheet: Timesheet, fields: string[]): boolean {
+  const record = timesheet as unknown as Record<string, unknown>;
+  return fields.some((field) => {
+    const value = record[field];
+    return (
+      value === "sent" || value === "done" || value === "completed" || value === "bookkeeping_sent"
+    );
+  });
+}
+
+function isPendingApproval(timesheet: Timesheet, today: string): boolean {
+  return (
+    timesheet.status === "sent" &&
+    effectiveProjectEndDate(timesheet) < today
+  );
+}
+
+function effectiveProjectEndDate(timesheet: Timesheet): string {
+  return isNonEmptyString(timesheet.projectEndDate)
+    ? timesheet.projectEndDate
+    : addDaysToISODate(timesheet.weekStart ?? "", 6);
+}
+
+function invoiceDueDateForTimesheet(weekStart: string): string {
+  return addDaysToISODate(addDaysToISODate(weekStart, 8), 8);
+}
+
+function deadlineTone(deadline: string): "waiting" | "soon" | "now" {
+  const days = calendarDaysUntil(deadline);
+  if (days <= 0) return "now";
+  if (days <= 3) return "soon";
+  return "waiting";
+}
+
+function calendarDaysUntil(isoDate: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${isoDate}T00:00:00`);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
+}
+
+function payrollPeriodForWeek(weekStart: string): { start: string; end: string } {
+  const monday = new Date(`${weekStart}T12:00:00`);
+  const oneJan = new Date(`${monday.getFullYear()}-01-01T12:00:00`);
+  const week = Math.ceil(
+    ((monday.getTime() - oneJan.getTime()) / 86400000 + oneJan.getDay() + 1) / 7,
+  );
+  const start = addDaysToISODate(weekStart, week % 2 === 0 ? -7 : 0);
+  return { start, end: addDaysToISODate(start, 13) };
+}
+
+function payrollReady(timesheet: Timesheet, periodEnd: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const end = new Date(`${periodEnd}T12:00:00`);
+  if (end.getTime() >= today.getTime()) return false;
+
+  if (timesheet.status === "approved") return true;
+  const autoApprovalDate = new Date(`${addDaysToISODate(periodEnd, 2)}T12:00:00`);
+  return timesheet.status === "sent" && autoApprovalDate.getTime() <= today.getTime();
+}
+
+function addDaysToISODate(value: string, days: number): string {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function allTimesheetsQuery() {
