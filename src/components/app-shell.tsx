@@ -1,6 +1,7 @@
 import { Link, Navigate, Outlet, useRouterState } from "@tanstack/react-router";
 import { useState, type ReactNode } from "react";
 import {
+  Bot,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
@@ -21,6 +22,9 @@ import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
 import subzLogo from "@/assets/sub-z-logo.png";
 
+const TIMESHEET_ADMIN_ASSISTANT_URL =
+  "https://chatgpt.com/g/g-6a4f67db50e0819192cda0577945cec7-sub-z-timesheet-admin";
+
 type DashboardShellOptions = {
   title: string;
   subtitle: string;
@@ -31,6 +35,18 @@ type DashboardShellOptions = {
     placeholder: string;
   };
 };
+
+type InternalNavItem = {
+  to: string;
+  label: string;
+};
+
+type ExternalNavItem = {
+  href: string;
+  label: string;
+};
+
+type NavItem = InternalNavItem | ExternalNavItem;
 
 export function AppShell({
   children,
@@ -56,7 +72,7 @@ export function AppShell({
   const home = ROLE_HOME[role];
   const denied = allow && !allow.includes(role);
   const adminBase = role === "bruger" ? "/bruger1" : role === "bruger2" ? "/bruger2" : "/admin";
-  const adminNav =
+  const adminNav: NavItem[] =
     role === "admin"
       ? [
           { to: "/admin", label: "Dashboard" },
@@ -69,6 +85,7 @@ export function AppShell({
           { to: "/admin/users", label: "Brugere" },
           { to: "/admin/statistics", label: "Statistik" },
           { to: "/admin/invoice-payroll", label: "Faktura & løn" },
+          { href: TIMESHEET_ADMIN_ASSISTANT_URL, label: "Admin assistent" },
         ]
       : [
           { to: adminBase, label: "Timesedler" },
@@ -118,21 +135,31 @@ export function AppShell({
             {nav.map((item) => {
               const Icon = dashboardNavIcon(item.label);
               const active =
-                pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`));
-              return (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
-                      : "text-slate-300 hover:bg-white/10 hover:text-white",
-                  )}
-                >
+                isInternalNavItem(item) &&
+                (pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`)));
+              const className = cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                active
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white",
+              );
+
+              return isInternalNavItem(item) ? (
+                <Link key={item.to} to={item.to} className={className}>
                   <Icon className="h-4 w-4 shrink-0" />
                   <span>{item.label}</span>
                 </Link>
+              ) : (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={className}
+                >
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </a>
               );
             })}
           </nav>
@@ -231,20 +258,33 @@ export function AppShell({
             </div>
 
             <nav className="flex gap-1 overflow-x-auto border-t border-slate-100 px-4 lg:hidden">
-              {nav.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  className={cn(
-                    "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium",
-                    pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`))
-                      ? "border-blue-600 text-slate-950"
-                      : "border-transparent text-slate-500",
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {nav.map((item) =>
+                isInternalNavItem(item) ? (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium",
+                      pathname === item.to ||
+                        (item.to !== home && pathname.startsWith(`${item.to}/`))
+                        ? "border-blue-600 text-slate-950"
+                        : "border-transparent text-slate-500",
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ) : (
+                  <a
+                    key={item.href}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-medium text-slate-500"
+                  >
+                    {item.label}
+                  </a>
+                ),
+              )}
             </nav>
           </header>
 
@@ -297,20 +337,32 @@ export function AppShell({
       </header>
       <div className="border-b bg-card/70">
         <nav className="flex w-full flex-wrap gap-1 px-4 md:flex-nowrap md:overflow-x-auto md:px-6">
-          {nav.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
-                pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`))
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {nav.map((item) =>
+            isInternalNavItem(item) ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+                  pathname === item.to || (item.to !== home && pathname.startsWith(`${item.to}/`))
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <a
+                key={item.href}
+                href={item.href}
+                target="_blank"
+                rel="noreferrer"
+                className="whitespace-nowrap border-b-2 border-transparent px-3 py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {item.label}
+              </a>
+            ),
+          )}
         </nav>
       </div>
       <main className="w-full px-4 py-6 md:px-6 md:py-8">{content}</main>
@@ -318,7 +370,12 @@ export function AppShell({
   );
 }
 
+function isInternalNavItem(item: NavItem): item is InternalNavItem {
+  return "to" in item;
+}
+
 function dashboardNavIcon(label: string) {
+  if (label === "Admin assistent") return Bot;
   if (label === "Dashboard") return Home;
   if (label === "Timesedler") return ClipboardList;
   if (label === "Regelgrundlag") return FileBadge2;
