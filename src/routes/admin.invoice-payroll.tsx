@@ -468,7 +468,7 @@ const archivedInvoiceRows = filteredRows
                 </Button>
               }
             />
-            <div className="grid gap-4 p-4 xl:grid-cols-4">
+            <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "payroll-ready") && (
                 <StatusColumn
                   title="Klar til bogholderi"
