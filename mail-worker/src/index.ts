@@ -42,6 +42,8 @@ type AppStatePayload = {
   updatedAt?: string;
   timesheets?: unknown[];
   companies?: unknown[];
+  deletedTimesheetIds?: unknown[];
+  deletedCompanyIds?: unknown[];
 };
 
 type StoredTimesheet = {
@@ -278,7 +280,14 @@ async function readAppState(env: Env) {
   if (!env.WORKER_INVITES) throw new Error("WORKER_INVITES mangler");
   const stored = await env.WORKER_INVITES.get(APP_STATE_KEY);
   if (!stored) {
-    return { version: 1, updatedAt: "", timesheets: [], companies: [] };
+    return {
+      version: 1,
+      updatedAt: "",
+      timesheets: [],
+      companies: [],
+      deletedTimesheetIds: [],
+      deletedCompanyIds: [],
+    };
   }
   return JSON.parse(stored) as unknown;
 }
@@ -293,6 +302,8 @@ async function writeAppState(payload: AppStatePayload, env: Env) {
     updatedAt: typeof payload.updatedAt === "string" ? payload.updatedAt : new Date().toISOString(),
     timesheets: payload.timesheets,
     companies: payload.companies,
+    deletedTimesheetIds: stringArray(payload.deletedTimesheetIds),
+    deletedCompanyIds: stringArray(payload.deletedCompanyIds),
   };
   const serialized = JSON.stringify(state);
   if (serialized.length > MAX_APP_STATE_LENGTH) {
@@ -300,6 +311,12 @@ async function writeAppState(payload: AppStatePayload, env: Env) {
   }
   await env.WORKER_INVITES.put(APP_STATE_KEY, serialized);
   return state;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string" && item !== "")
+    : [];
 }
 
 function appBaseUrl(env: Env): string {
@@ -460,9 +477,7 @@ async function sendSingleEmail(
 
 async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized: number }> {
   const state = (await readAppState(env)) as AppStatePayload;
-  const timesheets = Array.isArray(state.timesheets)
-    ? (state.timesheets as StoredTimesheet[])
-    : [];
+  const timesheets = Array.isArray(state.timesheets) ? (state.timesheets as StoredTimesheet[]) : [];
   const baseUrl = appBaseUrl(env);
   if (!baseUrl || timesheets.length === 0) return { sent: 0, anonymized: 0 };
 
@@ -480,7 +495,10 @@ async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized
 
   for (const group of groups.values()) {
     const latestActivity = group
-      .flatMap((item) => [parseDate(item.weekStart || item.createdAt), parseDate(item.workerConsentRenewedAt)])
+      .flatMap((item) => [
+        parseDate(item.weekStart || item.createdAt),
+        parseDate(item.workerConsentRenewedAt),
+      ])
       .filter((date): date is Date => Boolean(date))
       .sort((a, b) => a.getTime() - b.getTime())
       .at(-1);
@@ -542,6 +560,8 @@ async function runConsentRetention(env: Env): Promise<{ sent: number; anonymized
         updatedAt: now.toISOString(),
         timesheets,
         companies: state.companies ?? [],
+        deletedTimesheetIds: state.deletedTimesheetIds ?? [],
+        deletedCompanyIds: state.deletedCompanyIds ?? [],
       },
       env,
     );
