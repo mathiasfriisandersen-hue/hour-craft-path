@@ -22,7 +22,14 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { Input } from "@/components/ui/input";
 import { useTimesheets } from "@/lib/use-timesheets";
-import { listCompanies, seedIfEmpty, type Company, type Timesheet } from "@/lib/timesheet-store";
+import {
+  invoicePeriodTone,
+  listCompanies,
+  resolveInvoiceBookingPeriod,
+  seedIfEmpty,
+  type Company,
+  type Timesheet,
+} from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/statistics")({
@@ -149,8 +156,8 @@ function StatisticsPage() {
     [companies, timesheets],
   );
   const invoiceOverview = useMemo(
-    () => buildInvoiceOverview(timesheets, invoiceSentRange),
-    [invoiceSentRange, timesheets],
+    () => buildInvoiceOverview(timesheets, companies, invoiceSentRange),
+    [companies, invoiceSentRange, timesheets],
   );
   const payrollOverview = useMemo(
     () => buildPayrollOverview(timesheets, payrollSentRange),
@@ -276,19 +283,19 @@ function StatisticsPage() {
               {
                 label: "Skal snart håndteres",
                 value: invoiceOverview.soon,
-                help: "Godkendte timesedler med kommende fakturafrist.",
+                help: "Perioden er påbegyndt, men ikke slut.",
                 tone: "neutral",
               },
               {
                 label: "Skal håndteres nu",
                 value: invoiceOverview.now,
-                help: "Godkendte timesedler hvor fakturafristen er nået.",
+                help: "Perioden er slut og skal håndteres.",
                 tone: "warning",
               },
               {
                 label: "Kræver ikke handling endnu",
                 value: invoiceOverview.waiting,
-                help: "Godkendte timesedler med senere fakturafrist.",
+                help: "Perioden er ikke påbegyndt.",
                 tone: "neutral",
               },
               {
@@ -615,7 +622,11 @@ function countProjectsByContactOrCompany(companies: Company[], timesheets: Times
   return projectKeys.size;
 }
 
-function buildInvoiceOverview(timesheets: Timesheet[], sentRange: DateRange): StatusOverview {
+function buildInvoiceOverview(
+  timesheets: Timesheet[],
+  companies: Company[],
+  sentRange: DateRange,
+): StatusOverview {
   const overview: StatusOverview = { soon: 0, now: 0, waiting: 0, done: 0 };
   const seen = new Set<string>();
   for (const timesheet of timesheets) {
@@ -630,12 +641,23 @@ function buildInvoiceOverview(timesheets: Timesheet[], sentRange: DateRange): St
       overview.done += 1;
       continue;
     }
-    if (timesheet.status !== "approved" || !hasRegisteredHours(timesheet)) continue;
+    if (timesheet.invoiceSentDate || timesheet.invoiceArchivedAt) continue;
+    if (
+      (timesheet.status !== "sent" && timesheet.status !== "approved") ||
+      !hasRegisteredHours(timesheet)
+    ) {
+      continue;
+    }
 
-    const tone = deadlineTone(invoiceDueDateForTimesheet(timesheet.weekStart));
-    if (tone === "now") overview.now += 1;
-    else if (tone === "soon") overview.soon += 1;
-    else overview.waiting += 1;
+    const bookingPeriod = resolveInvoiceBookingPeriod(timesheet, companies);
+    const tone = invoicePeriodTone({
+      status: timesheet.status,
+      startDate: bookingPeriod?.startDate,
+      endDate: bookingPeriod?.endDate,
+    });
+    if (tone === "red") overview.now += 1;
+    else if (tone === "orange") overview.soon += 1;
+    else if (tone === "green") overview.waiting += 1;
   }
   return overview;
 }
@@ -692,25 +714,6 @@ function hasDoneStatus(timesheet: Timesheet, fields: string[]): boolean {
       value === "sent" || value === "done" || value === "completed" || value === "bookkeeping_sent"
     );
   });
-}
-
-function deadlineTone(deadline: string): "waiting" | "soon" | "now" {
-  const days = calendarDaysUntil(deadline);
-  if (days <= 0) return "now";
-  if (days <= 3) return "soon";
-  return "waiting";
-}
-
-function calendarDaysUntil(isoDate: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${isoDate}T00:00:00`);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
-function invoiceDueDateForTimesheet(weekStart: string): string {
-  return addDaysToISODate(addDaysToISODate(weekStart, 8), 8);
 }
 
 function payrollPeriodForWeek(weekStart: string): { start: string; end: string } {

@@ -26,8 +26,10 @@ import {
   formatDkk,
   formatWeekRange,
   getRule,
+  invoicePeriodTone,
   listCompanies,
   overtimeHours,
+  resolveInvoiceBookingPeriod,
   totalHours,
   upsert,
   weekNumber,
@@ -49,7 +51,6 @@ type StatusFilter =
   | "invoice-soon"
   | "invoice-now"
   | "invoice-waiting"
-  | "invoice-sent"
   | "payroll-ready"
   | "payroll-waiting"
   | "payroll-sent"
@@ -61,6 +62,8 @@ type WorkContext = {
   project?: CompanyProject;
   approvedHours: number;
   invoiceBaseHours: number;
+  invoiceBookingStart?: string;
+  invoiceBookingEnd?: string;
   invoiceNumber: string;
   invoiceDate: string;
   invoiceDueDate: string;
@@ -78,7 +81,7 @@ type WorkContext = {
   invoiceExVat: number;
   vat: number;
   invoiceIncVat: number;
-  invoiceTone: StatusTone;
+  invoiceTone: StatusTone | null;
   payrollTone: StatusTone;
 };
 
@@ -116,7 +119,6 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "invoice-soon", label: "Skal snart håndteres" },
   { value: "invoice-now", label: "Skal håndteres nu" },
   { value: "invoice-waiting", label: "Kræver ikke handling endnu" },
-  { value: "invoice-sent", label: "Faktura sendt" },
   { value: "payroll-ready", label: "Klar til bogholderi" },
   { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
   { value: "payroll-sent", label: "Sendt til bogholderi" },
@@ -158,25 +160,27 @@ function InvoicePayrollPage() {
       }),
     [companyFilter, periodFilter, rows],
   );
-const invoiceRows = filteredRows
-  .filter(
-    (row) =>
-      row.timesheet.status === "approved" &&
-      row.approvedHours > 0 &&
-      !row.timesheet.invoiceArchivedAt,
-  )
-  .sort((a, b) => compareByUrgency(a, b, "invoice"));
+  const invoiceRows = filteredRows
+    .filter(
+      (row) =>
+        (row.timesheet.status === "sent" || row.timesheet.status === "approved") &&
+        row.approvedHours > 0 &&
+        !row.timesheet.invoiceSentDate &&
+        !row.timesheet.invoiceArchivedAt &&
+        row.invoiceTone !== null,
+    )
+    .sort((a, b) => compareByUrgency(a, b, "invoice"));
 
-const archivedInvoiceRows = filteredRows
-  .filter(
-    (row) =>
-      row.timesheet.status === "approved" &&
-      row.approvedHours > 0 &&
-      row.timesheet.invoiceArchivedAt,
-  )
-  .sort((a, b) =>
-    (b.timesheet.invoiceArchivedAt ?? "").localeCompare(a.timesheet.invoiceArchivedAt ?? ""),
-  );
+  const archivedInvoiceRows = filteredRows
+    .filter(
+      (row) =>
+        row.timesheet.status === "approved" &&
+        row.approvedHours > 0 &&
+        row.timesheet.invoiceArchivedAt,
+    )
+    .sort((a, b) =>
+      (b.timesheet.invoiceArchivedAt ?? "").localeCompare(a.timesheet.invoiceArchivedAt ?? ""),
+    );
   const payrollRows = filteredRows
   .filter((row) => {
     const timesheet = row.timesheet as any;
@@ -195,26 +199,22 @@ const archivedInvoiceRows = filteredRows
     );
   })
   .sort(comparePayrollRows);
-  const allInvoiceSentRows = invoiceRows.filter((row) => row.timesheet.invoiceSentDate);
-  const invoiceSentRows = invoiceRows.filter(
-    (row) => statusFilter === "invoice-sent" && row.timesheet.invoiceSentDate,
+  const invoiceSentCount = filteredRows.filter(
+    (row) => row.approvedHours > 0 && row.timesheet.invoiceSentDate,
   );
   const invoiceNowRows = invoiceRows.filter(
     (row) =>
       statusFilterMatches(statusFilter, "invoice-now") &&
-      !row.timesheet.invoiceSentDate &&
       row.invoiceTone === "red",
   );
   const invoiceSoonRows = invoiceRows.filter(
     (row) =>
       statusFilterMatches(statusFilter, "invoice-soon") &&
-      !row.timesheet.invoiceSentDate &&
       row.invoiceTone === "orange",
   );
   const invoiceWaitingRows = invoiceRows.filter(
     (row) =>
       statusFilterMatches(statusFilter, "invoice-waiting") &&
-      !row.timesheet.invoiceSentDate &&
       row.invoiceTone === "green",
   );
   const payrollSentRows = payrollRows.filter(
@@ -243,18 +243,13 @@ const archivedInvoiceRows = filteredRows
       row.timesheet.payrollBookkeepingApprovedDate,
   );
   const visibleInvoiceCount =
-    invoiceNowRows.length +
-    invoiceSoonRows.length +
-    invoiceWaitingRows.length +
-    (statusFilter === "invoice-sent" ? invoiceSentRows.length : 0);
+    invoiceNowRows.length + invoiceSoonRows.length + invoiceWaitingRows.length;
   const visiblePayrollCount =
     payrollReadyRows.length +
     payrollWaitingRows.length +
     payrollSentRows.length +
     (statusFilter === "payroll-approved" ? payrollApprovedRows.length : 0);
-  const sentCount =
-    (statusFilterMatches(statusFilter, "invoice-sent") ? allInvoiceSentRows.length : 0) +
-    payrollSentRows.length;
+  const sentCount = invoiceSentCount.length + payrollSentRows.length;
   const actionCount = invoiceNowRows.length + payrollReadyRows.length;
   const activeFilterCount = [periodFilter, companyFilter, statusFilter].filter(
     (value) => value !== "all",
@@ -386,16 +381,6 @@ const archivedInvoiceRows = filteredRows
             <SectionHeader
               title="Fakturaoverblik"
               count={visibleInvoiceCount}
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                  onClick={() => setStatusFilter("invoice-sent")}
-                >
-                  Faktura sendt
-                </Button>
-              }
             />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "invoice-now") && (
@@ -440,22 +425,6 @@ const archivedInvoiceRows = filteredRows
                   {invoiceWaitingRows.map((row) => (
                     <InvoiceCaseCard
                       key={`invoice-waiting-${row.timesheet.id}`}
-                      row={row}
-                      onPreview={() => setPreview(row)}
-                    />
-                  ))}
-                </StatusColumn>
-              )}
-              {statusFilter === "invoice-sent" && (
-                <StatusColumn
-                  title="Faktura sendt"
-                  count={invoiceSentRows.length}
-                  tone="green"
-                  empty="Ingen fakturaer er markeret sendt."
-                >
-                  {invoiceSentRows.map((row) => (
-                    <InvoiceCaseCard
-                      key={`invoice-sent-${row.timesheet.id}`}
                       row={row}
                       onPreview={() => setPreview(row)}
                     />
@@ -1025,6 +994,15 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
   const invoiceExVat = invoiceBaseExVat + invoiceAllowanceExVat;
   const vat = invoiceExVat * 0.25;
   const payrollDeadline = timesheet.payrollDeadline || fallbackPayrollDeadline;
+  const bookingPeriod = resolveInvoiceBookingPeriod(timesheet, companies);
+  const invoiceTone =
+    timesheet.invoiceSentDate || timesheet.invoiceArchivedAt
+      ? null
+      : invoicePeriodTone({
+          status: timesheet.status,
+          startDate: bookingPeriod?.startDate,
+          endDate: bookingPeriod?.endDate,
+        });
 
   return {
     timesheet,
@@ -1032,6 +1010,8 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     project,
     approvedHours,
     invoiceBaseHours,
+    invoiceBookingStart: bookingPeriod?.startDate,
+    invoiceBookingEnd: bookingPeriod?.endDate,
     invoiceNumber: timesheet.invoiceNumber || `F-${timesheet.id.slice(0, 8).toUpperCase()}`,
     invoiceDate,
     invoiceDueDate,
@@ -1049,7 +1029,7 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     invoiceExVat,
     vat,
     invoiceIncVat: invoiceExVat + vat,
-    invoiceTone: urgencyTone(invoiceDueDate),
+    invoiceTone,
     payrollTone: payrollTone(timesheet, payrollPeriod.end),
   };
 }
@@ -1063,8 +1043,8 @@ function findCompany(timesheet: Timesheet, companies: Company[]) {
 }
 
 function compareByUrgency(a: WorkContext, b: WorkContext, type: "invoice" | "payroll") {
-  const aTone = type === "invoice" ? a.invoiceTone : a.payrollTone;
-  const bTone = type === "invoice" ? b.invoiceTone : b.payrollTone;
+  const aTone = (type === "invoice" ? a.invoiceTone : a.payrollTone) ?? "green";
+  const bTone = (type === "invoice" ? b.invoiceTone : b.payrollTone) ?? "green";
   const aDeadline = type === "invoice" ? a.invoiceDueDate : a.payrollDeadline;
   const bDeadline = type === "invoice" ? b.invoiceDueDate : b.payrollDeadline;
   const toneDiff = toneRank(aTone) - toneRank(bTone);
@@ -1142,7 +1122,8 @@ function formatDate(value: string) {
   });
 }
 
-function statusLabel(tone: StatusTone) {
+function statusLabel(tone: StatusTone | null) {
+  if (!tone) return "Mangler bookingperiode";
   if (tone === "red") return "Skal håndteres nu";
   if (tone === "orange") return "Skal snart håndteres";
   return "Kræver ikke handling endnu";
@@ -1644,7 +1625,7 @@ function allowanceRowsForCalculation(
   calculation: ReturnType<typeof calculateTimesheet>,
   overrides: { overtime?: number } = {},
 ): Omit<PayrollAllowanceRow, "amount">[] {
-  return [
+  const rows = [
     {
       label: "Overarbejdsløn",
       hours: overrides.overtime ?? calculation.overtime,
@@ -1667,7 +1648,9 @@ function allowanceRowsForCalculation(
     },
     { label: "Nattillæg", hours: calculation.night, ruleKeys: ["night_allowance"] },
     { label: "Skifteholdstillæg", hours: calculation.shift, ruleKeys: ["shift_work"] },
-  ].filter((item) => item.hours > 0);
+  ] satisfies Array<Omit<PayrollAllowanceRow, "amount">>;
+
+  return rows.filter((item) => item.hours > 0);
 }
 
 function allowanceQuantityLabel(item: PayrollAllowanceRow) {

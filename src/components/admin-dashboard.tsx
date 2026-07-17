@@ -22,9 +22,12 @@ import { Button } from "@/components/ui/button";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
   formatWeekRange,
+  invoicePeriodTone,
   listCompanies,
+  resolveInvoiceBookingPeriod,
   totalHours,
   weekNumber,
+  type InvoicePeriodTone,
   type Timesheet,
 } from "@/lib/timesheet-store";
 import { cn } from "@/lib/utils";
@@ -55,7 +58,7 @@ type DashboardWorkContext = {
   approvedHours: number;
   invoiceDueDate: string;
   payrollDeadline: string;
-  invoiceTone: DashboardTone;
+  invoiceTone: InvoicePeriodTone | null;
   payrollTone: DashboardTone;
 };
 
@@ -95,20 +98,30 @@ export function AdminDashboard() {
     [workerRows],
   );
   const workRows = useMemo(
-    () => timesheets.filter((timesheet) => !timesheet.archived).map(buildDashboardWorkContext),
-    [timesheets],
+    () =>
+      timesheets
+        .filter((timesheet) => !timesheet.archived)
+        .map((timesheet) => buildDashboardWorkContext(timesheet, companies)),
+    [companies, timesheets],
   );
   const invoiceRows = useMemo(
-    () => workRows.filter((row) => row.timesheet.status === "approved" && row.approvedHours > 0),
+    () =>
+      workRows.filter(
+        (row) =>
+          (row.timesheet.status === "sent" || row.timesheet.status === "approved") &&
+          row.approvedHours > 0 &&
+          !row.timesheet.invoiceSentDate &&
+          !row.timesheet.invoiceArchivedAt &&
+          row.invoiceTone !== null,
+      ),
     [workRows],
   );
-  const invoiceSentRows = invoiceRows.filter((row) => row.timesheet.invoiceSentDate);
-  const invoiceNowRows = invoiceRows.filter(
-    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone === "red",
+  const invoiceSentRows = workRows.filter(
+    (row) => row.approvedHours > 0 && row.timesheet.invoiceSentDate,
   );
-  const invoiceSoonRows = invoiceRows.filter(
-    (row) => !row.timesheet.invoiceSentDate && row.invoiceTone !== "red",
-  );
+  const invoiceNowRows = invoiceRows.filter((row) => row.invoiceTone === "red");
+  const invoiceSoonRows = invoiceRows.filter((row) => row.invoiceTone === "orange");
+  const invoiceWaitingRows = invoiceRows.filter((row) => row.invoiceTone === "green");
   const payrollRows = useMemo(
     () =>
       workRows.filter(
@@ -410,14 +423,20 @@ export function AdminDashboard() {
             <OverviewStatusCard
               label="Skal snart håndteres"
               value={invoiceSoonRows.length}
-              description="Godkendte timesedler med kommende fakturafrist."
+              description="Perioden er påbegyndt, men ikke slut."
               tone="blue"
             />
             <OverviewStatusCard
               label="Skal håndteres nu"
               value={invoiceNowRows.length}
-              description="Godkendte timesedler hvor fakturafristen er nær."
+              description="Perioden er slut og faktura skal håndteres."
               tone="amber"
+            />
+            <OverviewStatusCard
+              label="Kræver ikke handling endnu"
+              value={invoiceWaitingRows.length}
+              description="Perioden er ikke påbegyndt."
+              tone="slate"
             />
             <OverviewStatusCard
               label="Faktura sendt"
@@ -807,7 +826,7 @@ function buildDashboardRows({
         kind: "invoice",
         icon: FileSpreadsheet,
         title: "Faktura skal håndteres",
-        status: "Fakturafrist",
+        status: "Periode slut",
         statusTone: "amber",
         csvDescription: "Faktura skal håndteres",
       }),
@@ -859,19 +878,30 @@ function actionRow(
   };
 }
 
-function buildDashboardWorkContext(timesheet: Timesheet): DashboardWorkContext {
+function buildDashboardWorkContext(
+  timesheet: Timesheet,
+  companies: ReturnType<typeof listCompanies>,
+): DashboardWorkContext {
   const approvedHours = totalHours(timesheet.days);
   const invoiceDate = invoiceDateForTimesheet(timesheet.weekStart);
   const invoiceDueDate = invoiceDueDateForInvoiceDate(invoiceDate);
   const payrollPeriod = payrollPeriodForWeek(timesheet.weekStart);
   const payrollDeadline = timesheet.payrollDeadline || addDays(payrollPeriod.end, 2);
+  const bookingPeriod = resolveInvoiceBookingPeriod(timesheet, companies);
 
   return {
     timesheet,
     approvedHours,
     invoiceDueDate,
     payrollDeadline,
-    invoiceTone: urgencyTone(invoiceDueDate),
+    invoiceTone:
+      timesheet.invoiceSentDate || timesheet.invoiceArchivedAt
+        ? null
+        : invoicePeriodTone({
+            status: timesheet.status,
+            startDate: bookingPeriod?.startDate,
+            endDate: bookingPeriod?.endDate,
+          }),
     payrollTone: dashboardPayrollTone(timesheet, payrollPeriod.end),
   };
 }
@@ -888,15 +918,6 @@ function payrollPeriodForWeek(weekStart: string) {
   const week = weekNumber(weekStart);
   const start = addDays(weekStart, week % 2 === 0 ? -7 : 0);
   return { start, end: addDays(start, 13) };
-}
-
-function urgencyTone(deadline: string): DashboardTone {
-  const today = new Date(`${localISODate(new Date())}T12:00:00`);
-  const due = new Date(`${deadline}T12:00:00`);
-  const days = Math.ceil((due.getTime() - today.getTime()) / 86_400_000);
-  if (days <= 0) return "red";
-  if (days <= 3) return "amber";
-  return "green";
 }
 
 function dashboardPayrollTone(timesheet: Timesheet, periodEnd: string): DashboardTone {

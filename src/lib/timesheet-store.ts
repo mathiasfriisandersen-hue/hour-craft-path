@@ -20,7 +20,15 @@ import {
   getRulesNeedingManualReview,
 } from "./agreementValidation";
 import { addDaysToISODate, getDanishAgreementHolidayName } from "./danishHolidays";
+import {
+  invoicePeriodTone,
+  isoDateOrNull,
+  type InvoicePeriodStatusInput,
+  type InvoicePeriodTone,
+} from "./invoice-period-status";
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
+
+export { invoicePeriodTone, type InvoicePeriodStatusInput, type InvoicePeriodTone };
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
 export type WorkerLanguage = "da" | "en" | "pl";
@@ -253,6 +261,11 @@ export type CompanyProject = {
   pause2End: string;
   billingHourlyWage: number;
   billingFactor: number;
+};
+
+export type InvoiceBookingPeriod = {
+  startDate: string;
+  endDate: string;
 };
 
 export type LocalAgreement = {
@@ -613,6 +626,68 @@ export function formatWeekRange(mondayISO: string): string {
   sunday.setDate(sunday.getDate() + 6);
   const fmt = (d: Date) => d.toLocaleDateString("da-DK", { day: "2-digit", month: "short" });
   return `${fmt(monday)} – ${fmt(sunday)}`;
+}
+
+export function resolveInvoiceBookingPeriod(
+  timesheet: Timesheet,
+  companies: Company[],
+): InvoiceBookingPeriod | null {
+  const company = findTimesheetCompany(timesheet, companies);
+  if (!company) return null;
+
+  const project = findTimesheetProject(timesheet, company);
+  if (!project || !projectIsLinkedToTimesheet(project, timesheet)) return null;
+
+  const startDate = isoDateOrNull(project.startDate);
+  const endDate = isoDateOrNull(project.endDate);
+  if (!startDate || !endDate) return null;
+
+  return { startDate, endDate };
+}
+
+function findTimesheetCompany(timesheet: Timesheet, companies: Company[]): Company | undefined {
+  if (timesheet.companyId) {
+    const byId = companies.find((company) => company.id === timesheet.companyId);
+    if (byId) return byId;
+  }
+  const companyName = invoiceReferenceKey(timesheet.brugervirksomhed);
+  return companies.find((company) => invoiceReferenceKey(company.name) === companyName);
+}
+
+function findTimesheetProject(
+  timesheet: Timesheet,
+  company: Company,
+): CompanyProject | undefined {
+  if (timesheet.projectId) {
+    return company.projects.find((project) => project.id === timesheet.projectId);
+  }
+
+  const projectName = invoiceReferenceKey(timesheet.projectName ?? "");
+  if (!projectName) return undefined;
+
+  const matches = company.projects.filter(
+    (project) => invoiceReferenceKey(project.name) === projectName,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function projectIsLinkedToTimesheet(project: CompanyProject, timesheet: Timesheet): boolean {
+  if (!project.workerEmails.length) return Boolean(timesheet.projectId || timesheet.projectName);
+  return project.workerEmails.some((reference) =>
+    projectReferenceMatchesTimesheet(reference, timesheet),
+  );
+}
+
+function projectReferenceMatchesTimesheet(reference: string, timesheet: Timesheet): boolean {
+  const referenceKey = invoiceReferenceKey(reference);
+  if (!referenceKey) return false;
+  return [timesheet.vikar, timesheet.vikarCode ?? "", timesheet.vikarEmail]
+    .map(invoiceReferenceKey)
+    .some((key) => key && key === referenceKey);
+}
+
+function invoiceReferenceKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatDateLabel(isoDate: string): string {
