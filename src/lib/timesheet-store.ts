@@ -1748,14 +1748,53 @@ function mergeTimesheets(
 
 function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolean): Company[] {
   const deletedIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
-  const byId = new Map<string, Company>();
-  for (const item of preferLocal ? remote : local) {
-    if (!deletedIds.has(item.id)) byId.set(item.id, item);
+  const localById = new Map(
+    local.filter((company) => !deletedIds.has(company.id)).map((company) => [company.id, company]),
+  );
+  const remoteById = new Map(
+    remote
+      .filter((company) => !deletedIds.has(company.id))
+      .map((company) => [company.id, company]),
+  );
+  const ids = new Set([...localById.keys(), ...remoteById.keys()]);
+
+  return [...ids]
+    .flatMap((id) => {
+      const localCompany = localById.get(id);
+      const remoteCompany = remoteById.get(id);
+      if (localCompany && remoteCompany) {
+        const preferred = preferLocal ? localCompany : remoteCompany;
+        const fallback = preferLocal ? remoteCompany : localCompany;
+        return [
+          {
+            ...fallback,
+            ...preferred,
+            projects: mergeCompanyProjects(
+              localCompany.projects,
+              remoteCompany.projects,
+              preferLocal,
+            ),
+          },
+        ];
+      }
+      return localCompany ?? remoteCompany ?? [];
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+}
+
+function mergeCompanyProjects(
+  local: CompanyProject[],
+  remote: CompanyProject[],
+  preferLocal: boolean,
+): CompanyProject[] {
+  const byId = new Map<string, CompanyProject>();
+  for (const project of preferLocal ? remote : local) {
+    byId.set(project.id, project);
   }
-  for (const item of preferLocal ? local : remote) {
-    if (!deletedIds.has(item.id)) byId.set(item.id, item);
+  for (const project of preferLocal ? local : remote) {
+    byId.set(project.id, project);
   }
-  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name, "da-DK"));
+  return [...byId.values()];
 }
 
 function applyAppState(state: RemoteAppState, updatedAt: string): void {
