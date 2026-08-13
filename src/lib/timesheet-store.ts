@@ -351,9 +351,6 @@ function round(value: number): number {
 }
 
 export function formatDkk(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "Blokeret: serverbaseret beregningssnapshot mangler";
-  }
   return `${round(value).toLocaleString("da-DK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -945,10 +942,11 @@ function isSensitiveBrowserField(key: string): boolean {
     normalized.includes("password") ||
     normalized.includes("passcode") ||
     normalized.includes("accesscode") ||
-    normalized.includes("accesstoken") ||
-    normalized.includes("refreshtoken") ||
-    normalized.includes("idtoken") ||
-    normalized.includes("sessiontoken") ||
+    normalized.endsWith("vikarcode") ||
+    normalized.endsWith("workercode") ||
+    normalized.endsWith("kontaktpersoncode") ||
+    normalized.endsWith("contactpersoncode") ||
+    normalized.endsWith("token") ||
     normalized.includes("authorization") ||
     normalized.includes("credential") ||
     normalized.includes("secret") ||

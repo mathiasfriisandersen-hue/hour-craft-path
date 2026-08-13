@@ -894,7 +894,7 @@ function ProjectsSection({
                     </Field>
                     <Field label="Total til kunden">
                       <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm font-medium">
-                        {formatProjectBilling(project)}
+                        Blokeret: serverbaseret beregningssnapshot mangler
                       </div>
                     </Field>
                   </div>
@@ -989,25 +989,6 @@ function ProjectsSection({
       </div>
     </section>
   );
-}
-
-function formatProjectBilling(project: CompanyProject): string {
-  const hourlyWage = Number(project.billingHourlyWage) || 0;
-  const factor = Number(project.billingFactor) || 0;
-  const total = hourlyWage * factor;
-  if (!hourlyWage || !factor) return "—";
-  return `${formatNumber(hourlyWage)} * ${formatNumber(factor)} = ${formatDkk(total)}`;
-}
-
-function formatNumber(value: number): string {
-  return value.toLocaleString("da-DK", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatDkk(value: number): string {
-  return `${formatNumber(value)} DKK`;
 }
 
 function companyHasAttachedWorker(

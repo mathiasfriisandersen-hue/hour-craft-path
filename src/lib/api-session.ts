@@ -281,7 +281,10 @@ export function getMailSessionAvailability(): MailSessionAvailability {
       reason: "Mail er blokeret, fordi den verificerede session er udløbet.",
     };
   }
-  return { available: true, reason: "" };
+  return {
+    available: false,
+    reason: "Mail er blokeret, fordi sikker modtagerbestemmelse ikke er konfigureret.",
+  };
 }
 
 export async function requireVerifiedMailBearer(): Promise<{

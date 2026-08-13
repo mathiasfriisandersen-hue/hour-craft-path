@@ -52,26 +52,136 @@ function applyAllMigrations(database) {
   for (const migration of migrations) sqlite(database, migrationSql(migration));
 }
 
+const requiredForeignKeyTables = [
+  "agreement_rate_periods",
+  "agreement_rules",
+  "agreement_sources",
+  "agreement_versions",
+];
+
+const requiredForeignKeySignatures = [
+  "agreement_rate_periods:agreement_version_id->agreement_rules.agreement_version_id:CASCADE:RESTRICT",
+  "agreement_rate_periods:agreement_version_id->agreement_sources.agreement_version_id:CASCADE:RESTRICT",
+  "agreement_rate_periods:agreement_version_id->agreement_versions.id:CASCADE:RESTRICT",
+  "agreement_rate_periods:rule_id->agreement_rules.id:CASCADE:RESTRICT",
+  "agreement_rate_periods:source_id->agreement_sources.id:CASCADE:RESTRICT",
+  "agreement_rules:agreement_version_id->agreement_sources.agreement_version_id:CASCADE:RESTRICT",
+  "agreement_rules:agreement_version_id->agreement_versions.id:CASCADE:RESTRICT",
+  "agreement_rules:source_id->agreement_sources.id:CASCADE:RESTRICT",
+  "agreement_sources:agreement_version_id->agreement_versions.id:CASCADE:RESTRICT",
+  "agreement_sources:verified_by_membership_id->organization_memberships.id:CASCADE:RESTRICT",
+  "agreement_versions:activated_by_membership_id->organization_memberships.id:CASCADE:RESTRICT",
+  "agreement_versions:agreement_id->agreements.id:CASCADE:RESTRICT",
+].sort();
+
+function foreignKeySignatures(database) {
+  return requiredForeignKeyTables
+    .flatMap((table) =>
+      query(
+        database,
+        `SELECT
+           "from" AS source_column,
+           "table" AS target_table,
+           "to" AS target_column,
+           on_update,
+           on_delete
+         FROM pragma_foreign_key_list('${table}');`,
+      ).map(
+        (row) =>
+          `${table}:${row.source_column}->${row.target_table}.${row.target_column}:` +
+          `${row.on_update}:${row.on_delete}`,
+      ),
+    )
+    .sort();
+}
+
 function assertCatalogAndSchema(database) {
   assert.equal(query(database, "PRAGMA integrity_check;")[0].integrity_check, "ok");
   assert.deepEqual(query(database, "PRAGMA foreign_key_check;"), []);
+  assert.deepEqual(foreignKeySignatures(database), requiredForeignKeySignatures);
   assert.deepEqual(
     query(
       database,
       `SELECT
          (SELECT COUNT(*) FROM agreements) AS agreements,
          (SELECT COUNT(*) FROM agreement_versions) AS agreement_versions,
+         (SELECT COUNT(*) FROM agreement_sources) AS agreement_sources,
          (SELECT COUNT(*) FROM agreement_rules) AS agreement_rules,
          (SELECT COUNT(*) FROM agreement_rate_periods) AS agreement_rate_periods,
+         (
+           SELECT COUNT(*)
+           FROM sqlite_master AS schema_object
+           JOIN pragma_foreign_key_list(schema_object.name) AS foreign_key
+           WHERE schema_object.type = 'table'
+             AND schema_object.name NOT LIKE 'sqlite_%'
+         ) AS foreign_key_rows,
          (SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger') AS triggers;`,
     )[0],
     {
       agreements: 30,
       agreement_versions: 5,
+      agreement_sources: 5,
       agreement_rules: 0,
       agreement_rate_periods: 0,
+      foreign_key_rows: 146,
       triggers: 43,
     },
+  );
+  assert.deepEqual(
+    query(
+      database,
+      `SELECT
+         version.id AS version_id,
+         version.implementation_status,
+         version.verification_status AS version_status,
+         COUNT(source.id) AS source_count,
+         MIN(source.verification_status) AS source_status
+       FROM agreement_versions AS version
+       LEFT JOIN agreement_sources AS source
+         ON source.agreement_version_id = version.id
+       GROUP BY
+         version.id,
+         version.implementation_status,
+         version.verification_status
+       ORDER BY version.id;`,
+    ),
+    [
+      {
+        version_id: "agrv_ba_di_3f_2025_2028",
+        implementation_status: "not_implemented",
+        version_status: "verified_not_implemented",
+        source_count: 1,
+        source_status: "verified_not_implemented",
+      },
+      {
+        version_id: "agrv_bygning_2025_2028",
+        implementation_status: "not_implemented",
+        version_status: "verified_not_implemented",
+        source_count: 1,
+        source_status: "verified_not_implemented",
+      },
+      {
+        version_id: "agrv_elektriker_2025_2028",
+        implementation_status: "not_implemented",
+        version_status: "verified_not_implemented",
+        source_count: 1,
+        source_status: "verified_not_implemented",
+      },
+      {
+        version_id: "agrv_industriens_2025_2028",
+        implementation_status: "not_implemented",
+        version_status: "verified_not_implemented",
+        source_count: 1,
+        source_status: "verified_not_implemented",
+      },
+      {
+        version_id: "agrv_murer_2025_2028",
+        implementation_status: "not_implemented",
+        version_status: "verified_not_implemented",
+        source_count: 1,
+        source_status: "verified_not_implemented",
+      },
+    ],
   );
   assert.deepEqual(
     query(

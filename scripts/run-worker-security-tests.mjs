@@ -74,6 +74,13 @@ function securityDatabase({
   role = "vikar",
   consumeInvitation = false,
   timesheetFound = true,
+  organizationFound = true,
+  organizationIsDemo = false,
+  outboundMailEnabled = true,
+  snapshotFound = true,
+  snapshotStatus = "completed",
+  snapshotManualReviewReasons = [],
+  snapshotResult = { exportBlocked: false, invoiceTotalOre: 67_890 },
 } = {}) {
   let invitationConsumed = false;
   return {
@@ -89,6 +96,14 @@ function securityDatabase({
             assert.match(values[0], /^[a-f0-9]{64}$/u);
             return null;
           }
+          if (/FROM organizations/u.test(query)) {
+            assert.equal(values[0], "organization-a");
+            if (!organizationFound) return null;
+            return {
+              is_demo: organizationIsDemo ? 1 : 0,
+              outbound_mail_enabled: outboundMailEnabled ? 1 : 0,
+            };
+          }
           if (/FROM invitation_tokens AS invitation/u.test(query)) {
             assert.equal(values[1], "organization-a");
             return {
@@ -97,6 +112,19 @@ function securityDatabase({
               invitation_purpose: "worker",
               project_id: "project-a",
               role_key: role,
+            };
+          }
+          if (/INNER JOIN calculation_snapshots AS snapshot/u.test(query)) {
+            assert.equal(values[0], "timesheet-a");
+            assert.equal(values[1], "organization-a");
+            if (!snapshotFound) return null;
+            return {
+              calculation_id: "calculation-a",
+              status: snapshotStatus,
+              gross_pay_cents: 12_345,
+              result_sha256: "a".repeat(64),
+              result_snapshot_json: JSON.stringify(snapshotResult),
+              manual_review_reasons_json: JSON.stringify(snapshotManualReviewReasons),
             };
           }
           if (/FROM timesheets/u.test(query)) {
@@ -299,6 +327,61 @@ const tests = [
     },
   },
   {
+    id: "production-token-cannot-send-from-demo-organization",
+    async run() {
+      const token = await productionToken();
+      const response = await mailWorker.default.fetch(
+        request("/send-timesheet", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            template: "worker_submission_receipt",
+            timesheetId: "timesheet-a",
+            idempotencyKey: "idempotency-key-a",
+          }),
+        }),
+        {
+          TIMESHEET_DB: securityDatabase({
+            organizationIsDemo: true,
+            outboundMailEnabled: false,
+          }),
+          ALLOWED_ORIGIN: allowedOrigin,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          SUPABASE_JWKS_URL: jwksUrl,
+        },
+      );
+      assert.equal(response.status, 403);
+      assert.equal((await body(response)).error.code, "demo_mail_disabled");
+    },
+  },
+  {
+    id: "production-organization-with-disabled-outbound-mail-cannot-send",
+    async run() {
+      const token = await productionToken();
+      const response = await mailWorker.default.fetch(
+        request("/send-timesheet", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            template: "worker_submission_receipt",
+            timesheetId: "timesheet-a",
+            idempotencyKey: "idempotency-key-a",
+          }),
+        }),
+        {
+          TIMESHEET_DB: securityDatabase({ outboundMailEnabled: false }),
+          ALLOWED_ORIGIN: allowedOrigin,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          SUPABASE_JWKS_URL: jwksUrl,
+        },
+      );
+      assert.equal(response.status, 403);
+      assert.equal((await body(response)).error.code, "organization_mail_disabled");
+    },
+  },
+  {
     id: "mail-requires-bearer-session",
     async run() {
       const response = await mailWorker.default.fetch(
@@ -423,16 +506,100 @@ const tests = [
     },
   },
   {
-    id: "frontend-mail-flow-has-no-mailto-fallback-or-recipient-payload",
+    id: "runtime-mail-flow-has-no-mailto-fallback-or-recipient-payload",
     async run() {
-      const frontendRoot = resolve(import.meta.dirname, "..", "src");
-      const combinedSource = sourceFiles(frontendRoot)
-        .map((path) => readFileSync(path, "utf8"))
-        .join("\n");
-      assert.doesNotMatch(combinedSource, /mailto:/iu);
+      const repositoryRoot = resolve(import.meta.dirname, "..");
+      const frontendRoot = resolve(repositoryRoot, "src");
+      const runtimeFiles = [
+        ...sourceFiles(frontendRoot),
+        ...sourceFiles(resolve(repositoryRoot, "mail-worker/src")),
+        ...sourceFiles(resolve(repositoryRoot, "timesheet-worker/src")),
+        resolve(repositoryRoot, "public/privacy-timesheet-gpt.html"),
+        resolve(repositoryRoot, "public/privacy-timesheet-gpt/index.html"),
+      ];
+      const combinedSource = runtimeFiles.map((path) => readFileSync(path, "utf8")).join("\n");
+      assert.doesNotMatch(combinedSource, /mailto:|mailtoUrl/iu);
       const mailSource = readFileSync(join(frontendRoot, "lib", "timesheet-mail.ts"), "utf8");
-      assert.doesNotMatch(mailSource, /payload\s*:\s*\{[^}]*recipient/isu);
+      assert.doesNotMatch(mailSource, /\brecipient\s*:/iu);
       assert.match(mailSource, /requireVerifiedMailBearer/u);
+    },
+  },
+  {
+    id: "latest-calculation-snapshot-is-server-scoped-and-verified",
+    async run() {
+      const token = await productionToken();
+      const response = await timesheetWorker.default.fetch(
+        request("/api/timesheets/timesheet-a/calculations/latest", {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        {
+          TIMESHEET_DB: securityDatabase({ role: "konsulent" }),
+          ALLOWED_ORIGIN: allowedOrigin,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          SUPABASE_JWKS_URL: jwksUrl,
+        },
+      );
+      assert.equal(response.status, 200);
+      const payload = await body(response);
+      assert.equal(payload.source, "d1");
+      assert.deepEqual(payload.snapshot, {
+        source: "d1",
+        calculationId: "calculation-a",
+        status: "completed",
+        exportBlocked: false,
+        manualReviewReasons: [],
+        resultHash: "a".repeat(64),
+        grossPayOre: 12_345,
+        invoiceTotalOre: 67_890,
+      });
+    },
+  },
+  {
+    id: "latest-calculation-snapshot-blocks-manual-review",
+    async run() {
+      const token = await productionToken();
+      const response = await timesheetWorker.default.fetch(
+        request("/api/timesheets/timesheet-a/calculations/latest", {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        {
+          TIMESHEET_DB: securityDatabase({
+            role: "konsulent",
+            snapshotStatus: "manual_review_required",
+            snapshotManualReviewReasons: ["Kræver manuel validering"],
+          }),
+          ALLOWED_ORIGIN: allowedOrigin,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          SUPABASE_JWKS_URL: jwksUrl,
+        },
+      );
+      assert.equal(response.status, 200);
+      const payload = await body(response);
+      assert.equal(payload.snapshot.status, "manual_review_required");
+      assert.equal(payload.snapshot.exportBlocked, true);
+      assert.deepEqual(payload.snapshot.manualReviewReasons, ["Kræver manuel validering"]);
+    },
+  },
+  {
+    id: "latest-calculation-snapshot-cannot-cross-organization-boundary",
+    async run() {
+      const token = await productionToken();
+      const response = await timesheetWorker.default.fetch(
+        request("/api/timesheets/timesheet-a/calculations/latest", {
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        {
+          TIMESHEET_DB: securityDatabase({ role: "konsulent", snapshotFound: false }),
+          ALLOWED_ORIGIN: allowedOrigin,
+          AUTH_ISSUER: issuer,
+          AUTH_AUDIENCE: audience,
+          SUPABASE_JWKS_URL: jwksUrl,
+        },
+      );
+      assert.equal(response.status, 404);
+      assert.equal((await body(response)).error.code, "calculation_snapshot_not_found");
     },
   },
   {

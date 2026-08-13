@@ -37,6 +37,7 @@ const server = await createSsrLoader();
 
 const store = await server.ssrLoadModule("/src/lib/timesheet-store.ts");
 const apiSession = await server.ssrLoadModule("/src/lib/api-session.ts");
+const errorReporting = await server.ssrLoadModule("/src/lib/lovable-error-reporting.ts");
 
 function makeDays(entries) {
   const days = Array.from({ length: 7 }, (_, index) => store.emptyDay(index));
@@ -74,6 +75,33 @@ function assertGuarded(result, label) {
   if (!result.missingRules.length) {
     throw new Error(`${label}: forventede mindst en valideringsblokering`);
   }
+}
+
+function memoryStorage(initialEntries = {}) {
+  const values = new Map(Object.entries(initialEntries));
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key) {
+      return values.has(key) ? values.get(key) : null;
+    },
+    key(index) {
+      return [...values.keys()][index] ?? null;
+    },
+    removeItem(key) {
+      values.delete(key);
+    },
+    setItem(key, value) {
+      values.set(String(key), String(value));
+    },
+    snapshot() {
+      return Object.fromEntries(values);
+    },
+  };
 }
 
 const tests = [
@@ -371,34 +399,96 @@ const tests = [
     },
   },
   {
-    id: "browser-storage-scrubs-sensitive-fields-recursively",
+    id: "browser-storage-scrubs-sensitive-fields-and-credentials-in-both-stores",
     run() {
-      const sanitized = store.sanitizeSensitiveBrowserData({
+      const sensitiveFixture = {
         id: "timesheet-safe",
+        notes: "bevar sikker note",
         vikarCpr: "0101901234",
-        nested: {
-          workerAccessCode: "0000",
-          accessToken: "secret-token",
-          note: "bevar",
-        },
-        list: [{ refreshToken: "refresh-secret", value: "bevar-også" }],
+        vikarCode: "VIKAR-42",
+        kontaktpersonCode: "KONTAKT-24",
+        accessToken: "secret-token",
+        nested: { workerAccessCode: "0000", note: "bevar-også" },
+      };
+      const localStorage = memoryStorage({
+        "timesheets-v1": JSON.stringify([sensitiveFixture]),
+        "timesheet-api-token": "legacy-local-token",
       });
-      assertEqual(sanitized.id, "timesheet-safe", "safe id must remain");
-      assertEqual(sanitized.nested.note, "bevar", "safe nested value must remain");
-      assertEqual(sanitized.list[0].value, "bevar-også", "safe array value must remain");
-      const serialized = JSON.stringify(sanitized);
-      for (const forbidden of [
-        "vikarCpr",
-        "0101901234",
-        "workerAccessCode",
-        "0000",
-        "accessToken",
-        "secret-token",
-        "refreshToken",
-        "refresh-secret",
-      ]) {
-        if (serialized.includes(forbidden)) {
-          throw new Error(`browser storage sanitizer retained forbidden value ${forbidden}`);
+      const sessionStorage = memoryStorage({
+        "timesheets-v1": JSON.stringify([sensitiveFixture]),
+        "timeseddel.demo-session-token": "legacy-session-token",
+      });
+      const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+      const originalConsole = {
+        log: console.log,
+        warn: console.warn,
+        error: console.error,
+      };
+      const capturedLogs = [];
+
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+          localStorage,
+          sessionStorage,
+          dispatchEvent() {},
+        },
+      });
+      console.log = (...values) => capturedLogs.push(["log", ...values]);
+      console.warn = (...values) => capturedLogs.push(["warn", ...values]);
+      console.error = (...values) => capturedLogs.push(["error", ...values]);
+
+      try {
+        store.scrubSensitiveBrowserStorage();
+        apiSession.clearSessionCredential();
+        store.upsert(
+          sheet([], {
+            id: "written-timesheet",
+            notes: "bevar faktisk write",
+            vikarCpr: "0202905678",
+            vikarCode: "WRITE-CODE",
+          }),
+        );
+
+        const persisted = JSON.stringify({
+          local: localStorage.snapshot(),
+          session: sessionStorage.snapshot(),
+        });
+        for (const forbidden of [
+          "vikarCpr",
+          "0101901234",
+          "0202905678",
+          "vikarCode",
+          "VIKAR-42",
+          "WRITE-CODE",
+          "kontaktpersonCode",
+          "KONTAKT-24",
+          "workerAccessCode",
+          "0000",
+          "accessToken",
+          "secret-token",
+          "legacy-local-token",
+          "legacy-session-token",
+        ]) {
+          if (persisted.includes(forbidden)) {
+            throw new Error(`browser storage retained forbidden field or value ${forbidden}`);
+          }
+        }
+        if (
+          !persisted.includes("bevar sikker note") ||
+          !persisted.includes("bevar faktisk write")
+        ) {
+          throw new Error("browser storage cleanup must retain non-sensitive business data");
+        }
+        assertEqual(capturedLogs.length, 0, "storage cleanup and write must not log stored values");
+      } finally {
+        console.log = originalConsole.log;
+        console.warn = originalConsole.warn;
+        console.error = originalConsole.error;
+        if (originalWindow) {
+          Object.defineProperty(globalThis, "window", originalWindow);
+        } else {
+          delete globalThis.window;
         }
       }
     },
@@ -417,17 +507,63 @@ const tests = [
     },
   },
   {
+    id: "error-reporting-redacts-sensitive-error-values",
+    run() {
+      const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+      let capturedError;
+
+      Object.defineProperty(globalThis, "window", {
+        configurable: true,
+        value: {
+          location: { pathname: "/safe-test-route" },
+          __lovableEvents: {
+            captureException(error) {
+              capturedError = error;
+            },
+          },
+        },
+      });
+
+      try {
+        const sensitiveError = new Error("CPR 0101901234, token secret-token og adgangskode 0000");
+        sensitiveError.name = "0101901234";
+        errorReporting.reportLovableError(sensitiveError, { boundary: "test" });
+
+        if (!(capturedError instanceof Error)) {
+          throw new Error("error reporting must emit a sanitized Error");
+        }
+        const reported = [
+          capturedError.name,
+          capturedError.message,
+          capturedError.stack ?? "",
+        ].join("\n");
+        for (const forbidden of ["0101901234", "secret-token", "0000"]) {
+          if (reported.includes(forbidden)) {
+            throw new Error(`error reporting leaked sensitive value ${forbidden}`);
+          }
+        }
+        assertEqual(capturedError.name, "UnknownError", "unsafe error name");
+        assertEqual(capturedError.message, "Application error", "safe error message");
+      } finally {
+        if (originalWindow) {
+          Object.defineProperty(globalThis, "window", originalWindow);
+        } else {
+          delete globalThis.window;
+        }
+      }
+    },
+  },
+  {
     id: "demo-copy-discloses-local-browser-storage",
     run() {
       const source = readFileSync(
         resolve(import.meta.dirname, "../src/components/login-screen.tsx"),
         "utf8",
       );
-      if (!source.includes("Syntetiske demodata kan blive gemt lokalt i denne browser")) {
-        throw new Error("demo copy must disclose local browser storage");
-      }
-      if (source.includes("gemmes ikke permanent")) {
-        throw new Error("demo copy must not claim that local demo data is never persisted");
+      const requiredCopy =
+        "Denne demo bruger syntetiske testdata. Ikke-følsomme demodata kan gemmes lokalt i browseren. Brug ikke rigtige personoplysninger.";
+      if (!source.replace(/\s+/gu, " ").includes(requiredCopy)) {
+        throw new Error("demo copy must disclose local storage and prohibit real personal data");
       }
     },
   },
@@ -461,6 +597,38 @@ const tests = [
         null,
         "server snapshot without invoice total must remain blocked",
       );
+      const verifiedSnapshot = {
+        source: "d1",
+        calculationId: "server-snapshot",
+        status: "completed",
+        exportBlocked: false,
+        manualReviewReasons: [],
+        resultHash: "b".repeat(64),
+        grossPayOre: 12_345,
+        invoiceTotalOre: 67_890,
+      };
+      assertEqual(
+        apiSession.verifiedSnapshotAmountDkk(verifiedSnapshot, "grossPayOre"),
+        123.45,
+        "verified server gross pay",
+      );
+      assertEqual(
+        apiSession.verifiedSnapshotAmountDkk(verifiedSnapshot, "invoiceTotalOre"),
+        678.9,
+        "verified server invoice total",
+      );
+      for (const [patch, label] of [
+        [{ status: "manual_review_required" }, "manual review status"],
+        [{ exportBlocked: true }, "export blocked"],
+        [{ manualReviewReasons: ["Kræver manuel validering"] }, "manual review reason"],
+        [{ resultHash: "invalid" }, "invalid hash"],
+      ]) {
+        assertEqual(
+          apiSession.verifiedSnapshotAmountDkk({ ...verifiedSnapshot, ...patch }, "grossPayOre"),
+          null,
+          `${label} must block client display`,
+        );
+      }
 
       const repositoryRoot = resolve(import.meta.dirname, "..");
       const financeSource = readFileSync(
@@ -471,23 +639,44 @@ const tests = [
         resolve(repositoryRoot, "src/routes/admin.$id.tsx"),
         "utf8",
       );
-      if (/invoiceBaseHours\s*\*\s*billingRate/u.test(financeSource)) {
-        throw new Error("invoice page still computes a client-side base total");
+      const companySource = readFileSync(
+        resolve(repositoryRoot, "src/routes/admin.companies.tsx"),
+        "utf8",
+      );
+      if (
+        /invoiceBaseHours\s*\*\s*billingRate|payrollBasisHours\s*\*|function\s+(?:allowanceRowsForCalculation|invoiceAllowanceRowsForCalculation|payrollAllowanceRowsForCalculation)\b/u.test(
+          financeSource,
+        )
+      ) {
+        throw new Error("invoice page still contains a client-side financial calculation helper");
       }
-      if (/payrollBasisHours\s*\*/u.test(financeSource)) {
-        throw new Error("invoice page still computes a client-side payroll total");
+      for (const blockedFinancialMarker of [
+        "invoiceBaseExVat: Number.NaN",
+        "allowanceRows: []",
+        "payrollTotal: Number.NaN",
+      ]) {
+        if (!financeSource.includes(blockedFinancialMarker)) {
+          throw new Error(`invoice page must retain blocked marker ${blockedFinancialMarker}`);
+        }
       }
-      if ((financeSource.match(/invoiceAllowanceRowsForCalculation\s*\(/gu) ?? []).length !== 1) {
-        throw new Error("legacy client invoice calculation helper is still called");
-      }
-      if ((financeSource.match(/payrollAllowanceRowsForCalculation\s*\(/gu) ?? []).length !== 1) {
-        throw new Error("legacy client payroll calculation helper is still called");
+      if (/\.saturday\s*\+\s*[^;\n]*\.sunday\s*\+\s*[^;\n]*\.weekend/u.test(financeSource)) {
+        throw new Error("overlapping weekend categories are still summed in client finance code");
       }
       if (!detailSource.includes("getLatestCalculationSnapshot")) {
         throw new Error("admin detail must obtain financial totals from the server endpoint");
       }
       if (/customerBillingTotal|employeeBaseCost|totalAllowanceHours/u.test(detailSource)) {
         throw new Error("admin detail still contains a client-computed economic total");
+      }
+      if (
+        /formatProjectBilling|billingHourlyWage\s*\*\s*(?:project\.)?billingFactor/u.test(
+          companySource,
+        )
+      ) {
+        throw new Error("company page still contains a client-computed customer total");
+      }
+      if (!companySource.includes("Blokeret: serverbaseret beregningssnapshot mangler")) {
+        throw new Error("company page must block customer totals without a server snapshot");
       }
     },
   },

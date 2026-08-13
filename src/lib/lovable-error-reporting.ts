@@ -18,10 +18,28 @@ declare global {
   }
 }
 
+const SAFE_ERROR_NAMES = new Set([
+  "AggregateError",
+  "Error",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "TypeError",
+  "URIError",
+]);
+
+export function safeErrorDetails(error: unknown): { name: string } {
+  const name =
+    error instanceof Error && SAFE_ERROR_NAMES.has(error.name) ? error.name : "UnknownError";
+  return { name };
+}
+
 export function reportLovableError(error: unknown, context: Record<string, unknown> = {}) {
   if (typeof window === "undefined") return;
+  const safeError = new Error("Application error");
+  safeError.name = safeErrorDetails(error).name;
   window.__lovableEvents?.captureException?.(
-    error,
+    safeError,
     {
       source: "react_error_boundary",
       route: window.location.pathname,
