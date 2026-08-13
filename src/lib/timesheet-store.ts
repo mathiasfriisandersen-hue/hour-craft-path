@@ -20,7 +20,15 @@ import {
   getRulesNeedingManualReview,
 } from "./agreementValidation";
 import { addDaysToISODate, getDanishAgreementHolidayName } from "./danishHolidays";
+import {
+  invoicePeriodTone,
+  isoDateOrNull,
+  type InvoicePeriodStatusInput,
+  type InvoicePeriodTone,
+} from "./invoice-period-status";
 import { calculateTimesheetSummary } from "./timesheetCalculationService";
+
+export { invoicePeriodTone, type InvoicePeriodStatusInput, type InvoicePeriodTone };
 
 export type Status = "draft" | "sent" | "approved" | "rejected";
 export type WorkerLanguage = "da" | "en" | "pl";
@@ -185,15 +193,11 @@ export type Timesheet = {
   kontaktperson: string;
   kontaktpersonPhone: string;
   kontaktpersonEmail: string;
-  contactPersonAccessCode?: string;
-  contactPersonMustChangeAccessCode?: boolean;
   referenceNo: string;
   arbejdssted: string;
   selectedAgreementId: string;
   overenskomst?: string;
   hourlyWage: number;
-  workerAccessCode?: string;
-  workerMustChangeAccessCode?: boolean;
   localAgreementApplies: boolean;
   lokalaftale?: boolean;
   localAgreementId?: string;
@@ -255,6 +259,11 @@ export type CompanyProject = {
   billingFactor: number;
 };
 
+export type InvoiceBookingPeriod = {
+  startDate: string;
+  endDate: string;
+};
+
 export type LocalAgreement = {
   id: string;
   name: string;
@@ -298,9 +307,8 @@ const APP_STATE_META_KEY = "timesheet-app-state-updated-at-v1";
 const DELETED_TIMESHEET_IDS_KEY = "timesheet-deleted-timesheet-ids-v1";
 const DELETED_COMPANY_IDS_KEY = "timesheet-deleted-company-ids-v1";
 const TIMESHEET_API_SYNC_STATUS_KEY = "timesheet-api-sync-status-v1";
-const TIMESHEET_API_PENDING_IDS_KEY = "timesheet-api-pending-ids-v1";
 export const INDUSTRIENS_AGREEMENT_ID = "industriens-overenskomst";
-export const DELAYED_MEAL_BREAK_RATE_DKK = 34.05;
+export const DELAYED_MEAL_BREAK_RATE_DKK: null = null;
 
 function defaultDayType(index = 0): DayType {
   if (index === 5) return "saturday_rest_day";
@@ -343,6 +351,9 @@ function round(value: number): number {
 }
 
 export function formatDkk(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "Blokeret: serverbaseret beregningssnapshot mangler";
+  }
   return `${round(value).toLocaleString("da-DK", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -388,13 +399,14 @@ export function delayedMealBreakDaysForTimesheet(
 }
 
 export function delayedMealBreakAmountForDays(days: number): number {
-  return round(days * DELAYED_MEAL_BREAK_RATE_DKK);
+  void days;
+  return 0;
 }
 
 export function delayedMealBreakCalculationText(days: number): string {
-  return `${days} ${days === 1 ? "dag" : "dage"} x ${formatDkk(
-    DELAYED_MEAL_BREAK_RATE_DKK,
-  )} = ${formatDkk(delayedMealBreakAmountForDays(days))}`;
+  return `${days} ${
+    days === 1 ? "dag" : "dage"
+  } – Kræver manuel validering; ingen sats anvendes automatisk`;
 }
 
 export function delayedMealBreakSummaryText(days: number): string {
@@ -423,11 +435,7 @@ type StoredTimesheet = Omit<
   projectName?: string;
   projectEndDate?: string;
   kontaktpersonPhone?: string;
-  contactPersonAccessCode?: string;
-  contactPersonMustChangeAccessCode?: boolean;
   hourlyWage?: number;
-  workerAccessCode?: string;
-  workerMustChangeAccessCode?: boolean;
   archived?: boolean;
   workerInactive?: boolean;
   workerConsentInactive?: boolean;
@@ -538,6 +546,9 @@ function normalizeWorkerPhone(value: StoredTimesheet | CreateWorkerTimesheetInpu
 
 function normalizeTimesheet(value: StoredTimesheet): Timesheet {
   const now = new Date().toISOString();
+  const cleanValue = Object.fromEntries(
+    Object.entries(value).filter(([key]) => !isLegacyAccessCredentialKey(key)),
+  ) as StoredTimesheet;
   const days = Array.from({ length: 7 }, (_, index) => normalizeDay(value.days?.[index], index));
   const migratedAgreementId = normalizeStoredAgreementId(
     value.selectedAgreementId,
@@ -547,7 +558,7 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     getCollectiveAgreementById(migratedAgreementId)?.name ?? value.overenskomst ?? "";
   const localAgreementApplies = value.localAgreementApplies ?? value.lokalaftale ?? false;
   return {
-    ...value,
+    ...cleanValue,
     ownerRole: normalizeOwnerRole(value.ownerRole),
     vikarCode: value.vikarCode ?? "",
     vikarEmail: value.vikarEmail ?? "",
@@ -562,12 +573,8 @@ function normalizeTimesheet(value: StoredTimesheet): Timesheet {
     projectName: value.projectName ?? "",
     projectEndDate: value.projectEndDate ?? "",
     kontaktpersonPhone: value.kontaktpersonPhone ?? "",
-    contactPersonAccessCode: value.contactPersonAccessCode,
-    contactPersonMustChangeAccessCode: value.contactPersonMustChangeAccessCode ?? false,
     referenceNo: value.referenceNo ?? "",
     hourlyWage: Number(value.hourlyWage) || 0,
-    workerAccessCode: value.workerAccessCode,
-    workerMustChangeAccessCode: value.workerMustChangeAccessCode ?? false,
     selectedAgreementId: migratedAgreementId,
     overenskomst: agreementName,
     localAgreementApplies,
@@ -613,6 +620,64 @@ export function formatWeekRange(mondayISO: string): string {
   sunday.setDate(sunday.getDate() + 6);
   const fmt = (d: Date) => d.toLocaleDateString("da-DK", { day: "2-digit", month: "short" });
   return `${fmt(monday)} – ${fmt(sunday)}`;
+}
+
+export function resolveInvoiceBookingPeriod(
+  timesheet: Timesheet,
+  companies: Company[],
+): InvoiceBookingPeriod | null {
+  const company = findTimesheetCompany(timesheet, companies);
+  if (!company) return null;
+
+  const project = findTimesheetProject(timesheet, company);
+  if (!project || !projectIsLinkedToTimesheet(project, timesheet)) return null;
+
+  const startDate = isoDateOrNull(project.startDate);
+  const endDate = isoDateOrNull(project.endDate);
+  if (!startDate || !endDate) return null;
+
+  return { startDate, endDate };
+}
+
+function findTimesheetCompany(timesheet: Timesheet, companies: Company[]): Company | undefined {
+  if (timesheet.companyId) {
+    const byId = companies.find((company) => company.id === timesheet.companyId);
+    if (byId) return byId;
+  }
+  const companyName = invoiceReferenceKey(timesheet.brugervirksomhed);
+  return companies.find((company) => invoiceReferenceKey(company.name) === companyName);
+}
+
+function findTimesheetProject(timesheet: Timesheet, company: Company): CompanyProject | undefined {
+  if (timesheet.projectId) {
+    return company.projects.find((project) => project.id === timesheet.projectId);
+  }
+
+  const projectName = invoiceReferenceKey(timesheet.projectName ?? "");
+  if (!projectName) return undefined;
+
+  const matches = company.projects.filter(
+    (project) => invoiceReferenceKey(project.name) === projectName,
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function projectIsLinkedToTimesheet(project: CompanyProject, timesheet: Timesheet): boolean {
+  return project.workerEmails.some((reference) =>
+    projectReferenceMatchesTimesheet(reference, timesheet),
+  );
+}
+
+function projectReferenceMatchesTimesheet(reference: string, timesheet: Timesheet): boolean {
+  const referenceKey = invoiceReferenceKey(reference);
+  if (!referenceKey) return false;
+  return [timesheet.vikar, timesheet.vikarCode ?? "", timesheet.vikarEmail]
+    .map(invoiceReferenceKey)
+    .some((key) => key && key === referenceKey);
+}
+
+function invoiceReferenceKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function formatDateLabel(isoDate: string): string {
@@ -864,8 +929,55 @@ function uniqueMessages(markers: DayRuleMarker[]): string[] {
 }
 
 function storageForKey(key: string): Storage | undefined {
+  void key;
   if (typeof window === "undefined") return undefined;
   return window.localStorage;
+}
+
+function normalizedStorageName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/gu, "");
+}
+
+function isSensitiveBrowserField(key: string): boolean {
+  const normalized = normalizedStorageName(key);
+  return (
+    normalized.includes("cpr") ||
+    normalized.includes("password") ||
+    normalized.includes("passcode") ||
+    normalized.includes("accesscode") ||
+    normalized.includes("accesstoken") ||
+    normalized.includes("refreshtoken") ||
+    normalized.includes("idtoken") ||
+    normalized.includes("sessiontoken") ||
+    normalized.includes("authorization") ||
+    normalized.includes("credential") ||
+    normalized.includes("secret") ||
+    normalized.includes("apikey")
+  );
+}
+
+export function sanitizeSensitiveBrowserData<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((entry) => sanitizeSensitiveBrowserData(entry)) as T;
+  }
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !isSensitiveBrowserField(key))
+      .map(([key, entry]) => [key, sanitizeSensitiveBrowserData(entry)]),
+  ) as T;
+}
+
+function sanitizeSerializedStorageValue(value: string): { value: string; changed: boolean } {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    const sanitized = sanitizeSensitiveBrowserData(parsed);
+    const serialized = JSON.stringify(sanitized);
+    return { value: serialized, changed: serialized !== value };
+  } catch {
+    return { value, changed: false };
+  }
 }
 
 function safeParse<T>(key: string, fallback: T): T {
@@ -876,17 +988,26 @@ function safeParse<T>(key: string, fallback: T): T {
     if (!raw && typeof window !== "undefined") {
       raw = window.sessionStorage.getItem(key);
       if (raw) {
-        storage.setItem(key, raw);
+        setStorageItem(key, raw);
       }
     }
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    if (!raw) return fallback;
+    const sanitized = sanitizeSerializedStorageValue(raw);
+    if (sanitized.changed) storage.setItem(key, sanitized.value);
+    return JSON.parse(sanitized.value) as T;
   } catch {
     return fallback;
   }
 }
 
 function setStorageItem(key: string, value: string): void {
-  storageForKey(key)?.setItem(key, value);
+  const storage = storageForKey(key);
+  if (!storage) return;
+  if (isSensitiveBrowserField(key)) {
+    storage.removeItem(key);
+    return;
+  }
+  storage.setItem(key, sanitizeSerializedStorageValue(value).value);
 }
 
 function removeStorageItem(key: string): void {
@@ -895,6 +1016,31 @@ function removeStorageItem(key: string): void {
     window.sessionStorage.removeItem(key);
   }
 }
+
+export function scrubSensitiveBrowserStorage(): void {
+  if (typeof window === "undefined") return;
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    try {
+      const relevantKeys = Array.from({ length: storage.length }, (_, index) => storage.key(index))
+        .filter((key): key is string => Boolean(key))
+        .filter((key) => /^(?:timesheet|timeseddel)/iu.test(key));
+      for (const key of relevantKeys) {
+        if (isSensitiveBrowserField(key)) {
+          storage.removeItem(key);
+          continue;
+        }
+        const current = storage.getItem(key);
+        if (!current) continue;
+        const sanitized = sanitizeSerializedStorageValue(current);
+        if (sanitized.changed) storage.setItem(key, sanitized.value);
+      }
+    } catch {
+      // Rensningen kopierer eller logger aldrig lagrede værdier.
+    }
+  }
+}
+
+scrubSensitiveBrowserStorage();
 
 function readDeletedIds(key: string): Set<string> {
   return new Set(safeParse<string[]>(key, []));
@@ -913,146 +1059,19 @@ function forgetDeletedId(key: string, id: string): void {
   setStorageItem(key, JSON.stringify([...ids]));
 }
 
-function readPendingTimesheetApiIds(): Set<string> {
-  return new Set(safeParse<string[]>(TIMESHEET_API_PENDING_IDS_KEY, []));
-}
-
-function rememberPendingTimesheetApiId(id: string): void {
-  if (!id) return;
-  const ids = readPendingTimesheetApiIds();
-  ids.add(id);
-  setStorageItem(TIMESHEET_API_PENDING_IDS_KEY, JSON.stringify([...ids]));
-}
-
-function forgetPendingTimesheetApiId(id: string): void {
-  const ids = readPendingTimesheetApiIds();
-  if (!ids.delete(id)) return;
-  setStorageItem(TIMESHEET_API_PENDING_IDS_KEY, JSON.stringify([...ids]));
-}
-
 function emit(): void {
   window.dispatchEvent(new Event("timesheets-changed"));
-}
-
-function localUpdatedAt(): string {
-  const stored = storageForKey(APP_STATE_META_KEY)?.getItem(APP_STATE_META_KEY) ?? "";
-  if (stored) return stored;
-  const timesheetUpdatedAt = readTimesheets()
-    .map((item) => item.updatedAt)
-    .sort()
-    .at(-1);
-  if (timesheetUpdatedAt) return timesheetUpdatedAt;
-  return listCompanies().length > 0 ? new Date().toISOString() : "";
 }
 
 function markLocalUpdated(updatedAt = new Date().toISOString()): void {
   setStorageItem(APP_STATE_META_KEY, updatedAt);
 }
 
-function workerApiUrl(path: string, baseUrl: string): string {
-  return new URL(path, baseUrl).toString();
-}
-
-const BUILD_TIME_MAIL_API_URL = import.meta.env.VITE_TIMESHEET_MAIL_API_URL?.trim() ?? "";
-const BUILD_TIME_TIMESHEET_API_URL = import.meta.env.VITE_TIMESHEET_API_URL?.trim() ?? "";
-const BUILD_TIME_TIMESHEET_API_TOKEN = import.meta.env.VITE_TIMESHEET_API_TOKEN?.trim() ?? "";
-let runtimeMailApiUrl: string | undefined;
-let runtimeConfigPromise: Promise<string> | undefined;
-let runtimeTimesheetApiConfig: TimesheetApiConfig | undefined;
-let runtimeTimesheetApiConfigPromise: Promise<TimesheetApiConfig> | undefined;
-
-type TimesheetApiConfig = {
-  url: string;
-  token: string;
-};
-
 type TimesheetApiSyncStatus = {
   mode: "api" | "fallback";
   message: string;
   updatedAt: string;
 };
-
-async function fetchRuntimeJsonConfig<T>(fileName: string): Promise<T | undefined> {
-  const baseUrl = `${import.meta.env.BASE_URL}${fileName}`;
-  const rootUrl = `/${fileName}`;
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-
-  const urls = [...new Set(isLocalhost ? [rootUrl, baseUrl] : [baseUrl, rootUrl])];
-
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok) continue;
-      return (await response.json()) as T;
-    } catch {
-      continue;
-    }
-  }
-
-  return undefined;
-}
-
-async function loadRuntimeMailApiUrl(): Promise<string> {
-  if (runtimeMailApiUrl !== undefined) return runtimeMailApiUrl;
-
-  runtimeConfigPromise ??= fetchRuntimeJsonConfig<{ timesheetMailApiUrl?: string }>(
-    "mail-config.json",
-  ).then((config) => config?.timesheetMailApiUrl?.trim() ?? "");
-
-  runtimeMailApiUrl = await runtimeConfigPromise;
-  return runtimeMailApiUrl;
-}
-
-async function appStateApiUrl(): Promise<string> {
-  const mailApiUrl = BUILD_TIME_MAIL_API_URL || (await loadRuntimeMailApiUrl());
-
-  if (mailApiUrl) {
-    return workerApiUrl("/app-state", mailApiUrl);
-  }
-
-  const timesheetApi = await timesheetApiConfig();
-  return timesheetApi.url ? workerApiUrl("/app-state", timesheetApi.url) : "";
-}
-
-async function loadRuntimeTimesheetApiConfig(): Promise<TimesheetApiConfig> {
-  if (runtimeTimesheetApiConfig) return runtimeTimesheetApiConfig;
-
-  runtimeTimesheetApiConfigPromise ??= fetchRuntimeJsonConfig<{
-    timesheetApiUrl?: string;
-    timesheetApiToken?: string;
-  }>("timesheet-api-config.json").then((config) => ({
-    url: config?.timesheetApiUrl?.trim() ?? "",
-    token: config?.timesheetApiToken?.trim() ?? "",
-  }));
-
-  runtimeTimesheetApiConfig = await runtimeTimesheetApiConfigPromise;
-  return runtimeTimesheetApiConfig;
-}
-
-async function timesheetApiConfig(): Promise<TimesheetApiConfig> {
-  if (BUILD_TIME_TIMESHEET_API_URL || BUILD_TIME_TIMESHEET_API_TOKEN) {
-    return {
-      url: BUILD_TIME_TIMESHEET_API_URL,
-      token: BUILD_TIME_TIMESHEET_API_TOKEN,
-    };
-  }
-  return loadRuntimeTimesheetApiConfig();
-}
-
-async function timesheetApiUrl(path: string): Promise<string> {
-  const config = await timesheetApiConfig();
-  return config.url ? workerApiUrl(path, config.url) : "";
-}
-
-async function timesheetApiHeaders(): Promise<Record<string, string>> {
-  const config = await timesheetApiConfig();
-  return {
-    "content-type": "application/json",
-    ...(config.token ? { authorization: `Bearer ${config.token}` } : {}),
-  };
-}
 
 function setTimesheetApiSyncStatus(mode: TimesheetApiSyncStatus["mode"], message: string): void {
   const status: TimesheetApiSyncStatus = {
@@ -1072,17 +1091,28 @@ function setTimesheetApiSyncStatus(mode: TimesheetApiSyncStatus["mode"], message
 export function getTimesheetApiSyncStatus(): TimesheetApiSyncStatus {
   return safeParse<TimesheetApiSyncStatus>(TIMESHEET_API_SYNC_STATUS_KEY, {
     mode: "fallback",
-    message: "Timesheet API er ikke synkroniseret endnu. Local cache bruges midlertidigt.",
+    message:
+      "Legacy app-state-synkronisering er fjernet. Forretningsdata skal læses og skrives via den autentificerede D1 API.",
     updatedAt: "",
   });
 }
 
 function readTimesheets(): Timesheet[] {
-  return safeParse<Timesheet[]>(TIMESHEET_KEY, []).map(normalizeTimesheet);
+  const stored = safeParse<StoredTimesheet[]>(TIMESHEET_KEY, []);
+  const normalized = stored.map(normalizeTimesheet);
+  if (stored.some((item) => Object.keys(item).some(isLegacyAccessCredentialKey))) {
+    setStorageItem(TIMESHEET_KEY, JSON.stringify(normalized));
+  }
+  return normalized;
+}
+
+function isLegacyAccessCredentialKey(key: string): boolean {
+  const normalized = normalizedStorageName(key);
+  return /^(?:worker|contactperson)(?:mustchange)?accesscode$/u.test(normalized);
 }
 
 function writeTimesheets(list: Timesheet[], options: { syncRemote?: boolean } = {}): void {
-  setStorageItem(TIMESHEET_KEY, JSON.stringify(list));
+  setStorageItem(TIMESHEET_KEY, JSON.stringify(sanitizeSensitiveBrowserData(list)));
   if (options.syncRemote !== false) {
     markLocalUpdated();
   }
@@ -1097,27 +1127,6 @@ export function getById(id: string): Timesheet | undefined {
   return readTimesheets().find((item) => item.id === id);
 }
 
-export function findByWorkerAccessCode(code: string): Timesheet | undefined {
-  if (!/^\d{4,8}$/.test(code)) return undefined;
-  return readTimesheets().find(
-    (item) => item.workerAccessCode === code && item.workerMustChangeAccessCode === false,
-  );
-}
-
-export function findByContactPersonAccessCode(code: string): Timesheet | undefined {
-  if (!/^\d{4,8}$/.test(code)) return undefined;
-  return readTimesheets().find(
-    (item) =>
-      item.contactPersonAccessCode === code && item.contactPersonMustChangeAccessCode === false,
-  );
-}
-
-export function generateOneTimeCode(): string {
-  const values = new Uint32Array(1);
-  crypto.getRandomValues(values);
-  return String(values[0] % 1_000_000).padStart(6, "0");
-}
-
 export function upsert(t: Timesheet): Timesheet {
   const list = readTimesheets();
   const updated = normalizeTimesheet({ ...t, updatedAt: new Date().toISOString() });
@@ -1126,7 +1135,6 @@ export function upsert(t: Timesheet): Timesheet {
   else list.push(updated);
   forgetDeletedId(DELETED_TIMESHEET_IDS_KEY, updated.id);
   writeTimesheets(list);
-  queueTimesheetApiUpsert(updated);
   return updated;
 }
 
@@ -1147,7 +1155,6 @@ export function setWorkerInactive(workerKey: string, workerInactive: boolean): T
   );
   writeTimesheets(updated);
   const changed = updated.filter((item) => knownWorkerKey(item) === key);
-  queueRemoteTimesheetPersist(changed);
   return changed;
 }
 
@@ -1193,21 +1200,18 @@ export function removeWorkerFromSystem(
   writeTimesheets(nextTimesheets);
   setStorageItem(COMPANY_KEY, JSON.stringify(nextCompanies));
   markLocalUpdated();
-  queueRemoteAppStatePersist();
   emit();
 }
 
 export function remove(id: string): void {
   rememberDeletedId(DELETED_TIMESHEET_IDS_KEY, id);
   writeTimesheets(readTimesheets().filter((item) => item.id !== id));
-  queueRemoteAppStatePersist();
 }
 
 export function clearAll(): void {
   if (typeof window === "undefined") return;
   removeStorageItem(TIMESHEET_KEY);
   markLocalUpdated();
-  queueRemoteAppStatePersist();
   emit();
 }
 
@@ -1233,15 +1237,11 @@ export function createBlank(): Timesheet {
     kontaktperson: "",
     kontaktpersonPhone: "",
     kontaktpersonEmail: "",
-    contactPersonAccessCode: "",
-    contactPersonMustChangeAccessCode: false,
     referenceNo: "",
     arbejdssted: "",
     selectedAgreementId: "",
     overenskomst: "",
     hourlyWage: 0,
-    workerAccessCode: "",
-    workerMustChangeAccessCode: false,
     localAgreementApplies: false,
     lokalaftale: false,
     weekStart: getMondayISO(),
@@ -1294,8 +1294,6 @@ export type CreateWorkerTimesheetInput = {
   shiftWorkApplies?: boolean;
   weekPlan?: CreateWorkerDayPlan[];
   startDate: string;
-  workerAccessCode: string;
-  contactPersonAccessCode?: string;
   ownerRole?: "bruger" | "bruger2";
 };
 
@@ -1411,14 +1409,10 @@ export function createTimesheetForWorker(input: CreateWorkerTimesheetInput): Tim
     kontaktperson: input.kontaktperson.trim(),
     kontaktpersonPhone: input.kontaktpersonPhone.trim(),
     kontaktpersonEmail: input.kontaktpersonEmail.trim(),
-    contactPersonAccessCode: input.contactPersonAccessCode?.trim() ?? "",
-    contactPersonMustChangeAccessCode: Boolean(input.contactPersonAccessCode?.trim()),
     referenceNo: input.referenceNo.trim(),
     selectedAgreementId,
     overenskomst: agreement?.name ?? "",
     hourlyWage: Number(input.hourlyWage) || 0,
-    workerAccessCode: input.workerAccessCode.trim(),
-    workerMustChangeAccessCode: true,
     weekStart,
     days,
   };
@@ -1591,7 +1585,6 @@ export function saveCompany(company: Company): void {
   forgetDeletedId(DELETED_COMPANY_IDS_KEY, updated.id);
   setStorageItem(COMPANY_KEY, JSON.stringify(list));
   markLocalUpdated();
-  queueRemoteAppStatePersist();
   emit();
 }
 
@@ -1604,7 +1597,6 @@ export function removeCompany(id: string): void {
   );
 
   markLocalUpdated();
-  queueRemoteAppStatePersist();
   emit();
 }
 
@@ -1613,8 +1605,27 @@ type RemoteAppState = {
   updatedAt?: string;
   timesheets?: StoredTimesheet[];
   companies?: StoredCompany[];
+  workerConsents?: RemoteWorkerConsent[];
   deletedTimesheetIds?: string[];
   deletedCompanyIds?: string[];
+};
+
+type RemoteWorkerConsent = {
+  key: string;
+  vikar: string;
+  vikarEmail: string;
+  vikarPhone: string;
+  workerLanguage: WorkerLanguage;
+  tradeSkills: TradeSkill[];
+  competencies: string;
+  status: Status;
+  weekStart: string;
+  createdAt: string;
+  updatedAt: string;
+  workerInactive: boolean;
+  workerConsentInactive: boolean;
+  workerConsentRenewalSentAt: string;
+  workerConsentRenewedAt: string;
 };
 
 type NormalizedAppState = {
@@ -1622,53 +1633,47 @@ type NormalizedAppState = {
   updatedAt: string;
   timesheets: Timesheet[];
   companies: Company[];
+  workerConsents: RemoteWorkerConsent[];
   deletedTimesheetIds: string[];
   deletedCompanyIds: string[];
 };
 
 let remotePersistTimer: number | undefined;
 let remoteSyncPromise: Promise<void> | undefined;
-let timesheetApiPersistTimer: number | undefined;
-const pendingTimesheetApiUpserts = new Map<string, Timesheet>();
 
 function currentAppState(): NormalizedAppState {
   return {
     version: 1,
-    updatedAt: localUpdatedAt(),
+    updatedAt: "",
     timesheets: readTimesheets(),
     companies: listCompanies(),
+    workerConsents: workerConsentIndexFromTimesheets(readTimesheets()),
     deletedTimesheetIds: [...readDeletedIds(DELETED_TIMESHEET_IDS_KEY)],
     deletedCompanyIds: [...readDeletedIds(DELETED_COMPANY_IDS_KEY)],
   };
 }
 
-function mergeTimesheets(
-  local: Timesheet[],
-  remote: Timesheet[],
-  preferLocal = false,
-): Timesheet[] {
-  const deletedIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
-  const byId = new Map<string, Timesheet>();
-
-  for (const item of preferLocal ? remote : local) {
-    if (deletedIds.has(item.id)) continue;
-
-    const existing = byId.get(item.id);
-    if (!existing || item.updatedAt >= existing.updatedAt) {
-      byId.set(item.id, item);
-    }
-  }
-
-  for (const item of preferLocal ? local : remote) {
-    if (deletedIds.has(item.id)) continue;
-
-    const existing = byId.get(item.id);
-    if (!existing || item.updatedAt >= existing.updatedAt) {
-      byId.set(item.id, item);
-    }
-  }
-
-  return [...byId.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+function workerConsentIndexFromTimesheets(timesheets: Timesheet[]): RemoteWorkerConsent[] {
+  return timesheets
+    .filter((timesheet) => timesheet.status !== "draft")
+    .map((timesheet) => ({
+      key: knownWorkerKey(timesheet),
+      vikar: timesheet.vikar,
+      vikarEmail: timesheet.vikarEmail,
+      vikarPhone: timesheet.vikarPhone ?? "",
+      workerLanguage: normalizeWorkerLanguage(timesheet.workerLanguage),
+      tradeSkills: timesheet.tradeSkills ?? [],
+      competencies: timesheet.competencies ?? "",
+      status: timesheet.status,
+      weekStart: timesheet.weekStart,
+      createdAt: timesheet.createdAt,
+      updatedAt: timesheet.updatedAt,
+      workerInactive: timesheet.workerInactive ?? false,
+      workerConsentInactive: timesheet.workerConsentInactive ?? false,
+      workerConsentRenewalSentAt: timesheet.workerConsentRenewalSentAt ?? "",
+      workerConsentRenewedAt: timesheet.workerConsentRenewedAt ?? "",
+    }))
+    .filter((item) => item.key && item.vikarEmail);
 }
 
 function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolean): Company[] {
@@ -1715,258 +1720,62 @@ function applyAppState(state: RemoteAppState, updatedAt: string): void {
   emit();
 }
 
-function applyRemoteTimesheets(
-  timesheets: StoredTimesheet[],
-  updatedAt: string,
-  pendingLocalTimesheets: Timesheet[] = [],
-): void {
-  const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
-  const remoteTimesheets = timesheets
-    .map((item) => normalizeTimesheet(item))
-    .filter((item) => !deletedTimesheetIds.has(item.id));
-  const mergedTimesheets = mergeTimesheets(pendingLocalTimesheets, remoteTimesheets);
-  writeTimesheets(mergedTimesheets, { syncRemote: false });
-  markLocalUpdated(updatedAt);
-  emit();
+function remoteConsentKey(item: RemoteWorkerConsent): string {
+  return item.key || personLookupKey(item.vikar) || personLookupKey(item.vikarEmail);
 }
 
-async function persistRemoteAppState(): Promise<void> {
-  const url = await appStateApiUrl();
-  if (!url) return;
+function applyRemoteWorkerConsentState(workerConsents: RemoteWorkerConsent[]): void {
+  if (workerConsents.length === 0) return;
+  const remoteByKey = new Map(
+    workerConsents
+      .map((item) => [remoteConsentKey(item), item] as const)
+      .filter(([key]) => Boolean(key)),
+  );
+  if (remoteByKey.size === 0) return;
 
-  const state = currentAppState();
-  if (!state.updatedAt) return;
+  let hasChanges = false;
+  const updated = readTimesheets().map((timesheet) => {
+    const remote = remoteByKey.get(knownWorkerKey(timesheet));
+    if (!remote) return timesheet;
 
-  await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ ...state, timesheets: [] }),
-  }).catch(() => undefined);
-}
-
-async function persistTimesheetToApi(timesheet: Timesheet): Promise<void> {
-  const url = await timesheetApiUrl("/api/timesheets");
-  const headers = await timesheetApiHeaders();
-  if (!url || !("authorization" in headers)) {
-    setTimesheetApiSyncStatus(
-      "fallback",
-      "Timesheet API mangler URL eller Bearer token. Local cache bruges som fallback.",
-    );
-    throw new Error("Timesheet API is not configured.");
-  }
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ timesheet }),
+    const next = { ...timesheet };
+    let changed = false;
+    if (remote.workerConsentRenewalSentAt > (next.workerConsentRenewalSentAt ?? "")) {
+      next.workerConsentRenewalSentAt = remote.workerConsentRenewalSentAt;
+      changed = true;
+    }
+    if (remote.workerConsentRenewedAt > (next.workerConsentRenewedAt ?? "")) {
+      next.workerConsentRenewedAt = remote.workerConsentRenewedAt;
+      changed = true;
+    }
+    if (remote.workerConsentInactive && !next.workerConsentInactive) {
+      next.vikarEmail = "";
+      next.vikarPhone = "";
+      next.kontaktperson = "";
+      next.kontaktpersonPhone = "";
+      next.kontaktpersonEmail = "";
+      next.tradeSkills = [];
+      next.competencies = "";
+      next.workerConsentInactive = true;
+      changed = true;
+    }
+    if (changed) {
+      hasChanges = true;
+      next.updatedAt =
+        [next.updatedAt, remote.updatedAt].filter(Boolean).sort().at(-1) ?? next.updatedAt;
+    }
+    return changed ? normalizeTimesheet(next) : timesheet;
   });
 
-  if (!response.ok) {
-    throw new Error(`Timesheet API returned ${response.status} on upsert.`);
-  }
-}
-
-async function flushPendingTimesheetApiUpserts(): Promise<void> {
-  const pending = [...pendingTimesheetApiUpserts.values()];
-  pendingTimesheetApiUpserts.clear();
-  if (pending.length === 0) return;
-
-  const failed: Timesheet[] = [];
-  const persisted: Timesheet[] = [];
-  for (const item of pending) {
-    try {
-      await persistTimesheetToApi(item);
-      persisted.push(item);
-    } catch {
-      failed.push(item);
-    }
-  }
-
-  for (const item of persisted) {
-    forgetPendingTimesheetApiId(item.id);
-  }
-
-  for (const item of failed) {
-    pendingTimesheetApiUpserts.set(item.id, item);
-  }
-
-  if (failed.length > 0) {
-    setTimesheetApiSyncStatus(
-      "fallback",
-      "Timesheet API svarede ikke. Appen bruger lokal cache og prøver igen ved næste ændring.",
-    );
-    return;
-  }
-
-  setTimesheetApiSyncStatus("api", "Timesheets er synkroniseret til Worker API.");
-}
-
-function queueTimesheetApiUpsert(timesheet: Timesheet): void {
-  if (typeof window === "undefined") return;
-  pendingTimesheetApiUpserts.set(timesheet.id, timesheet);
-  rememberPendingTimesheetApiId(timesheet.id);
-  if (timesheetApiPersistTimer) window.clearTimeout(timesheetApiPersistTimer);
-  timesheetApiPersistTimer = window.setTimeout(() => {
-    void flushPendingTimesheetApiUpserts();
-  }, 400);
-}
-
-function queueRemoteTimesheetPersist(list: Timesheet[]): void {
-  for (const item of list) {
-    queueTimesheetApiUpsert(item);
-  }
-}
-
-function queueRemoteAppStatePersist(): void {
-  if (typeof window === "undefined") return;
-  if (remotePersistTimer) window.clearTimeout(remotePersistTimer);
-  remotePersistTimer = window.setTimeout(() => {
-    void persistRemoteAppState();
-  }, 400);
-}
-
-export async function syncRemoteAppState(): Promise<void> {
-  if (typeof window === "undefined") return;
-  if (remoteSyncPromise) return remoteSyncPromise;
-
-  remoteSyncPromise = (async () => {
-    const url = await appStateApiUrl();
-    let remoteState: RemoteAppState | undefined;
-
-    if (url) {
-      const response = await fetch(url, { cache: "no-store" }).catch(() => undefined);
-      if (response?.ok) {
-        const body = (await response.json().catch(() => undefined)) as
-          | { ok?: boolean; state?: RemoteAppState }
-          | undefined;
-
-        if (body?.ok && body.state) {
-          remoteState = body.state;
-
-          const deletedTimesheetIds = new Set([
-            ...readDeletedIds(DELETED_TIMESHEET_IDS_KEY),
-            ...(Array.isArray(remoteState.deletedTimesheetIds)
-              ? remoteState.deletedTimesheetIds
-              : []),
-          ]);
-
-          const deletedCompanyIds = new Set([
-            ...readDeletedIds(DELETED_COMPANY_IDS_KEY),
-            ...(Array.isArray(remoteState.deletedCompanyIds) ? remoteState.deletedCompanyIds : []),
-          ]);
-
-          setStorageItem(DELETED_TIMESHEET_IDS_KEY, JSON.stringify([...deletedTimesheetIds]));
-          setStorageItem(DELETED_COMPANY_IDS_KEY, JSON.stringify([...deletedCompanyIds]));
-        }
-      }
-    }
-
-    await syncTimesheetsFromApi();
-
-    if (!url || !remoteState) return;
-
-    const remoteUpdatedAt = remoteState.updatedAt ?? "";
-    const localState = currentAppState();
-    const preferLocal = !remoteUpdatedAt || localState.updatedAt >= remoteUpdatedAt;
-    const remoteCompanies = Array.isArray(remoteState.companies)
-      ? remoteState.companies.map((item) => normalizeCompany(item))
-      : [];
-
-    const mergedCompanies = mergeCompanies(localState.companies, remoteCompanies, preferLocal);
-    const mergedUpdatedAt =
-      [localState.updatedAt, remoteUpdatedAt].filter(Boolean).sort().at(-1) ||
-      new Date().toISOString();
-
-    applyAppState(
-      {
-        version: 1,
-        updatedAt: mergedUpdatedAt,
-        timesheets: readTimesheets(),
-        companies: mergedCompanies,
-        deletedTimesheetIds: [
-          ...new Set([
-            ...localState.deletedTimesheetIds,
-            ...(Array.isArray(remoteState.deletedTimesheetIds)
-              ? remoteState.deletedTimesheetIds
-              : []),
-          ]),
-        ],
-        deletedCompanyIds: [
-          ...new Set([
-            ...localState.deletedCompanyIds,
-            ...(Array.isArray(remoteState.deletedCompanyIds) ? remoteState.deletedCompanyIds : []),
-          ]),
-        ],
-      },
-      mergedUpdatedAt,
-    );
-
-    if (
-      localState.updatedAt !== remoteUpdatedAt ||
-      mergedCompanies.length !== remoteCompanies.length
-    ) {
-      await persistRemoteAppState();
-    }
-  })().finally(() => {
-    remoteSyncPromise = undefined;
-  });
-
-  return remoteSyncPromise;
-}
-
-async function syncTimesheetsFromApi(): Promise<void> {
-  const url = await timesheetApiUrl("/api/timesheets");
-  const headers = await timesheetApiHeaders();
-  if (!url || !("authorization" in headers)) {
-    setTimesheetApiSyncStatus(
-      "fallback",
-      "Timesheet API er ikke konfigureret. Appen viser lokal cache.",
-    );
-    return;
-  }
-
-  const response = await fetch(url, {
-    headers,
-    cache: "no-store",
-  }).catch(() => undefined);
-
-  if (!response?.ok) {
-    setTimesheetApiSyncStatus(
-      "fallback",
-      "Timesheet API svarede ikke ved load. Appen viser lokal cache.",
-    );
-    return;
-  }
-
-  const body = (await response.json().catch(() => undefined)) as
-    | { ok?: boolean; timesheets?: StoredTimesheet[] }
-    | undefined;
-  if (!body?.ok || !Array.isArray(body.timesheets)) {
-    setTimesheetApiSyncStatus(
-      "fallback",
-      "Timesheet API returnerede ikke gyldige timesheets. Appen viser lokal cache.",
-    );
-    return;
-  }
-
-  const remoteUpdatedAt =
-    body.timesheets
-      .map((item) => item.updatedAt ?? "")
-      .filter(Boolean)
-      .sort()
-      .at(-1) || new Date().toISOString();
-
-  const pendingIds = readPendingTimesheetApiIds();
-  const localTimesheets = readTimesheets();
-  const pendingLocalTimesheets = localTimesheets.filter((item) => pendingIds.has(item.id));
-
-  applyRemoteTimesheets(body.timesheets, remoteUpdatedAt, localTimesheets);
-  setTimesheetApiSyncStatus("api", "Timesheets er hentet fra Worker API.");
-
-  for (const item of pendingLocalTimesheets) {
-    queueTimesheetApiUpsert(item);
+  if (hasChanges) {
+    writeTimesheets(updated, { syncRemote: false });
+    const newestRemoteUpdate =
+      workerConsents
+        .map((item) => item.updatedAt)
+        .filter(Boolean)
+        .sort()
+        .at(-1) ?? new Date().toISOString();
+    markLocalUpdated(newestRemoteUpdate);
   }
 }
 
@@ -2121,7 +1930,6 @@ export function setKnownWorkerInactive(worker: KnownWorker, inactive: boolean): 
   );
   writeTimesheets(updated);
   const changed = updated.filter((item) => timesheetMatchesWorker(item, worker));
-  queueRemoteTimesheetPersist(changed);
   return changed;
 }
 export function deleteKnownWorker(worker: KnownWorker): Timesheet[] {
@@ -2134,7 +1942,6 @@ export function deleteKnownWorker(worker: KnownWorker): Timesheet[] {
   });
 
   writeTimesheets(updated);
-  queueRemoteAppStatePersist();
 
   return updated;
 }
@@ -2173,7 +1980,6 @@ export function updateKnownWorker(
   );
   writeTimesheets(updated);
   const changed = updated.filter((item) => timesheetMatchesWorker(item, { ...worker, ...patch }));
-  queueRemoteTimesheetPersist(changed);
   return changed;
 }
 
@@ -2229,7 +2035,6 @@ export function markWorkerConsentRenewalSent(workerKey: string): Timesheet[] {
   );
   writeTimesheets(updated);
   const changed = updated.filter((item) => knownWorkerKey(item) === key);
-  queueRemoteTimesheetPersist(changed);
   return changed;
 }
 
@@ -2252,7 +2057,6 @@ export function renewWorkerConsent(workerName: string, workerEmail: string): Tim
     const matchesEmail = emailKey && personLookupKey(item.vikarEmail) === emailKey;
     return Boolean(matchesName || matchesEmail);
   });
-  queueRemoteTimesheetPersist(changed);
   return changed;
 }
 
@@ -2383,7 +2187,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     if (day.eveningWorkStart && day.eveningWorkEnd) {
       return sum + overlapHours(day, day.eveningWorkStart, day.eveningWorkEnd);
     }
-    if (rule?.eveningStart && day.workType === "displaced_work_time") {
+    if (summary.canCalculateRatesAutomatically && rule?.eveningStart) {
       return sum + overlapHours(day, rule.eveningStart, rule.nightStart || "23:59");
     }
     return sum;
@@ -2392,7 +2196,7 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
     if (day.nightWorkStart && day.nightWorkEnd) {
       return sum + overlapHours(day, day.nightWorkStart, day.nightWorkEnd);
     }
-    if (rule?.nightStart && rule.nightEnd && day.workType === "displaced_work_time") {
+    if (summary.canCalculateRatesAutomatically && rule?.nightStart && rule.nightEnd) {
       return sum + overlapHours(day, rule.nightStart, rule.nightEnd);
     }
     return sum;
@@ -2400,9 +2204,15 @@ export function calculateTimesheet(t: Timesheet): CalculationResult {
   const shift = round(
     t.days.reduce((sum, day) => sum + (explicitShiftWork(day) ? dayHours(day) : 0), 0),
   );
-  const overtime = round(
+  const explicitOvertime = round(
     t.days.reduce((sum, day) => sum + (day.workType === "overtime" ? dayHours(day) : 0), 0),
   );
+  const normalWeekHours =
+    rule?.normalWeekHours && rule.normalWeekHours > 0 ? rule.normalWeekHours : undefined;
+  const overtime =
+    summary.canCalculateRatesAutomatically && normalWeekHours
+      ? Math.max(explicitOvertime, overtimeHours(t.days, normalWeekHours))
+      : explicitOvertime;
   const weekendAgreement = round(
     t.days.reduce((sum, day) => sum + (explicitWeekendAgreement(day) ? dayHours(day) : 0), 0),
   );
@@ -2641,15 +2451,7 @@ export function contactPersonEmailBody(t: Timesheet, options: MailTextOptions = 
           "",
           options.contactInviteUrl,
           "",
-          ...(t.contactPersonMustChangeAccessCode
-            ? [
-                "Log ind første gang med denne engangskode:",
-                "",
-                t.contactPersonAccessCode || "—",
-                "",
-                "Efter første login bliver du bedt om at ændre adgangskoden.",
-              ]
-            : ["Brug din personlige adgangskode, hvis du allerede har valgt en."]),
+          "Invitationen er personlig og kræver en serververificeret session.",
           "",
         ]
       : []),
@@ -2744,15 +2546,7 @@ export function contactPersonEmailHtml(t: Timesheet, options: MailTextOptions = 
       </p>
       <p style="margin:0 0 6px;color:#4b5563;font-size:13px;line-height:1.5;">Hvis knappen ikke virker, kan du kopiere dette link:</p>
       <p style="margin:0 0 18px;font-size:13px;line-height:1.5;word-break:break-all;"><a href="${safeInviteUrl}" style="color:#1f4e79;">${safeInviteUrl}</a></p>
-      ${
-        t.contactPersonMustChangeAccessCode
-          ? `<p style="margin:0 0 6px;line-height:1.5;">Log ind første gang med denne engangskode:</p>
-      <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
-        t.contactPersonAccessCode || "—",
-      )}</p>
-      <p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">Efter første login bliver du bedt om at ændre adgangskoden.</p>`
-          : `<p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">Brug din personlige adgangskode, hvis du allerede har valgt en.</p>`
-      }`
+      <p style="margin:0 0 18px;color:#4b5563;line-height:1.5;">Invitationen er personlig og kræver en serververificeret session.</p>`
     : "";
 
   return `<!doctype html>
@@ -3033,14 +2827,7 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
       `Start date/week: Week ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
       "",
       "LOGIN",
-      "Open the link below and log in the first time with this one-time code:",
-      "",
-      t.workerAccessCode || "—",
-      "",
-      "After your first login, you will be asked to change the password.",
-      "The invitation link is valid for 7 days from creation.",
-      "",
-      "Open the timesheet using the button/link in the email.",
+      "Open the personal invitation link in the email. A server-verified session is required.",
       "",
       "When you have completed or checked the hours, submit the timesheet for approval.",
     ].join("\n");
@@ -3068,14 +2855,7 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
       `Data startu/tydzień: tydzień ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
       "",
       "LOGOWANIE",
-      "Otwórz poniższy link i przy pierwszym logowaniu użyj tego kodu jednorazowego:",
-      "",
-      t.workerAccessCode || "—",
-      "",
-      "Po pierwszym logowaniu zostaniesz poproszony o zmianę hasła.",
-      "Link zaproszenia jest ważny przez 7 dni od utworzenia.",
-      "",
-      "Otwórz kartę czasu pracy za pomocą przycisku/linku w wiadomości.",
+      "Otwórz osobisty link z zaproszeniem w wiadomości. Wymagana jest sesja zweryfikowana przez serwer.",
       "",
       "Po uzupełnieniu lub sprawdzeniu godzin wyślij kartę czasu pracy do zatwierdzenia.",
     ].join("\n");
@@ -3103,14 +2883,7 @@ export function workerInviteEmailBody(t: Timesheet, inviteUrl: string): string {
     `Startdato/uge: Uge ${weekNumber(t.weekStart)} (${formatWeekRange(t.weekStart)})`,
     "",
     "LOGIN",
-    "Åbn linket herunder og log ind første gang med denne engangskode:",
-    "",
-    t.workerAccessCode || "—",
-    "",
-    "Efter første login bliver du bedt om at ændre adgangskoden.",
-    "Invitationslinket er gyldigt i 7 dage fra oprettelse.",
-    "",
-    "Åbn timesedlen via knappen/linket i mailen.",
+    "Åbn det personlige invitationslink i mailen. En serververificeret session er påkrævet.",
     "",
     "Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.",
   ].join("\n");
@@ -3146,9 +2919,7 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
           intro:
             "Sub-Z has created a timesheet for you. Use the button below to open the timesheet.",
           button: "Open timesheet",
-          loginIntro: "Log in the first time with this one-time code:",
-          validity:
-            "After your first login, you will be asked to change the password. The invitation link is valid for 7 days from creation.",
+          loginIntro: "The personal invitation requires a server-verified session.",
           footer:
             "When you have completed or checked the hours, submit the timesheet for approval.",
           workerName: "Worker name",
@@ -3171,9 +2942,7 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
             intro:
               "Sub-Z utworzył dla Ciebie kartę czasu pracy. Użyj przycisku poniżej, aby ją otworzyć.",
             button: "Otwórz kartę czasu pracy",
-            loginIntro: "Przy pierwszym logowaniu użyj tego kodu jednorazowego:",
-            validity:
-              "Po pierwszym logowaniu zostaniesz poproszony o zmianę hasła. Link zaproszenia jest ważny przez 7 dni od utworzenia.",
+            loginIntro: "Osobiste zaproszenie wymaga sesji zweryfikowanej przez serwer.",
             footer:
               "Po uzupełnieniu lub sprawdzeniu godzin wyślij kartę czasu pracy do zatwierdzenia.",
             workerName: "Pracownik",
@@ -3195,9 +2964,7 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
             intro:
               "Sub-Z har oprettet en timeseddel til dig. Brug knappen herunder til at åbne timesedlen.",
             button: "Åbn timeseddel",
-            loginIntro: "Log ind første gang med denne engangskode:",
-            validity:
-              "Efter første login bliver du bedt om at ændre adgangskoden. Invitationslinket er gyldigt i 7 dage fra oprettelse.",
+            loginIntro: "Den personlige invitation kræver en serververificeret session.",
             footer:
               "Når du har udfyldt eller kontrolleret timerne, sender du timesedlen til godkendelse.",
             workerName: "Vikarnavn",
@@ -3224,11 +2991,7 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
         <a href="${safeInviteUrl}" style="display:inline-block;background:#1f4e79;color:#ffffff;text-decoration:none;font-weight:700;border-radius:8px;padding:12px 18px;">${htmlEscape(copy.button)}</a>
       </p>
       <p style="margin:0 0 8px;font-weight:700;">Login</p>
-      <p style="margin:0 0 6px;line-height:1.5;">${htmlEscape(copy.loginIntro)}</p>
-      <p style="margin:0 0 18px;font-size:22px;font-weight:700;letter-spacing:0.12em;">${htmlEscape(
-        t.workerAccessCode || "—",
-      )}</p>
-      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">${htmlEscape(copy.validity)}</p>
+      <p style="margin:0 0 22px;color:#4b5563;line-height:1.5;">${htmlEscape(copy.loginIntro)}</p>
       <table style="border-collapse:collapse;width:100%;font-size:14px;">
         <tbody>
           ${htmlRow(copy.workerName, t.vikar)}
@@ -3252,10 +3015,6 @@ export function workerInviteEmailHtml(t: Timesheet, inviteUrl: string): string {
     </div>
   </body>
 </html>`;
-}
-
-export function mailtoUrl(t: Timesheet): string {
-  return `mailto:${t.kontaktpersonEmail}?subject=${encodeURIComponent(emailSubject(t))}&body=${encodeURIComponent(contactPersonEmailBody(t))}`;
 }
 
 function csvCell(value: string | number): string {
@@ -3870,8 +3629,6 @@ function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timeshe
     shiftWorkApplies: worker.workForm === "shift",
     weekPlan: Array.from({ length: 7 }, (_, index) => demoDayPlan(worker.workForm, index)),
     startDate: weekStart,
-    workerAccessCode: "0000",
-    contactPersonAccessCode: "0000",
   });
 
   const days = timesheet.days.map((day, index) => {
@@ -3906,8 +3663,6 @@ function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timeshe
     ...timesheet,
     id: worker.id,
     status: worker.ownerRole === "bruger2" ? "sent" : "approved",
-    workerMustChangeAccessCode: false,
-    contactPersonMustChangeAccessCode: false,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     days,
@@ -4003,6 +3758,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
 }
 
 const TEST_DATA_PREFIX = "testdata-2026-07-06-v6";
+const TEST_DATA_SEED_VERSION = "testdata-2026-07-06-v6-invoice-period-v2";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 const TEST_DATA_BASE_DATE = "2026-07-06";
 const TEST_DATA_ACTIVE_PROJECT_END_DATE = "2026-08-03";
@@ -4010,6 +3766,10 @@ const TEST_DATA_PAST_PROJECT_START = "2026-06-16";
 const TEST_DATA_PAST_PROJECT_END = "2026-06-22";
 const TEST_DATA_PAST_WEEK_START = "2026-06-15";
 const TEST_DATA_ACTIVE_WEEK_START = "2026-07-06";
+const TEST_DATA_INVOICE_SOON_START = "2026-07-13";
+const TEST_DATA_INVOICE_SOON_END = "2026-07-24";
+const TEST_DATA_INVOICE_WAITING_START = "2026-07-20";
+const TEST_DATA_INVOICE_WAITING_END = "2026-07-31";
 
 type TestCompanyInput = {
   name: string;
@@ -4207,6 +3967,7 @@ function testProjectInputs(
     for (let localProjectIndex = 0; localProjectIndex < count; localProjectIndex += 1) {
       const tradeSkill = TEST_TRADE_SKILLS[projectIndex % TEST_TRADE_SKILLS.length];
       const isCurrentProject = projectIndex < 20;
+      const invoiceScenario = testInvoicePeriodScenario(projectIndex);
       const workerIndexes =
         ownerRole === "bruger" && projectIndex === 0
           ? [0, workerCount - 1]
@@ -4220,8 +3981,22 @@ function testProjectInputs(
         competencies: TEST_COMPETENCIES[projectIndex % TEST_COMPETENCIES.length],
         workerIndexes,
         workPeriod: testWorkPeriod(projectIndex),
-        startDate: isCurrentProject ? TEST_DATA_BASE_DATE : TEST_DATA_PAST_PROJECT_START,
-        endDate: isCurrentProject ? TEST_DATA_ACTIVE_PROJECT_END_DATE : TEST_DATA_PAST_PROJECT_END,
+        startDate:
+          invoiceScenario === "soon"
+            ? TEST_DATA_INVOICE_SOON_START
+            : invoiceScenario === "waiting"
+              ? TEST_DATA_INVOICE_WAITING_START
+              : isCurrentProject
+                ? TEST_DATA_BASE_DATE
+                : TEST_DATA_PAST_PROJECT_START,
+        endDate:
+          invoiceScenario === "soon"
+            ? TEST_DATA_INVOICE_SOON_END
+            : invoiceScenario === "waiting"
+              ? TEST_DATA_INVOICE_WAITING_END
+              : isCurrentProject
+                ? TEST_DATA_ACTIVE_PROJECT_END_DATE
+                : TEST_DATA_PAST_PROJECT_END,
       });
       projectIndex += 1;
     }
@@ -4256,17 +4031,26 @@ function testDataId(kind: string, ownerRole: "bruger" | "bruger2", index: number
   return `${TEST_DATA_PREFIX}-${ownerRole}-${kind}-${String(index + 1).padStart(2, "0")}`;
 }
 
+function testInvoicePeriodScenario(projectIndex: number): "soon" | "waiting" | null {
+  if (projectIndex >= 6 && projectIndex <= 10) return "soon";
+  if (projectIndex >= 1 && projectIndex <= 5) return "waiting";
+  return null;
+}
+
+function testTimesheetWeekStart(projectIndex: number): string {
+  return projectIndex < 20 ? TEST_DATA_ACTIVE_WEEK_START : TEST_DATA_PAST_WEEK_START;
+}
+
 function testTimesheetStatus(projectIndex: number): Status {
-  if (projectIndex < 10) return "sent";
-  if (projectIndex < 20) return "approved";
-  if (projectIndex < 22) return "sent";
-  if (projectIndex < 28) return "approved";
+  if (testInvoicePeriodScenario(projectIndex)) return "sent";
+  if (projectIndex >= 11 && projectIndex <= 18) return "approved";
+  if (projectIndex >= 19 && projectIndex < 28) return "approved";
   if (projectIndex % 11 === 0) return "rejected";
   return "draft";
 }
 
 function testInvoiceSentDate(projectIndex: number): string {
-  return projectIndex >= 15 && projectIndex < 18 ? "2026-07-01" : "";
+  return projectIndex >= 19 && projectIndex < 28 ? "2026-07-01" : "";
 }
 
 function testPayrollSentDate(projectIndex: number): string {
@@ -4421,10 +4205,7 @@ function buildOwnerTestSeed(
       defaultNightWorkStart: project.workPeriod === "night" ? times.start : "",
       defaultNightWorkEnd: project.workPeriod === "night" ? times.end : "",
       weekPlan: testWeekPlan(project.workPeriod),
-      startDate:
-        project.projectIndex < 20 ? TEST_DATA_ACTIVE_WEEK_START : TEST_DATA_PAST_WEEK_START,
-      workerAccessCode: "0000",
-      contactPersonAccessCode: "0000",
+      startDate: testTimesheetWeekStart(project.projectIndex),
     });
 
     return normalizeTimesheet({
@@ -4457,8 +4238,6 @@ function buildOwnerTestSeed(
       status: testTimesheetStatus(project.projectIndex),
       invoiceSentDate: testInvoiceSentDate(project.projectIndex),
       payrollSentDate: testPayrollSentDate(project.projectIndex),
-      workerMustChangeAccessCode: false,
-      contactPersonMustChangeAccessCode: false,
       createdAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
       updatedAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
     });
@@ -4477,6 +4256,32 @@ function buildTestDataSeed(): { companies: Company[]; timesheets: Timesheet[] } 
   };
 }
 
+function testTimesheetMatchesSeed(existing: Timesheet | undefined, testTimesheet: Timesheet) {
+  return (
+    existing &&
+    existing.projectEndDate === testTimesheet.projectEndDate &&
+    existing.weekStart === testTimesheet.weekStart &&
+    existing.status === testTimesheet.status &&
+    (existing.invoiceSentDate ?? "") === (testTimesheet.invoiceSentDate ?? "") &&
+    (existing.payrollSentDate ?? "") === (testTimesheet.payrollSentDate ?? "")
+  );
+}
+
+function testProjectMatchesSeed(
+  existing: CompanyProject | undefined,
+  testProject: CompanyProject,
+): boolean {
+  return Boolean(
+    existing &&
+    existing.startDate === testProject.startDate &&
+    existing.endDate === testProject.endDate &&
+    existing.workerEmails.length === testProject.workerEmails.length &&
+    existing.workerEmails.every(
+      (reference, index) => reference === testProject.workerEmails[index],
+    ),
+  );
+}
+
 function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): boolean {
   const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
   const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
@@ -4491,9 +4296,12 @@ function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): bool
   );
 
   const companyIds = new Set(companies.map((company) => company.id));
-  const timesheetIds = new Set(timesheets.map((timesheet) => timesheet.id));
+  const timesheetsById = new Map(timesheets.map((timesheet) => [timesheet.id, timesheet]));
   const projectIds = new Set(
     companies.flatMap((company) => company.projects.map((project) => project.id)),
+  );
+  const projectsById = new Map(
+    companies.flatMap((company) => company.projects.map((project) => [project.id, project])),
   );
 
   const requiredTestProjectIds = requiredTestCompanies.flatMap((company) =>
@@ -4503,8 +4311,28 @@ function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): bool
   return (
     requiredTestCompanies.every((company) => companyIds.has(company.id)) &&
     requiredTestProjectIds.every((projectId) => projectIds.has(projectId)) &&
-    requiredTestTimesheets.every((timesheet) => timesheetIds.has(timesheet.id))
+    requiredTestCompanies.every((company) =>
+      company.projects.every((project) =>
+        testProjectMatchesSeed(projectsById.get(project.id), project),
+      ),
+    ) &&
+    requiredTestTimesheets.every((timesheet) =>
+      testTimesheetMatchesSeed(timesheetsById.get(timesheet.id), timesheet),
+    )
   );
+}
+
+function mergeTestTimesheet(existing: Timesheet, testTimesheet: Timesheet): Timesheet {
+  return normalizeTimesheet({
+    ...existing,
+    projectEndDate: testTimesheet.projectEndDate,
+    weekStart: testTimesheet.weekStart,
+    days: testTimesheet.days,
+    status: testTimesheet.status,
+    invoiceSentDate: testTimesheet.invoiceSentDate,
+    payrollSentDate: testTimesheet.payrollSentDate,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 function mergeTestDataSeed(
@@ -4536,13 +4364,31 @@ function mergeTestDataSeed(
       continue;
     }
 
-    const projectIds = new Set(existingCompany.projects.map((project) => project.id));
-    const missingProjects = testCompany.projects.filter((project) => !projectIds.has(project.id));
+    const projectsById = new Map(existingCompany.projects.map((project) => [project.id, project]));
+    let hasProjectChanges = false;
 
-    if (missingProjects.length > 0) {
+    for (const testProject of testCompany.projects) {
+      const existingProject = projectsById.get(testProject.id);
+      if (!existingProject) {
+        projectsById.set(testProject.id, testProject);
+        hasProjectChanges = true;
+        continue;
+      }
+      if (!testProjectMatchesSeed(existingProject, testProject)) {
+        projectsById.set(testProject.id, {
+          ...existingProject,
+          startDate: testProject.startDate,
+          endDate: testProject.endDate,
+          workerEmails: testProject.workerEmails,
+        });
+        hasProjectChanges = true;
+      }
+    }
+
+    if (hasProjectChanges) {
       companiesById.set(testCompany.id, {
         ...existingCompany,
-        projects: [...existingCompany.projects, ...missingProjects],
+        projects: [...projectsById.values()],
       });
     }
   }
@@ -4550,8 +4396,14 @@ function mergeTestDataSeed(
   for (const testTimesheet of testTimesheets) {
     if (deletedTimesheetIds.has(testTimesheet.id)) continue;
 
-    if (!timesheetsById.has(testTimesheet.id)) {
+    const existingTimesheet = timesheetsById.get(testTimesheet.id);
+    if (!existingTimesheet) {
       timesheetsById.set(testTimesheet.id, testTimesheet);
+      continue;
+    }
+
+    if (!testTimesheetMatchesSeed(existingTimesheet, testTimesheet)) {
+      timesheetsById.set(testTimesheet.id, mergeTestTimesheet(existingTimesheet, testTimesheet));
     }
   }
 
@@ -4567,7 +4419,7 @@ export function seedIfEmpty(): void {
   const existingTimesheets = readTimesheets();
   const existingCompanies = listCompanies();
   const hasSeededCurrentVersion =
-    storageForKey(TEST_DATA_SEED_KEY)?.getItem(TEST_DATA_SEED_KEY) === TEST_DATA_PREFIX;
+    storageForKey(TEST_DATA_SEED_KEY)?.getItem(TEST_DATA_SEED_KEY) === TEST_DATA_SEED_VERSION;
 
   if (hasSeededCurrentVersion && hasCurrentTestData(existingCompanies, existingTimesheets)) {
     return;
@@ -4577,8 +4429,7 @@ export function seedIfEmpty(): void {
 
   setStorageItem(TIMESHEET_KEY, JSON.stringify(timesheets));
   setStorageItem(COMPANY_KEY, JSON.stringify(companies));
-  setStorageItem(TEST_DATA_SEED_KEY, TEST_DATA_PREFIX);
+  setStorageItem(TEST_DATA_SEED_KEY, TEST_DATA_SEED_VERSION);
   markLocalUpdated();
-  queueRemoteAppStatePersist();
   emit();
 }

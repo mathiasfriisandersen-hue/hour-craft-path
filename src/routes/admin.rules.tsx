@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { AppShell, InfoBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { listRules, saveRule } from "@/lib/timesheet-store";
+import {
+  listVerifiedAgreementCatalog,
+  safeSessionErrorMessage,
+  type ApiAgreementCatalogEntry,
+} from "@/lib/api-session";
+import { listRules } from "@/lib/timesheet-store";
 import {
   AGREEMENT_RULE_SOURCE_LABEL,
   agreementRuleSourceHref,
@@ -15,12 +20,6 @@ import {
   getCollectiveAgreementById,
   publicAgreementPdfHref,
 } from "@/lib/collectiveAgreements";
-import {
-  listAgreementValidationReports,
-  saveAgreementValidationReport,
-  type AgreementRuleCategory,
-  type AgreementValidationReport,
-} from "@/lib/agreementValidation";
 
 export const Route = createFileRoute("/admin/rules")({
   head: () => ({ meta: [{ title: "Admin — Regelgrundlag" }] }),
@@ -34,9 +33,35 @@ function RulesPage() {
   const [rules, setRules] = useState(listRules);
   const [selectedId, setSelectedId] = useState(rules[0]?.agreementId ?? "");
   const [message, setMessage] = useState("");
+  const [serverCatalog, setServerCatalog] = useState<ApiAgreementCatalogEntry[]>([]);
+  const [serverCatalogMessage, setServerCatalogMessage] = useState(
+    "Henter det servervaliderede katalog…",
+  );
   const [sourcePageInputs, setSourcePageInputs] = useState<Record<string, string>>({});
   const rule = rules.find((item) => item.agreementId === selectedId);
   const agreement = rule ? getCollectiveAgreementById(rule.agreementId) : undefined;
+
+  useEffect(() => {
+    let cancelled = false;
+    listVerifiedAgreementCatalog()
+      .then((catalog) => {
+        if (cancelled) return;
+        setServerCatalog(catalog);
+        setServerCatalogMessage(
+          catalog.length
+            ? `${catalog.length} katalogposter er hentet fra D1.`
+            : "Demoorganisationen indeholder ingen juridiske aftaler.",
+        );
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setServerCatalog([]);
+        setServerCatalogMessage(safeSessionErrorMessage(error));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const update = (patch: Partial<AgreementRule>) => {
     setRules((current) =>
@@ -73,47 +98,7 @@ function RulesPage() {
     });
   };
   const save = () => {
-    if (!rule) return;
-
-    const sourceFields = Object.keys(AGREEMENT_RULE_SOURCE_LABEL) as AgreementRuleSourceKey[];
-
-    const mergedSources = sourceFields.flatMap((field) => {
-      const existingSources = rule.sources.filter((source) => source.field === field);
-      const existing = existingSources[0];
-      const pageInputKey = `${selectedId}:${field}`;
-      const draftValue = sourcePageInputs[pageInputKey];
-
-      const pages =
-        draftValue !== undefined
-          ? parsePageInput(draftValue)
-          : existingSources.map((source) => source.page);
-
-      const pdfUrl = existing?.pdfUrl ?? agreement?.pdfUrl ?? "";
-      const pdfFileName = existing?.pdfFileName ?? agreement?.pdfFileName ?? "";
-
-      if (pages.length === 0 || !pdfUrl.trim()) {
-        return [];
-      }
-
-      return pages.map((page) => ({
-        field,
-        page,
-        pdfUrl: pdfUrl.trim(),
-        pdfFileName: pdfFileName.trim() || undefined,
-      }));
-    });
-
-    const ruleToSave = {
-      ...rule,
-      sources: mergedSources,
-    };
-
-    saveRule(ruleToSave);
-    syncValidationFromRuleSources(ruleToSave);
-    setRules(listRules());
-    setSourcePageInputs({});
-    setMessage("Regelgrundlaget er gemt i denne browser.");
-    window.setTimeout(() => setMessage(""), 3000);
+    setMessage("Browserlagring er deaktiveret. Brug det auditerede D1-flow.");
   };
 
   return (
@@ -127,6 +112,12 @@ function RulesPage() {
       <InfoBanner tone="warning">
         Systemet indeholder ingen forudfyldte satser. Indtast kun verificerede regler fra den
         gældende overenskomst, og angiv gyldighedsperioden.
+      </InfoBanner>
+      <ServerAgreementCatalog entries={serverCatalog} message={serverCatalogMessage} />
+      <InfoBanner tone="warning">
+        Den tidligere browserbaserede regelvisning nedenfor er kun historisk reference og er
+        skrivebeskyttet. Juridiske regler og satser må kun aktiveres gennem et auditeret,
+        servervalideret D1-flow.
       </InfoBanner>
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[320px_1fr]">
         <aside className="max-h-[720px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -142,7 +133,10 @@ function RulesPage() {
           ))}
         </aside>
         {rule && (
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+          <fieldset
+            disabled
+            className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm disabled:opacity-75 md:p-6"
+          >
             <div className="mb-5">
               <h2 className="text-lg font-semibold text-slate-950">
                 {agreement?.name ?? rule.agreementId}
@@ -289,7 +283,7 @@ function RulesPage() {
                         </div>
                         <Input
                           value={source?.pdfUrl ?? agreement?.pdfUrl ?? ""}
-                          placeholder="/overenskomster/filnavn.pdf"
+                          placeholder="https://officiel-udgiver.example/aftale.pdf"
                           className={inputClassName}
                           onChange={(e) =>
                             updateSource(field, {
@@ -343,13 +337,110 @@ function RulesPage() {
             <div className="mt-5 flex items-center justify-between gap-3">
               <span className="text-sm text-slate-500">{message}</span>
               <Button className="bg-blue-600 text-white hover:bg-blue-700" onClick={save}>
-                Gem regler
+                Serveropdatering kræver valideret D1-flow
               </Button>
             </div>
-          </section>
+          </fieldset>
         )}
       </div>
     </AppShell>
+  );
+}
+
+function ServerAgreementCatalog({
+  entries,
+  message,
+}: {
+  entries: ApiAgreementCatalogEntry[];
+  message: string;
+}) {
+  return (
+    <section className="mt-6 rounded-xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-950">
+            Servervalideret overenskomstkatalog
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">{message}</p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+          D1 er autoritativ
+        </span>
+      </div>
+      {entries.length > 0 && (
+        <div className="mt-4 space-y-3">
+          {entries.map((entry) => (
+            <details key={entry.id} className="rounded-lg border border-slate-200 p-4">
+              <summary className="cursor-pointer list-none">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-slate-950">{entry.exactTitle}</div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {entry.agreementParties} · {entry.catalogKey}
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                    {entry.catalogStatus}
+                  </span>
+                </div>
+              </summary>
+              <dl className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <CatalogField label="Arbejdsgiverorganisation">
+                  {entry.employerOrganization || "Kræver manuel validering"}
+                </CatalogField>
+                <CatalogField label="Medarbejderkategori">{entry.employeeCategory}</CatalogField>
+                <CatalogField label="Fagligt scope">{entry.coveredWorkAreas}</CatalogField>
+                <CatalogField label="Geografisk scope">{entry.geographyScope}</CatalogField>
+              </dl>
+              <div className="mt-4 space-y-3">
+                {entry.versions.length === 0 ? (
+                  <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+                    Ingen verificeret version. Kræver manuel afklaring – beregning og eksport er
+                    blokeret.
+                  </div>
+                ) : (
+                  entry.versions.map((version) => (
+                    <div key={version.id} className="rounded-lg bg-slate-50 p-3 text-sm">
+                      <div className="font-semibold text-slate-900">
+                        Version {version.versionLabel} · {version.validFrom} –{" "}
+                        {version.validTo || "ingen verificeret slutdato"}
+                      </div>
+                      <div className="mt-1 text-slate-600">
+                        Implementering: {version.implementationStatus} · Kildekontrol:{" "}
+                        {version.verificationStatus} · Godkendte lokale overrides:{" "}
+                        {version.approvedOverrideCount}
+                      </div>
+                      <div className="mt-2 space-y-1">
+                        {version.sources.map((source) => (
+                          <a
+                            key={source.id}
+                            href={source.officialUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block font-semibold text-blue-700 hover:underline"
+                          >
+                            {source.documentTitle} · {source.verificationStatus} →
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function CatalogField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="font-semibold text-slate-700">{label}</dt>
+      <dd className="mt-1 text-slate-600">{children}</dd>
+    </div>
   );
 }
 
@@ -383,126 +474,6 @@ function TextField({
       />
     </label>
   );
-}
-
-const SOURCE_FIELD_VALIDATION_RULES: Record<AgreementRuleSourceKey, AgreementRuleCategory[]> = {
-  normalDayHours: ["normal_daily_working_time"],
-  normalWeekHours: ["normal_weekly_working_time"],
-  overtimeRule: ["overtime", "outside_normal_time"],
-  saturdayRule: ["saturday_allowance"],
-  sundayRule: ["sunday_allowance", "public_holiday"],
-  eveningRule: ["evening_allowance", "staggered_time"],
-  nightRule: ["night_allowance"],
-  shiftRule: ["shift_work"],
-  specialRule: ["special_allowances", "local_agreements", "breaks"],
-};
-
-const VALIDATION_RULE_LABELS: Record<AgreementRuleCategory, string> = {
-  normal_daily_working_time: "Normal daglig arbejdstid",
-  normal_weekly_working_time: "Normal ugentlig arbejdstid",
-  overtime: "Overarbejde",
-  saturday_allowance: "Lørdagstillæg",
-  sunday_allowance: "Søndagstillæg",
-  public_holiday: "Helligdage / søgnehelligdage",
-  evening_allowance: "Aftentillæg",
-  night_allowance: "Nattillæg",
-  staggered_time: "Forskudt tid",
-  shift_work: "Skiftehold / holddrift",
-  special_allowances: "Særlige tillæg",
-  local_agreements: "Lokalaftaler",
-  breaks: "Pauser",
-  outside_normal_time: "Arbejde uden for normal tid",
-};
-
-function createValidationReportFromRuleSources(
-  rule: AgreementRule,
-): AgreementValidationReport | undefined {
-  const agreement = getCollectiveAgreementById(rule.agreementId);
-  if (!agreement) return undefined;
-
-  const rules = Object.entries(SOURCE_FIELD_VALIDATION_RULES).flatMap(([field, ruleKeys]) => {
-    const pages = [
-      ...new Set(
-        rule.sources
-          .filter((source) => source.field === field)
-          .map((source) => source.page)
-          .filter((page) => Number.isInteger(page) && page > 0),
-      ),
-    ].sort((a, b) => a - b);
-
-    if (!pages.length) return [];
-
-    return ruleKeys.map((ruleKey) => ({
-      ruleKey,
-      label: VALIDATION_RULE_LABELS[ruleKey],
-      required: !["special_allowances", "local_agreements"].includes(ruleKey),
-      calculationType: "manual" as const,
-      rate: null,
-      unit: null,
-      conditions: "Valideres manuelt ud fra kildehenvisningen i regelgrundlaget.",
-      pdfPages: pages,
-      sourceText: "Kildehenvisning er angivet i regelgrundlagets PDF-sidefelt.",
-      possibleRates: [],
-      confidence: "medium" as const,
-      reviewStatus: "approved" as const,
-      notes: "Godkendt via kildehenvisning i regelgrundlaget.",
-    }));
-  });
-
-  if (!rules.length) return undefined;
-
-  return {
-    agreementSlug: agreement.id,
-    agreementName: agreement.name,
-    sourceAuditVersion: "pdf-references-v1",
-    status: "validated_for_calculation",
-    validatedForCalculation: true,
-    sourcePdf: agreement.pdfFileName ?? agreement.pdfUrl ?? "",
-    extractedAt: new Date().toISOString().slice(0, 10),
-    validatedAt: new Date().toISOString().slice(0, 10),
-    validatedBy: "Admin",
-    validationNote: "Valideret via gemte kildehenvisninger i regelgrundlaget.",
-    rules,
-    testCases: [],
-  };
-}
-
-function syncValidationFromRuleSources(rule: AgreementRule) {
-  const sourceReport = createValidationReportFromRuleSources(rule);
-  if (!sourceReport) return;
-
-  const existingReport = listAgreementValidationReports().find(
-    (item) => item.agreementSlug === rule.agreementId,
-  );
-  const existingRulesByKey = new Map(
-    (existingReport?.rules ?? []).map((validationRule) => [validationRule.ruleKey, validationRule]),
-  );
-  saveAgreementValidationReport({
-    ...sourceReport,
-    extractedAt: existingReport?.extractedAt || sourceReport.extractedAt,
-    rules: sourceReport.rules.map((validationRule) => {
-      const existingRule = existingRulesByKey.get(validationRule.ruleKey);
-      return {
-        ...validationRule,
-        calculationType: existingRule?.calculationType ?? validationRule.calculationType,
-        rate: existingRule?.rate ?? validationRule.rate,
-        unit: existingRule?.unit ?? validationRule.unit,
-        conditions: existingRule?.conditions.trim()
-          ? existingRule.conditions
-          : validationRule.conditions,
-        sourceText: existingRule?.sourceText.trim()
-          ? existingRule.sourceText
-          : validationRule.sourceText,
-        possibleRates: existingRule?.possibleRates.length
-          ? existingRule.possibleRates
-          : validationRule.possibleRates,
-        confidence: existingRule?.confidence ?? validationRule.confidence,
-        reviewStatus: "approved",
-        notes: "Godkendt via kildehenvisning i regelgrundlaget.",
-      };
-    }),
-    testCases: [],
-  });
 }
 
 function formatPdfSourcePageInput(pages: number[]) {

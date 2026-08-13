@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import subzLogo from "@/assets/sub-z-logo.png";
-import { renewWorkerConsent, syncRemoteAppState } from "@/lib/timesheet-store";
 import { fetchWorkerConsentByToken, type WorkerConsentPayload } from "@/lib/worker-invite";
 
 export const Route = createFileRoute("/vikar/consent")({
@@ -33,14 +32,10 @@ function VikarConsentPage() {
     };
   }, []);
 
-  const confirmConsent = async () => {
+  const confirmConsent = () => {
     if (!payload) return;
-    await syncRemoteAppState();
-    const updated = renewWorkerConsent(payload.workerName, payload.workerEmail);
     setMessage(
-      updated.length
-        ? "Tak. Dit samtykke er fornyet, og Sub-Z kan fortsat kontakte dig om relevante jobmuligheder."
-        : "Samtykket er modtaget, men vi kunne ikke finde en lokal vikarregistrering at opdatere.",
+      "Det tidligere browsersamtykke er lukket. Samtykke kan først fornyes gennem det servervaliderede D1-flow.",
     );
   };
 

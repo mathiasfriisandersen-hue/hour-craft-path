@@ -13,6 +13,10 @@
     "mail:deploy": "npx --yes wrangler@latest deploy --config mail-worker/wrangler.toml",
     "validate:agreements": "python3 scripts/extract-agreement-rules.py",
     "test:validation": "node scripts/run-validation-tests.mjs",
+    "test:agreement-engine": "node scripts/run-agreement-engine-tests.mjs",
+    "test:worker-auth": "node scripts/run-worker-auth-tests.mjs",
+    "test:worker-security": "node scripts/run-worker-security-tests.mjs",
+    "test:migrations": "node scripts/run-migration-tests.mjs",
     "format": "prettier --write ."
   },
   "dependencies": {

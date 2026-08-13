@@ -1,16 +1,30 @@
+import {
+  AuthenticationError,
+  authenticateRequest,
+  issueDemoSession,
+  requireRole,
+  type AuthEnvironment,
+  type AuthSession,
+  type MembershipRole,
+} from "../../workers/shared/auth";
+import {
+  AgreementCalculationError,
+  calculateAndPersistTimesheet,
+} from "../../workers/shared/agreement-calculation";
+import { INVALID_WORK_DATE, isStrictWorkDate } from "../../shared/agreement-engine";
+
 type Env = {
   TIMESHEET_DB: D1Database;
-  WORKER_INVITES?: KVNamespace;
-  TIMESHEET_API_TOKEN?: string;
   ALLOWED_ORIGIN?: string;
-};
-
-type KVNamespace = {
-  get(key: string): Promise<string | null>;
-};
+  AUTH_ISSUER?: string;
+  AUTH_AUDIENCE?: string;
+  SUPABASE_JWKS_URL?: string;
+  DEMO_SESSION_SECRET?: string;
+} & AuthEnvironment;
 
 type D1Database = {
   prepare(query: string): D1PreparedStatement;
+  batch(statements: D1PreparedStatement[]): Promise<unknown[]>;
 };
 
 type D1PreparedStatement = {
@@ -28,7 +42,9 @@ type D1Result<T> = {
 
 type D1ExecResult = {
   success: boolean;
-  meta: unknown;
+  meta: {
+    changes?: number;
+  };
 };
 
 type Status = "draft" | "sent" | "approved" | "rejected";
@@ -57,14 +73,17 @@ type Timesheet = {
   vikarCpr?: string;
   brugervirksomhed?: string;
   companyId?: string;
+  companyRecordId?: string;
   projectId?: string;
+  projectRecordId?: string;
+  workerRecordId?: string;
+  employmentTermId?: string;
+  agreementAssignmentId?: string;
   projectName?: string;
   projectEndDate?: string;
   kontaktperson?: string;
   kontaktpersonPhone?: string;
   kontaktpersonEmail?: string;
-  contactPersonAccessCode?: string;
-  workerAccessCode?: string;
   referenceNo?: string;
   arbejdssted?: string;
   selectedAgreementId?: string;
@@ -83,7 +102,23 @@ type Timesheet = {
 };
 
 type TimesheetRow = {
+  id: string;
+  organization_id: string;
+  company_record_id: string;
+  project_record_id: string;
+  worker_record_id: string;
+  employment_term_id: string;
+  agreement_assignment_id: string;
+  owner_membership_id: string;
+  row_version: number;
+  status: Status;
   data: string;
+};
+
+type TimesheetQuery = {
+  sql: string;
+  params: unknown[];
+  label: string;
 };
 
 type AnalyticsStatusRow = {
@@ -101,11 +136,42 @@ type AnalyticsSummaryRow = {
   payrollReadyTimesheets: number;
 };
 
+type CalculationSnapshotRow = {
+  calculation_id: string;
+  status: "completed" | "manual_review_required" | "source_conflict" | "failed";
+  gross_pay_cents: number;
+  result_sha256: string;
+  result_snapshot_json: string;
+  manual_review_reasons_json: string;
+};
+
+type AgreementCatalogRow = {
+  id: string;
+  catalog_key: string;
+  exact_title: string;
+  agreement_parties: string;
+  employer_organization: string;
+  covered_work_areas: string;
+  employee_category: string;
+  geography_scope: string;
+  catalog_status: string;
+  version_id: string | null;
+  version_label: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  implementation_status: string | null;
+  verification_status: string | null;
+  source_id: string | null;
+  source_type: string | null;
+  source_title: string | null;
+  official_url: string | null;
+  source_verification_status: string | null;
+  approved_override_count: number;
+};
+
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
 };
-
-const APP_STATE_KEY = "app-state-v1";
 
 const PRIVACY_POLICY_HTML = `<!doctype html>
 <html lang="en">
@@ -133,6 +199,18 @@ const PRIVACY_POLICY_HTML = `<!doctype html>
 
 const VALID_STATUSES = new Set(["draft", "sent", "approved", "rejected"]);
 
+class ApiError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.code = code;
+    this.status = status;
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const cors = corsHeaders(request, env);
@@ -153,50 +231,146 @@ export default {
       return errorResponse("origin_not_allowed", "Origin is not allowed.", 403, cors);
     }
 
-    if (!isAuthorized(request, env)) {
-      return errorResponse(
-        "unauthorized",
-        "Authorization header with Bearer token is required.",
-        401,
-        cors,
-      );
-    }
-
     try {
+      if (request.method === "POST" && url.pathname === "/api/demo/session") {
+        const payload = (await readJson(request)) as { role?: MembershipRole };
+        const role = payload?.role;
+        if (
+          role !== "vikar" &&
+          role !== "kontaktperson" &&
+          role !== "konsulent" &&
+          role !== "organisationsadministrator"
+        ) {
+          return errorResponse("invalid_demo_role", "Demo-rollen er ugyldig.", 400, cors);
+        }
+        const issued = await issueDemoSession(env.DEMO_SESSION_SECRET ?? "", role);
+        return jsonResponse(
+          {
+            ok: true,
+            token: issued.token,
+            session: publicSession(issued.session),
+          },
+          200,
+          cors,
+        );
+      }
+
+      const session = await authenticateRequest(request, env, env.TIMESHEET_DB);
+      if (request.method === "GET" && url.pathname === "/api/session") {
+        return jsonResponse({ ok: true, session: publicSession(session) }, 200, cors);
+      }
+      if (session.demo) {
+        return demoResponse(request, url, session, cors);
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/agreements") {
+        requireRole(session, ["konsulent", "organisationsadministrator", "platformsadministrator"]);
+        return await listAgreementCatalog(env, session, cors);
+      }
+
+      const calculationMatch = url.pathname.match(/^\/api\/timesheets\/([^/]+)\/calculations$/);
+      if (request.method === "POST" && calculationMatch) {
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        const body = (await readJson(request)) as { asOf?: unknown };
+        if (typeof body.asOf !== "string") {
+          throw new ApiError(
+            "as_of_required",
+            "Beregningen kræver et eksplicit asOf-tidspunkt.",
+            400,
+          );
+        }
+        const expectedVersion = expectedVersionFromIfMatch(request);
+        const result = await calculateAndPersistTimesheet(
+          env.TIMESHEET_DB,
+          session,
+          decodeURIComponent(calculationMatch[1]),
+          expectedVersion,
+          body.asOf,
+        );
+        return jsonResponse(
+          {
+            ok: true,
+            rowVersion: result.rowVersion,
+            exportBlocked: result.snapshot.exportBlocked,
+            snapshot: result.snapshot,
+          },
+          201,
+          { ...cors, etag: `"${result.rowVersion}"` },
+        );
+      }
+
+      const latestCalculationMatch = url.pathname.match(
+        /^\/api\/timesheets\/([^/]+)\/calculations\/latest$/,
+      );
+      if (request.method === "GET" && latestCalculationMatch) {
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await latestCalculationSnapshot(
+          env,
+          session,
+          decodeURIComponent(latestCalculationMatch[1]),
+          cors,
+        );
+      }
+
       if (request.method === "POST" && url.pathname === "/api/timesheets") {
-        return await upsertTimesheet(request, env, cors);
+        return await upsertTimesheet(request, env, session, cors);
       }
 
       if (request.method === "GET" && url.pathname === "/api/timesheets") {
-        return await listTimesheets(env, cors, allTimesheetsQuery());
+        return await listTimesheets(env, session, cors, allTimesheetsQuery(session));
       }
 
       if (request.method === "GET" && url.pathname === "/api/gpt-timesheets") {
-        return await listGptTimesheets(env, cors);
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await listGptTimesheets(env, session, cors);
       }
 
       if (request.method === "GET" && url.pathname === "/api/timesheets/pending") {
-        return await listTimesheets(env, cors, pendingTimesheetsQuery(todayIso()));
+        requireRole(session, ["kontaktperson", "konsulent", "organisationsadministrator"]);
+        return await listTimesheets(
+          env,
+          session,
+          cors,
+          pendingTimesheetsQuery(session, todayIso()),
+        );
       }
 
       if (request.method === "GET" && url.pathname === "/api/timesheets/invoice-ready") {
-        return await listTimesheets(env, cors, invoiceReadyTimesheetsQuery());
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await listTimesheets(env, session, cors, invoiceReadyTimesheetsQuery(session));
       }
 
       if (request.method === "GET" && url.pathname === "/api/timesheets/payroll-ready") {
-        return await listTimesheets(env, cors, payrollReadyTimesheetsQuery(todayIso()));
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await listTimesheets(
+          env,
+          session,
+          cors,
+          payrollReadyTimesheetsQuery(session, todayIso()),
+        );
       }
 
       if (request.method === "GET" && url.pathname === "/api/timesheets/sick-leave") {
-        return await listTimesheets(env, cors, sickLeaveTimesheetsQuery());
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await listTimesheets(env, session, cors, sickLeaveTimesheetsQuery(session));
       }
 
       if (request.method === "GET" && url.pathname === "/api/analytics") {
-        return await analytics(env, cors);
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await analytics(env, session, cors);
       }
 
       return errorResponse("not_found", "Endpoint not found.", 404, cors);
-    } catch {
+    } catch (error) {
+      if (error instanceof AuthenticationError) {
+        return errorResponse(error.code, error.message, error.status, cors);
+      }
+      if (error instanceof ApiError) {
+        return errorResponse(error.code, error.message, error.status, cors);
+      }
+      if (error instanceof AgreementCalculationError) {
+        return errorResponse(error.code, error.message, error.status, cors);
+      }
       return errorResponse("internal_error", "Unexpected API error.", 500, cors);
     }
   },
@@ -212,88 +386,517 @@ function privacyPolicyResponse(headOnly = false): Response {
   });
 }
 
-async function upsertTimesheet(request: Request, env: Env, cors: HeadersInit): Promise<Response> {
-  const payload = await readJson(request);
-  const timesheet = unwrapTimesheetPayload(payload);
-  const validationError = validateTimesheet(timesheet);
+function publicSession(session: AuthSession): Record<string, unknown> {
+  return {
+    userId: session.userId,
+    organizationId: session.organizationId,
+    membershipId: session.membershipId,
+    role: session.role,
+    expiresAt: session.expiresAt,
+    demo: session.demo,
+  };
+}
 
-  if (validationError) {
-    return errorResponse("invalid_timesheet", validationError, 400, cors);
+function demoResponse(
+  request: Request,
+  url: URL,
+  session: AuthSession,
+  cors: HeadersInit,
+): Response {
+  if (request.method !== "GET") {
+    return errorResponse(
+      "demo_read_only",
+      "Demoorganisationen er isoleret og skrivebeskyttet.",
+      403,
+      cors,
+    );
+  }
+  if (url.pathname === "/api/session") {
+    return jsonResponse({ ok: true, session: publicSession(session) }, 200, cors);
+  }
+  if (url.pathname === "/api/analytics") {
+    requireRole(session, ["konsulent", "organisationsadministrator"]);
+    return jsonResponse(
+      {
+        ok: true,
+        source: "synthetic-demo",
+        generatedAt: new Date().toISOString(),
+        analytics: {
+          totalTimesheets: 0,
+          totalHours: 0,
+          sickLeaveTimesheets: 0,
+          pendingTimesheets: 0,
+          invoiceReadyTimesheets: 0,
+          payrollReadyTimesheets: 0,
+          invoiceOverview: { soon: 0, now: 0, waiting: 0, done: 0 },
+          payrollOverview: { soon: 0, now: 0, waiting: 0, done: 0 },
+          statusCounts: [],
+        },
+      },
+      200,
+      cors,
+    );
+  }
+  if (url.pathname === "/api/agreements") {
+    requireRole(session, ["konsulent", "organisationsadministrator", "platformsadministrator"]);
+    return jsonResponse(
+      {
+        ok: true,
+        source: "synthetic-demo",
+        count: 0,
+        agreements: [],
+      },
+      200,
+      cors,
+    );
+  }
+  if (
+    url.pathname === "/api/timesheets" ||
+    url.pathname === "/api/timesheets/pending" ||
+    url.pathname === "/api/timesheets/invoice-ready" ||
+    url.pathname === "/api/timesheets/payroll-ready" ||
+    url.pathname === "/api/timesheets/sick-leave" ||
+    url.pathname === "/api/gpt-timesheets"
+  ) {
+    if (url.pathname === "/api/gpt-timesheets") {
+      requireRole(session, ["konsulent", "organisationsadministrator"]);
+    }
+    return jsonResponse(
+      {
+        ok: true,
+        source: "synthetic-demo",
+        list: "demo",
+        count: 0,
+        timesheets: [],
+      },
+      200,
+      cors,
+    );
+  }
+  return errorResponse("not_found", "Endpoint not found.", 404, cors);
+}
+
+async function listAgreementCatalog(
+  env: Env,
+  session: AuthSession,
+  cors: HeadersInit,
+): Promise<Response> {
+  const result = await env.TIMESHEET_DB.prepare(
+    `SELECT
+       agreement.id,
+       agreement.catalog_key,
+       agreement.exact_title,
+       agreement.agreement_parties,
+       agreement.employer_organization,
+       agreement.covered_work_areas,
+       agreement.employee_category,
+       agreement.geography_scope,
+       agreement.catalog_status,
+       version.id AS version_id,
+       version.version_label,
+       version.valid_from,
+       version.valid_to,
+       version.implementation_status,
+       version.verification_status,
+       source.id AS source_id,
+       source.source_type,
+       source.document_title AS source_title,
+       source.official_url,
+       source.verification_status AS source_verification_status,
+       (
+         SELECT COUNT(*)
+         FROM agreement_assignments AS assignment
+         INNER JOIN local_overrides AS local_override
+           ON local_override.organization_id = assignment.organization_id
+          AND local_override.agreement_assignment_id = assignment.id
+          AND local_override.status = 'approved'
+         WHERE assignment.organization_id = ?
+           AND assignment.agreement_version_id = version.id
+       ) AS approved_override_count
+     FROM agreements AS agreement
+     LEFT JOIN agreement_versions AS version
+       ON version.agreement_id = agreement.id
+     LEFT JOIN agreement_sources AS source
+       ON source.agreement_version_id = version.id
+     ORDER BY agreement.exact_title, version.valid_from, source.source_type, source.id`,
+  )
+    .bind(session.organizationId)
+    .all<AgreementCatalogRow>();
+  const rows = result.results ?? [];
+  const agreements = new Map<
+    string,
+    {
+      id: string;
+      catalogKey: string;
+      exactTitle: string;
+      agreementParties: string;
+      employerOrganization: string;
+      coveredWorkAreas: string;
+      employeeCategory: string;
+      geographyScope: string;
+      catalogStatus: string;
+      versions: Array<{
+        id: string;
+        versionLabel: string;
+        validFrom: string;
+        validTo: string | null;
+        implementationStatus: string;
+        verificationStatus: string;
+        approvedOverrideCount: number;
+        sources: Array<{
+          id: string;
+          sourceType: string;
+          documentTitle: string;
+          officialUrl: string;
+          verificationStatus: string;
+        }>;
+      }>;
+    }
+  >();
+
+  for (const row of rows) {
+    let agreement = agreements.get(row.id);
+    if (!agreement) {
+      agreement = {
+        id: row.id,
+        catalogKey: row.catalog_key,
+        exactTitle: row.exact_title,
+        agreementParties: row.agreement_parties,
+        employerOrganization: row.employer_organization,
+        coveredWorkAreas: row.covered_work_areas,
+        employeeCategory: row.employee_category,
+        geographyScope: row.geography_scope,
+        catalogStatus: row.catalog_status,
+        versions: [],
+      };
+      agreements.set(row.id, agreement);
+    }
+    if (!row.version_id) continue;
+    let version = agreement.versions.find((entry) => entry.id === row.version_id);
+    if (!version) {
+      version = {
+        id: row.version_id,
+        versionLabel: row.version_label ?? "",
+        validFrom: row.valid_from ?? "",
+        validTo: row.valid_to,
+        implementationStatus: row.implementation_status ?? "not_implemented",
+        verificationStatus: row.verification_status ?? "manual_review_required",
+        approvedOverrideCount: Number(row.approved_override_count || 0),
+        sources: [],
+      };
+      agreement.versions.push(version);
+    }
+    if (row.source_id) {
+      version.sources.push({
+        id: row.source_id,
+        sourceType: row.source_type ?? "",
+        documentTitle: row.source_title ?? "",
+        officialUrl: row.official_url ?? "",
+        verificationStatus: row.source_verification_status ?? "manual_review_required",
+      });
+    }
   }
 
-  const normalized = normalizeTimesheet(timesheet);
-  const row = toTimesheetDbRow(normalized);
+  return jsonResponse(
+    {
+      ok: true,
+      source: "d1",
+      count: agreements.size,
+      agreements: [...agreements.values()],
+    },
+    200,
+    cors,
+  );
+}
 
-  await env.TIMESHEET_DB.prepare(
-    `INSERT INTO timesheets (
-      id,
-      status,
-      owner_role,
-      week_start,
-      project_end_date,
-      company_id,
-      project_id,
-      brugervirksomhed,
-      worker_code,
-      has_sick_leave,
-      total_hours,
-      invoice_sent_date,
-      payroll_sent_date,
-      created_at,
-      updated_at,
-      data
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      status = excluded.status,
-      owner_role = excluded.owner_role,
-      week_start = excluded.week_start,
-      project_end_date = excluded.project_end_date,
-      company_id = excluded.company_id,
-      project_id = excluded.project_id,
-      brugervirksomhed = excluded.brugervirksomhed,
-      worker_code = excluded.worker_code,
-      has_sick_leave = excluded.has_sick_leave,
-      total_hours = excluded.total_hours,
-      invoice_sent_date = excluded.invoice_sent_date,
-      payroll_sent_date = excluded.payroll_sent_date,
-      updated_at = excluded.updated_at,
-      data = excluded.data`,
+async function latestCalculationSnapshot(
+  env: Env,
+  session: AuthSession,
+  timesheetId: string,
+  cors: HeadersInit,
+): Promise<Response> {
+  const row = await env.TIMESHEET_DB.prepare(
+    `SELECT
+       snapshot.id AS calculation_id,
+       snapshot.status,
+       snapshot.gross_pay_cents,
+       snapshot.result_sha256,
+       snapshot.result_snapshot_json,
+       snapshot.manual_review_reasons_json
+     FROM timesheets AS timesheet
+     INNER JOIN calculation_snapshots AS snapshot
+       ON snapshot.id = timesheet.last_calculation_snapshot_id
+      AND snapshot.organization_id = timesheet.organization_id
+      AND snapshot.timesheet_id = timesheet.id
+     WHERE timesheet.id = ?
+       AND timesheet.organization_id = ?
+       AND timesheet.tenant_migration_status IN ('assigned', 'verified_demo')
+     LIMIT 1`,
   )
-    .bind(
-      row.id,
-      row.status,
-      row.ownerRole,
-      row.weekStart,
-      row.projectEndDate,
-      row.companyId,
-      row.projectId,
-      row.brugervirksomhed,
-      row.workerCode,
-      row.hasSickLeave,
-      row.totalHours,
-      row.invoiceSentDate,
-      row.payrollSentDate,
-      row.createdAt,
-      row.updatedAt,
-      row.data,
-    )
-    .run();
+    .bind(timesheetId, session.organizationId)
+    .first<CalculationSnapshotRow>();
+  if (!row) {
+    return errorResponse(
+      "calculation_snapshot_not_found",
+      "Timesedlen har ikke et aktuelt serverberegnet snapshot.",
+      404,
+      cors,
+    );
+  }
 
-  return jsonResponse({ ok: true, timesheet: normalized }, 200, cors);
+  let storedResult: Record<string, unknown>;
+  let manualReviewReasons: string[];
+  try {
+    const parsedResult = JSON.parse(row.result_snapshot_json) as unknown;
+    const parsedReasons = JSON.parse(row.manual_review_reasons_json) as unknown;
+    if (
+      typeof parsedResult !== "object" ||
+      parsedResult === null ||
+      !Array.isArray(parsedReasons) ||
+      !parsedReasons.every((reason) => typeof reason === "string")
+    ) {
+      throw new Error("invalid snapshot JSON");
+    }
+    storedResult = parsedResult as Record<string, unknown>;
+    manualReviewReasons = parsedReasons;
+  } catch {
+    throw new ApiError(
+      "invalid_calculation_snapshot",
+      "Det serverlagrede beregningssnapshot er ugyldigt.",
+      500,
+    );
+  }
+
+  const invoiceTotalOre =
+    typeof storedResult.invoiceTotalOre === "number" &&
+    Number.isSafeInteger(storedResult.invoiceTotalOre) &&
+    storedResult.invoiceTotalOre >= 0
+      ? storedResult.invoiceTotalOre
+      : null;
+  const exportBlocked =
+    row.status !== "completed" ||
+    storedResult.exportBlocked !== false ||
+    manualReviewReasons.length > 0 ||
+    !/^[a-f0-9]{64}$/iu.test(row.result_sha256);
+
+  return jsonResponse(
+    {
+      ok: true,
+      source: "d1",
+      snapshot: {
+        source: "d1",
+        calculationId: row.calculation_id,
+        status: row.status,
+        exportBlocked,
+        manualReviewReasons,
+        resultHash: row.result_sha256,
+        grossPayOre: row.gross_pay_cents,
+        invoiceTotalOre,
+      },
+    },
+    200,
+    cors,
+  );
+}
+
+async function upsertTimesheet(
+  request: Request,
+  env: Env,
+  session: AuthSession,
+  cors: HeadersInit,
+): Promise<Response> {
+  requireRole(session, ["vikar", "kontaktperson", "konsulent", "organisationsadministrator"]);
+  const payload = await readJson(request);
+  const incoming = unwrapTimesheetPayload(payload);
+  const validationError = validateTimesheet(incoming);
+  if (validationError) {
+    throw new ApiError(validationError.code, validationError.message, validationError.status);
+  }
+
+  const existing = await env.TIMESHEET_DB.prepare(
+    `${timesheetSelectSql()}
+     WHERE timesheet.id = ?
+       AND timesheet.organization_id = ?
+       AND timesheet.tenant_migration_status IN ('assigned', 'verified_demo')
+     LIMIT 1`,
+  )
+    .bind(incoming.id, session.organizationId)
+    .first<TimesheetRow>();
+
+  if (existing && !(await canAccessTimesheet(env, session, existing, "submit"))) {
+    throw new ApiError("not_found", "Timesedlen blev ikke fundet.", 404);
+  }
+  if (!existing && !isAdministrativeRole(session.role)) {
+    throw new ApiError(
+      "forbidden",
+      "Kun konsulent eller organisationsadministrator kan oprette en timeseddel.",
+      403,
+    );
+  }
+
+  assertConcurrencyHeaders(request, existing?.row_version);
+  const before = existing ? parseStoredTimesheet(existing) : undefined;
+  const candidate = applyAllowedMutation(before, incoming, session);
+  const normalized = normalizeTimesheet(sanitizeSensitiveTimesheet(candidate));
+  await validateNormalizedReferences(env, session, normalized, existing);
+  const row = toTimesheetDbRow(normalized);
+  const correlationId = request.headers.get("x-correlation-id")?.trim() || crypto.randomUUID();
+
+  let nextVersion = 1;
+  if (!existing) {
+    await env.TIMESHEET_DB.prepare(
+      `INSERT INTO timesheets (
+        id,
+        status,
+        owner_role,
+        week_start,
+        project_end_date,
+        company_id,
+        project_id,
+        brugervirksomhed,
+        worker_code,
+        has_sick_leave,
+        total_hours,
+        invoice_sent_date,
+        payroll_sent_date,
+        created_at,
+        updated_at,
+        data,
+        organization_id,
+        company_record_id,
+        project_record_id,
+        worker_record_id,
+        employment_term_id,
+        agreement_assignment_id,
+        owner_membership_id,
+        tenant_migration_status,
+        row_version,
+        data_schema_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'assigned', 1, 2)`,
+    )
+      .bind(
+        row.id,
+        row.status,
+        row.ownerRole,
+        row.weekStart,
+        row.projectEndDate,
+        row.companyId,
+        row.projectId,
+        row.brugervirksomhed,
+        row.workerCode,
+        row.hasSickLeave,
+        row.totalHours,
+        row.invoiceSentDate,
+        row.payrollSentDate,
+        row.createdAt,
+        row.updatedAt,
+        row.data,
+        session.organizationId,
+        normalized.companyRecordId,
+        normalized.projectRecordId,
+        normalized.workerRecordId,
+        normalized.employmentTermId,
+        normalized.agreementAssignmentId,
+        session.membershipId,
+      )
+      .run();
+  } else {
+    nextVersion = existing.row_version + 1;
+    const result = await env.TIMESHEET_DB.prepare(
+      `UPDATE timesheets
+       SET status = ?,
+           owner_role = ?,
+           week_start = ?,
+           project_end_date = ?,
+           company_id = ?,
+           project_id = ?,
+           brugervirksomhed = ?,
+           worker_code = ?,
+           has_sick_leave = ?,
+           total_hours = ?,
+           invoice_sent_date = ?,
+           payroll_sent_date = ?,
+           updated_at = ?,
+           data = ?,
+           company_record_id = ?,
+           project_record_id = ?,
+           worker_record_id = ?,
+           employment_term_id = ?,
+           agreement_assignment_id = ?,
+           row_version = row_version + 1,
+           data_schema_version = 2
+       WHERE id = ?
+         AND organization_id = ?
+         AND row_version = ?`,
+    )
+      .bind(
+        row.status,
+        row.ownerRole,
+        row.weekStart,
+        row.projectEndDate,
+        row.companyId,
+        row.projectId,
+        row.brugervirksomhed,
+        row.workerCode,
+        row.hasSickLeave,
+        row.totalHours,
+        row.invoiceSentDate,
+        row.payrollSentDate,
+        row.updatedAt,
+        row.data,
+        normalized.companyRecordId,
+        normalized.projectRecordId,
+        normalized.workerRecordId,
+        normalized.employmentTermId,
+        normalized.agreementAssignmentId,
+        row.id,
+        session.organizationId,
+        existing.row_version,
+      )
+      .run();
+    if ((result.meta.changes ?? 0) !== 1) {
+      throw new ApiError(
+        "version_conflict",
+        "Timesedlen er ændret af en anden. Hent den nyeste version og prøv igen.",
+        409,
+      );
+    }
+  }
+
+  await appendAuditEvent(env, session, {
+    action: existing ? "timesheet.updated" : "timesheet.created",
+    objectId: row.id,
+    correlationId,
+    requestId: request.headers.get("cf-ray") ?? undefined,
+    before: before ? auditSummary(before, existing?.row_version ?? 1) : undefined,
+    after: auditSummary(normalized, nextVersion),
+  });
+
+  return jsonResponse(
+    {
+      ok: true,
+      version: nextVersion,
+      etag: `"${nextVersion}"`,
+      timesheet: sanitizeTimesheetForSession(normalized, session),
+    },
+    existing ? 200 : 201,
+    { ...cors, etag: `"${nextVersion}"` },
+  );
 }
 
 async function listTimesheets(
   env: Env,
+  session: AuthSession,
   cors: HeadersInit,
-  query: { sql: string; params: unknown[]; label: string },
+  query: TimesheetQuery,
 ): Promise<Response> {
   const result = await env.TIMESHEET_DB.prepare(query.sql)
     .bind(...query.params)
     .all<TimesheetRow>();
-  const deletedIds = await readDeletedTimesheetIds(env);
-  const timesheets = (result.results ?? [])
-    .map((row) => JSON.parse(row.data) as Timesheet)
-    .filter((timesheet) => !deletedIds.has(timesheet.id));
+  const timesheets = (result.results ?? []).map((row) => ({
+    ...sanitizeTimesheetForSession(parseStoredTimesheet(row), session),
+    rowVersion: row.row_version,
+  }));
   return jsonResponse(
     { ok: true, source: "d1", list: query.label, count: timesheets.length, timesheets },
     200,
@@ -301,18 +904,454 @@ async function listTimesheets(
   );
 }
 
-async function listGptTimesheets(env: Env, cors: HeadersInit): Promise<Response> {
-  const result = await env.TIMESHEET_DB.prepare(allTimesheetsQuery().sql).all<TimesheetRow>();
-  const deletedIds = await readDeletedTimesheetIds(env);
+async function listGptTimesheets(
+  env: Env,
+  session: AuthSession,
+  cors: HeadersInit,
+): Promise<Response> {
+  const query = allTimesheetsQuery(session);
+  const result = await env.TIMESHEET_DB.prepare(query.sql)
+    .bind(...query.params)
+    .all<TimesheetRow>();
   const timesheets = (result.results ?? [])
-    .map((row) => JSON.parse(row.data) as Timesheet)
-    .filter((timesheet) => !deletedIds.has(timesheet.id))
+    .map(parseStoredTimesheet)
+    .map(sanitizeSensitiveTimesheet)
     .map(toGptTimesheet);
   return jsonResponse(
     { ok: true, source: "d1", list: "gpt-compact", count: timesheets.length, timesheets },
     200,
     cors,
   );
+}
+
+function timesheetSelectSql(): string {
+  return `SELECT
+    timesheet.id,
+    timesheet.organization_id,
+    timesheet.company_record_id,
+    timesheet.project_record_id,
+    timesheet.worker_record_id,
+    timesheet.employment_term_id,
+    timesheet.agreement_assignment_id,
+    timesheet.owner_membership_id,
+    timesheet.row_version,
+    timesheet.status,
+    timesheet.data
+  FROM timesheets AS timesheet`;
+}
+
+function isAdministrativeRole(role: MembershipRole): boolean {
+  return role === "konsulent" || role === "organisationsadministrator";
+}
+
+function assertConcurrencyHeaders(request: Request, existingVersion?: number): void {
+  if (existingVersion === undefined) {
+    if (request.headers.get("if-none-match") !== "*") {
+      throw new ApiError("precondition_required", "Nye timesedler kræver If-None-Match: *.", 428);
+    }
+    return;
+  }
+  const expectedVersion = expectedVersionFromIfMatch(request);
+  if (expectedVersion !== existingVersion) {
+    throw new ApiError(
+      "version_conflict",
+      "Timesedlen er ændret af en anden. Hent den nyeste version og prøv igen.",
+      409,
+    );
+  }
+}
+
+function expectedVersionFromIfMatch(request: Request): number {
+  const match = request.headers
+    .get("if-match")
+    ?.trim()
+    .match(/^(?:W\/)?"?(\d+)"?$/);
+  if (!match) {
+    throw new ApiError(
+      "precondition_required",
+      "Opdateringer kræver If-Match med den senest læste version.",
+      428,
+    );
+  }
+  return Number(match[1]);
+}
+
+function parseStoredTimesheet(row: TimesheetRow): Timesheet {
+  try {
+    const parsed = JSON.parse(row.data) as Timesheet;
+    return {
+      ...sanitizeSensitiveTimesheet(parsed),
+      id: row.id,
+      companyRecordId: row.company_record_id,
+      projectRecordId: row.project_record_id,
+      workerRecordId: row.worker_record_id,
+      employmentTermId: row.employment_term_id,
+      agreementAssignmentId: row.agreement_assignment_id,
+      status: row.status,
+    };
+  } catch {
+    throw new ApiError(
+      "stored_timesheet_invalid",
+      "Den lagrede timeseddel kan ikke læses og kræver manuel gennemgang.",
+      500,
+    );
+  }
+}
+
+async function canAccessTimesheet(
+  env: Env,
+  session: AuthSession,
+  row: TimesheetRow,
+  operation: "view" | "submit",
+): Promise<boolean> {
+  if (isAdministrativeRole(session.role)) return true;
+  if (session.role === "vikar") {
+    const worker = await env.TIMESHEET_DB.prepare(
+      `SELECT id
+       FROM workers
+       WHERE id = ?
+         AND organization_id = ?
+         AND membership_id = ?
+         AND status = 'active'
+       LIMIT 1`,
+    )
+      .bind(row.worker_record_id, session.organizationId, session.membershipId)
+      .first<{ id: string }>();
+    return Boolean(worker);
+  }
+  if (session.role === "kontaktperson") {
+    const allowedLevels =
+      operation === "submit" ? ["approve", "manage"] : ["view", "approve", "manage"];
+    const placeholders = allowedLevels.map(() => "?").join(", ");
+    const access = await env.TIMESHEET_DB.prepare(
+      `SELECT project_id
+       FROM project_membership_access
+       WHERE organization_id = ?
+         AND project_id = ?
+         AND membership_id = ?
+         AND revoked_at IS NULL
+         AND access_level IN (${placeholders})
+       LIMIT 1`,
+    )
+      .bind(session.organizationId, row.project_record_id, session.membershipId, ...allowedLevels)
+      .first<{ project_id: string }>();
+    return Boolean(access);
+  }
+  return false;
+}
+
+function applyAllowedMutation(
+  before: Timesheet | undefined,
+  incoming: Timesheet,
+  session: AuthSession,
+): Timesheet {
+  if (isAdministrativeRole(session.role)) {
+    if (before?.status === "approved") {
+      throw new ApiError(
+        "approved_timesheet_immutable",
+        "En godkendt timeseddel må ikke overskrives. Opret en auditeret korrektion.",
+        409,
+      );
+    }
+    return {
+      ...(before ?? {}),
+      ...incoming,
+      id: incoming.id,
+      createdAt: before?.createdAt ?? incoming.createdAt,
+    };
+  }
+  if (!before) {
+    throw new ApiError("not_found", "Timesedlen blev ikke fundet.", 404);
+  }
+  if (session.role === "vikar") {
+    const nextStatus = incoming.status ?? before.status ?? "draft";
+    if (nextStatus !== "draft" && nextStatus !== "sent") {
+      throw new ApiError(
+        "invalid_status_transition",
+        "Vikaren kan kun gemme kladde eller indsende timesedlen.",
+        409,
+      );
+    }
+    if (before.status !== "draft" && before.status !== "rejected") {
+      throw new ApiError(
+        "timesheet_locked",
+        "Timesedlen kan ikke ændres i den aktuelle status.",
+        409,
+      );
+    }
+    return {
+      ...before,
+      days: sanitizeWorkerDays(incoming.days),
+      notes: typeof incoming.notes === "string" ? incoming.notes.slice(0, 2000) : before.notes,
+      status: nextStatus,
+      rejectionComment: nextStatus === "sent" ? undefined : before.rejectionComment,
+    };
+  }
+  if (session.role === "kontaktperson") {
+    if (before.status !== "sent") {
+      throw new ApiError(
+        "timesheet_locked",
+        "Kun en indsendt timeseddel kan godkendes eller afvises.",
+        409,
+      );
+    }
+    if (incoming.status !== "approved" && incoming.status !== "rejected") {
+      throw new ApiError(
+        "invalid_status_transition",
+        "Kontaktpersonen kan kun godkende eller afvise timesedlen.",
+        409,
+      );
+    }
+    return {
+      ...before,
+      status: incoming.status,
+      rejectionComment:
+        incoming.status === "rejected" && typeof incoming.rejectionComment === "string"
+          ? incoming.rejectionComment.slice(0, 2000)
+          : undefined,
+    };
+  }
+  throw new ApiError("forbidden", "Rollen kan ikke ændre timesedlen.", 403);
+}
+
+function sanitizeWorkerDays(days: DayEntry[] | undefined): DayEntry[] {
+  if (!Array.isArray(days)) return [];
+  return days.slice(0, 14).map((day) => ({
+    start: typeof day?.start === "string" ? day.start : undefined,
+    end: typeof day?.end === "string" ? day.end : undefined,
+    pause: Number.isInteger(day?.pause) ? Math.max(0, Number(day.pause)) : undefined,
+    pauseStart: typeof day?.pauseStart === "string" ? day.pauseStart : undefined,
+    pauseEnd: typeof day?.pauseEnd === "string" ? day.pauseEnd : undefined,
+    pause2Start: typeof day?.pause2Start === "string" ? day.pause2Start : undefined,
+    pause2End: typeof day?.pause2End === "string" ? day.pause2End : undefined,
+    absence:
+      day?.absence === "sick" ||
+      day?.absence === "vacation" ||
+      day?.absence === "dayoff" ||
+      day?.absence === "none"
+        ? day.absence
+        : "none",
+  }));
+}
+
+const FORBIDDEN_STORED_KEYS = new Set([
+  "vikarcpr",
+  "cpr",
+  "personnummer",
+  "contactpersonaccesscode",
+  "workeraccesscode",
+  "accesscode",
+  "password",
+  "passwordhash",
+  "secret",
+  "token",
+  "organizationid",
+  "ownermembershipid",
+  "approvedbymembershipid",
+  "tenantmigrationstatus",
+  "rowversion",
+  "hourlywage",
+  "selectedagreementid",
+  "overenskomst",
+  "localagreementapplies",
+  "lokalaftale",
+  "localagreementid",
+]);
+
+function sanitizeSensitiveTimesheet(value: Timesheet): Timesheet {
+  return sanitizeObject(value) as Timesheet;
+}
+
+function sanitizeObject(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sanitizeObject);
+  if (!value || typeof value !== "object") return value;
+  const clean: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (FORBIDDEN_STORED_KEYS.has(normalizedKey)) continue;
+    clean[key] = sanitizeObject(child);
+  }
+  return clean;
+}
+
+function sanitizeTimesheetForSession(
+  value: Timesheet,
+  session: AuthSession,
+): Record<string, unknown> {
+  const clean = sanitizeSensitiveTimesheet(value) as Record<string, unknown>;
+  if (session.role === "kontaktperson") {
+    delete clean.vikarEmail;
+    delete clean.vikarPhone;
+    delete clean.vikarAddress;
+  }
+  if (session.role === "vikar") {
+    delete clean.kontaktpersonEmail;
+    delete clean.kontaktpersonPhone;
+  }
+  return clean;
+}
+
+async function validateNormalizedReferences(
+  env: Env,
+  session: AuthSession,
+  timesheet: Timesheet,
+  existing: TimesheetRow | null,
+): Promise<void> {
+  const companyId = timesheet.companyRecordId || existing?.company_record_id;
+  const projectId = timesheet.projectRecordId || existing?.project_record_id;
+  const workerId = timesheet.workerRecordId || existing?.worker_record_id;
+  const employmentTermId = timesheet.employmentTermId;
+  const assignmentId = timesheet.agreementAssignmentId;
+  if (
+    !isNonEmptyString(companyId) ||
+    !isNonEmptyString(projectId) ||
+    !isNonEmptyString(workerId) ||
+    !isNonEmptyString(employmentTermId) ||
+    !isNonEmptyString(assignmentId) ||
+    !isStrictWorkDate(timesheet.weekStart ?? "")
+  ) {
+    throw new ApiError(
+      "authoritative_references_required",
+      "Virksomhed, projekt, vikar, ansættelsesvilkår, aftaletildeling og uge skal være serverregistrerede.",
+      409,
+    );
+  }
+
+  const relation = await env.TIMESHEET_DB.prepare(
+    `SELECT assignment.id
+     FROM projects AS project
+     INNER JOIN companies AS company
+       ON company.organization_id = project.organization_id
+      AND company.id = project.company_id
+      AND company.status = 'active'
+     INNER JOIN workers AS worker
+       ON worker.organization_id = project.organization_id
+      AND worker.id = ?
+      AND worker.status = 'active'
+     INNER JOIN employment_terms AS employment
+       ON employment.organization_id = project.organization_id
+      AND employment.id = ?
+      AND employment.worker_id = worker.id
+      AND employment.company_id = company.id
+      AND (employment.project_id IS NULL OR employment.project_id = project.id)
+      AND employment.status = 'active'
+      AND employment.valid_from <= ?
+      AND (employment.valid_to IS NULL OR employment.valid_to >= ?)
+     INNER JOIN agreement_assignments AS assignment
+       ON assignment.organization_id = project.organization_id
+      AND assignment.id = ?
+      AND assignment.status = 'active'
+      AND assignment.valid_from <= ?
+      AND (assignment.valid_to IS NULL OR assignment.valid_to >= ?)
+      AND (
+        assignment.scope_type = 'organization'
+        OR (assignment.scope_type = 'company' AND assignment.company_id = company.id)
+        OR (assignment.scope_type = 'project' AND assignment.project_id = project.id)
+        OR (assignment.scope_type = 'worker' AND assignment.worker_id = worker.id)
+        OR (
+          assignment.scope_type = 'employment_term'
+          AND assignment.employment_term_id = employment.id
+        )
+        OR (
+          assignment.scope_type = 'workplace'
+          AND assignment.workplace_id = project.workplace_id
+        )
+      )
+     WHERE project.organization_id = ?
+       AND project.id = ?
+       AND project.company_id = ?
+       AND project.status = 'active'
+     LIMIT 1`,
+  )
+    .bind(
+      workerId,
+      employmentTermId,
+      timesheet.weekStart,
+      timesheet.weekStart,
+      assignmentId,
+      timesheet.weekStart,
+      timesheet.weekStart,
+      session.organizationId,
+      projectId,
+      companyId,
+    )
+    .first<{ id: string }>();
+  if (!relation) {
+    throw new ApiError(
+      "authoritative_relationship_invalid",
+      "Timesedlens serverregistrerede relationer eller aktive aftaletildeling er ugyldige.",
+      409,
+    );
+  }
+  timesheet.companyRecordId = companyId;
+  timesheet.projectRecordId = projectId;
+  timesheet.workerRecordId = workerId;
+}
+
+async function appendAuditEvent(
+  env: Env,
+  session: AuthSession,
+  event: {
+    action: string;
+    objectId: string;
+    correlationId: string;
+    requestId?: string;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  },
+): Promise<void> {
+  const result = await env.TIMESHEET_DB.prepare(
+    `INSERT INTO audit_events (
+      id,
+      organization_id,
+      actor_type,
+      actor_identity_id,
+      actor_membership_id,
+      action,
+      object_type,
+      object_id,
+      correlation_id,
+      request_id,
+      before_values_json,
+      after_values_json,
+      reason
+    ) VALUES (?, ?, 'identity', ?, ?, ?, 'timesheet', ?, ?, ?, ?, ?, '')`,
+  )
+    .bind(
+      crypto.randomUUID(),
+      session.organizationId,
+      session.userId,
+      session.membershipId,
+      event.action,
+      event.objectId,
+      event.correlationId,
+      event.requestId ?? null,
+      event.before ? JSON.stringify(event.before) : null,
+      event.after ? JSON.stringify(event.after) : null,
+    )
+    .run();
+  if (!result.success || (result.meta.changes ?? 0) !== 1) {
+    throw new ApiError(
+      "audit_write_failed",
+      "Handlingen blev blokeret, fordi revisionssporet ikke kunne gemmes.",
+      503,
+    );
+  }
+}
+
+function auditSummary(timesheet: Timesheet, rowVersion: number): Record<string, unknown> {
+  return {
+    id: timesheet.id,
+    status: timesheet.status,
+    weekStart: timesheet.weekStart,
+    companyRecordId: timesheet.companyRecordId,
+    projectRecordId: timesheet.projectRecordId,
+    workerRecordId: timesheet.workerRecordId,
+    employmentTermId: timesheet.employmentTermId,
+    agreementAssignmentId: timesheet.agreementAssignmentId,
+    rowVersion,
+    totalMinutes: totalMinutes(timesheet.days),
+  };
 }
 
 function toGptTimesheet(timesheet: Timesheet): Record<string, unknown> {
@@ -393,28 +1432,15 @@ function compactRecord(record: Record<string, unknown>): Record<string, unknown>
   );
 }
 
-async function readDeletedTimesheetIds(env: Env): Promise<Set<string>> {
-  const stored = await env.WORKER_INVITES?.get(APP_STATE_KEY).catch(() => null);
-  if (!stored) return new Set();
-
-  try {
-    const state = JSON.parse(stored) as { deletedTimesheetIds?: unknown };
-    if (!Array.isArray(state.deletedTimesheetIds)) return new Set();
-    return new Set(
-      state.deletedTimesheetIds.filter((id): id is string => typeof id === "string" && id !== ""),
-    );
-  } catch {
-    return new Set();
-  }
-}
-
-async function analytics(env: Env, cors: HeadersInit): Promise<Response> {
-  const result = await env.TIMESHEET_DB.prepare(allTimesheetsQuery().sql).all<TimesheetRow>();
-  const deletedIds = await readDeletedTimesheetIds(env);
+async function analytics(env: Env, session: AuthSession, cors: HeadersInit): Promise<Response> {
+  const query = allTimesheetsQuery(session);
+  const result = await env.TIMESHEET_DB.prepare(query.sql)
+    .bind(...query.params)
+    .all<TimesheetRow>();
   const today = todayIso();
   const timesheets = (result.results ?? [])
-    .map((row) => JSON.parse(row.data) as Timesheet)
-    .filter((timesheet) => !deletedIds.has(timesheet.id) && timesheet.archived !== true);
+    .map(parseStoredTimesheet)
+    .filter((timesheet) => timesheet.archived !== true);
   const statusRows = statusCounts(timesheets);
   const invoiceOverview = buildInvoiceOverview(timesheets);
   const payrollOverview = buildPayrollOverview(timesheets);
@@ -567,79 +1593,137 @@ function addDaysToISODate(value: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function allTimesheetsQuery() {
+function timesheetScope(session: AuthSession): { sql: string; params: unknown[] } {
+  const base = `timesheet.organization_id = ?
+    AND timesheet.tenant_migration_status IN ('assigned', 'verified_demo')`;
+  if (isAdministrativeRole(session.role)) {
+    return { sql: base, params: [session.organizationId] };
+  }
+  if (session.role === "vikar") {
+    return {
+      sql: `${base}
+        AND EXISTS (
+          SELECT 1
+          FROM workers AS scoped_worker
+          WHERE scoped_worker.organization_id = timesheet.organization_id
+            AND scoped_worker.id = timesheet.worker_record_id
+            AND scoped_worker.membership_id = ?
+            AND scoped_worker.status = 'active'
+        )`,
+      params: [session.organizationId, session.membershipId],
+    };
+  }
+  if (session.role === "kontaktperson") {
+    return {
+      sql: `${base}
+        AND EXISTS (
+          SELECT 1
+          FROM project_membership_access AS scoped_access
+          WHERE scoped_access.organization_id = timesheet.organization_id
+            AND scoped_access.project_id = timesheet.project_record_id
+            AND scoped_access.membership_id = ?
+            AND scoped_access.revoked_at IS NULL
+            AND scoped_access.access_level IN ('view', 'approve', 'manage')
+        )`,
+      params: [session.organizationId, session.membershipId],
+    };
+  }
+  return { sql: "1 = 0", params: [] };
+}
+
+function allTimesheetsQuery(session: AuthSession): TimesheetQuery {
+  const scope = timesheetScope(session);
   return {
-    sql: `SELECT data FROM timesheets ORDER BY week_start DESC, updated_at DESC`,
-    params: [],
+    sql: `${timesheetSelectSql()}
+      WHERE ${scope.sql}
+      ORDER BY timesheet.week_start DESC, timesheet.updated_at DESC`,
+    params: scope.params,
     label: "all",
   };
 }
 
-function pendingTimesheetsQuery(today: string) {
+function pendingTimesheetsQuery(session: AuthSession, today: string): TimesheetQuery {
+  const scope = timesheetScope(session);
   return {
-    sql: `SELECT data FROM timesheets
-      WHERE ${pendingSqlPredicate()}
-      ORDER BY week_start ASC, updated_at ASC`,
-    params: [today],
+    sql: `${timesheetSelectSql()}
+      WHERE ${scope.sql}
+        AND ${pendingSqlPredicate()}
+      ORDER BY timesheet.week_start ASC, timesheet.updated_at ASC`,
+    params: [...scope.params, today],
     label: "pending",
   };
 }
 
-function invoiceReadyTimesheetsQuery() {
+function invoiceReadyTimesheetsQuery(session: AuthSession): TimesheetQuery {
+  const scope = timesheetScope(session);
   return {
-    sql: `SELECT data FROM timesheets
-      WHERE ${invoiceReadySqlPredicate()}
-      ORDER BY week_start ASC, updated_at ASC`,
-    params: [],
+    sql: `${timesheetSelectSql()}
+      WHERE ${scope.sql}
+        AND ${invoiceReadySqlPredicate()}
+      ORDER BY timesheet.week_start ASC, timesheet.updated_at ASC`,
+    params: scope.params,
     label: "invoice-ready",
   };
 }
 
-function payrollReadyTimesheetsQuery(today: string) {
+function payrollReadyTimesheetsQuery(session: AuthSession, today: string): TimesheetQuery {
+  const scope = timesheetScope(session);
   return {
-    sql: `SELECT data FROM timesheets
-      WHERE ${payrollReadySqlPredicate()}
-      ORDER BY week_start ASC, updated_at ASC`,
-    params: [today],
+    sql: `${timesheetSelectSql()}
+      WHERE ${scope.sql}
+        AND ${payrollReadySqlPredicate()}
+      ORDER BY timesheet.week_start ASC, timesheet.updated_at ASC`,
+    params: [...scope.params, today],
     label: "payroll-ready",
   };
 }
 
-function sickLeaveTimesheetsQuery() {
+function sickLeaveTimesheetsQuery(session: AuthSession): TimesheetQuery {
+  const scope = timesheetScope(session);
   return {
-    sql: `SELECT data FROM timesheets
-      WHERE has_sick_leave = 1
-      AND json_extract(data, '$.archived') IS NOT 1
-      ORDER BY week_start DESC, updated_at DESC`,
-    params: [],
+    sql: `${timesheetSelectSql()}
+      WHERE ${scope.sql}
+        AND timesheet.has_sick_leave = 1
+        AND json_extract(timesheet.data, '$.archived') IS NOT 1
+      ORDER BY timesheet.week_start DESC, timesheet.updated_at DESC`,
+    params: scope.params,
     label: "sick-leave",
   };
 }
 
 function pendingSqlPredicate(): string {
-  return `status = 'sent'
-    AND json_extract(data, '$.archived') IS NOT 1
-    AND COALESCE(NULLIF(project_end_date, ''), date(week_start, '+6 days')) < ?`;
+  return `timesheet.status = 'sent'
+    AND json_extract(timesheet.data, '$.archived') IS NOT 1
+    AND COALESCE(
+      NULLIF(timesheet.project_end_date, ''),
+      date(timesheet.week_start, '+6 days')
+    ) < ?`;
 }
 
 function invoiceReadySqlPredicate(): string {
-  return `status = 'approved'
-    AND total_hours > 0
-    AND invoice_sent_date = ''
-    AND json_extract(data, '$.archived') IS NOT 1`;
+  return `timesheet.status = 'approved'
+    AND timesheet.total_hours > 0
+    AND timesheet.invoice_sent_date = ''
+    AND json_extract(timesheet.data, '$.archived') IS NOT 1`;
 }
 
 function payrollReadySqlPredicate(): string {
   return `(
-      status = 'approved'
+      timesheet.status = 'approved'
       OR (
-        status = 'sent'
-        AND date(COALESCE(NULLIF(project_end_date, ''), date(week_start, '+6 days')), '+2 days') <= ?
+        timesheet.status = 'sent'
+        AND date(
+          COALESCE(
+            NULLIF(timesheet.project_end_date, ''),
+            date(timesheet.week_start, '+6 days')
+          ),
+          '+2 days'
+        ) <= ?
       )
     )
-    AND total_hours > 0
-    AND payroll_sent_date = ''
-    AND json_extract(data, '$.archived') IS NOT 1`;
+    AND timesheet.total_hours > 0
+    AND timesheet.payroll_sent_date = ''
+    AND json_extract(timesheet.data, '$.archived') IS NOT 1`;
 }
 
 function unwrapTimesheetPayload(payload: unknown): Timesheet {
@@ -653,18 +1737,43 @@ async function readJson(request: Request): Promise<unknown> {
   try {
     return await request.json();
   } catch {
-    throw new Error("Request body must be valid JSON.");
+    throw new ApiError("invalid_json", "Request body must be valid JSON.", 400);
   }
 }
 
-function validateTimesheet(value: Timesheet): string | undefined {
-  if (!value || typeof value !== "object") return "Timesheet body is required.";
-  if (!isNonEmptyString(value.id)) return "Timesheet id is required.";
-  if (value.status && !VALID_STATUSES.has(value.status)) return "Timesheet status is invalid.";
-  if (value.ownerRole && value.ownerRole !== "bruger" && value.ownerRole !== "bruger2") {
-    return "Timesheet ownerRole is invalid.";
+type TimesheetValidationError = {
+  code: string;
+  message: string;
+  status: number;
+};
+
+function validateTimesheet(value: Timesheet): TimesheetValidationError | undefined {
+  const invalid = (message: string): TimesheetValidationError => ({
+    code: "invalid_timesheet",
+    message,
+    status: 400,
+  });
+  if (!value || typeof value !== "object") return invalid("Timesheet body is required.");
+  if (!isNonEmptyString(value.id)) return invalid("Timesheet id is required.");
+  if (!isStrictWorkDate(value.weekStart ?? "")) {
+    return {
+      code: INVALID_WORK_DATE,
+      message: "Arbejdsugen skal være en eksisterende kalenderdato i formatet YYYY-MM-DD.",
+      status: 422,
+    };
   }
-  if (value.days && !Array.isArray(value.days)) return "Timesheet days must be an array.";
+  if (value.status && !VALID_STATUSES.has(value.status)) {
+    return invalid("Timesheet status is invalid.");
+  }
+  if (value.ownerRole && value.ownerRole !== "bruger" && value.ownerRole !== "bruger2") {
+    return invalid("Timesheet ownerRole is invalid.");
+  }
+  if (value.days && !Array.isArray(value.days)) {
+    return invalid("Timesheet days must be an array.");
+  }
+  if (Array.isArray(value.days) && value.days.length > 14) {
+    return invalid("Timesheet days may contain at most 14 entries.");
+  }
   return undefined;
 }
 
@@ -765,14 +1874,6 @@ function parseTime(value: unknown): number | undefined {
   return hours * 60 + minutes;
 }
 
-function isAuthorized(request: Request, env: Env): boolean {
-  const expectedToken = env.TIMESHEET_API_TOKEN?.trim();
-  if (!expectedToken) return false;
-  const authorization = request.headers.get("authorization") ?? "";
-  const [scheme, token] = authorization.split(/\s+/, 2);
-  return scheme?.toLowerCase() === "bearer" && token === expectedToken;
-}
-
 function allowedOrigins(env: Env): string[] {
   return (env.ALLOWED_ORIGIN ?? "")
     .split(",")
@@ -788,7 +1889,9 @@ function corsHeaders(request: Request, env: Env): HeadersInit {
   return {
     ...(allowedOrigin ? { "access-control-allow-origin": allowedOrigin } : {}),
     "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-    "access-control-allow-headers": "Content-Type, Authorization",
+    "access-control-allow-headers":
+      "Content-Type, Authorization, If-Match, If-None-Match, Idempotency-Key, X-Correlation-ID",
+    "access-control-expose-headers": "ETag",
     "access-control-max-age": "86400",
     vary: "Origin",
   };

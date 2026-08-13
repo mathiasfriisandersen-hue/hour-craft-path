@@ -12,10 +12,8 @@ import {
   delayedMealBreakCalculationText,
   formatWeekRange,
   getById,
-  listCompanies,
   getRule,
   isIndustriensAgreement,
-  mailtoUrl,
   removeWorkerFromSystem,
   setArchived,
   setWorkerInactive,
@@ -32,7 +30,13 @@ import {
   type AgreementRuleSource,
   type AgreementRuleSourceKey,
 } from "@/lib/agreementRules";
-import { sendTimesheetEmail } from "@/lib/timesheet-mail";
+import {
+  getLatestCalculationSnapshot,
+  getMailSessionAvailability,
+  verifiedSnapshotAmountDkk,
+  type ApiCalculationSnapshot,
+} from "@/lib/api-session";
+import { safeTimesheetMailErrorMessage, sendTimesheetEmail } from "@/lib/timesheet-mail";
 
 export const Route = createFileRoute("/admin/$id")({
   head: () => ({ meta: [{ title: "Admin — Detaljer" }] }),
@@ -50,6 +54,8 @@ function AdminDetail() {
   const [sendingMail, setSendingMail] = useState(false);
   const [editingTimesheet, setEditingTimesheet] = useState(false);
   const [showRuleDetails, setShowRuleDetails] = useState(false);
+  const [serverSnapshot, setServerSnapshot] = useState<ApiCalculationSnapshot | null>(null);
+  const [snapshotStatus, setSnapshotStatus] = useState<"loading" | "loaded" | "blocked">("loading");
 
   useEffect(() => {
     const found = getById(id);
@@ -57,35 +63,42 @@ function AdminDetail() {
     else setT(found);
   }, [id, navigate]);
 
+  useEffect(() => {
+    let active = true;
+    setSnapshotStatus("loading");
+    getLatestCalculationSnapshot(id)
+      .then((snapshot) => {
+        if (!active) return;
+        setServerSnapshot(snapshot);
+        setSnapshotStatus(snapshot ? "loaded" : "blocked");
+      })
+      .catch(() => {
+        if (!active) return;
+        setServerSnapshot(null);
+        setSnapshotStatus("blocked");
+      });
+    return () => {
+      active = false;
+    };
+  }, [id]);
+
   if (!t)
     return (
       <AppShell allow={["admin", "bruger", "bruger2"]}>
         <div>Indlæser…</div>
       </AppShell>
     );
+  const mailAvailability = getMailSessionAvailability();
   const calc = calculateTimesheet(t);
   const rule = getRule(t.selectedAgreementId);
   const showDelayedMealBreak = isIndustriensAgreement(t.selectedAgreementId);
   const retentionWarning = timesheetRetentionWarning(t);
-  const hasSickAbsence = t.days.some((day) => day.absence === "sick");
-  const employeeHourlyWage = t.hourlyWage ?? 0;
-  const employeeBaseCost = employeeHourlyWage * calc.total;
-  const socialCostRate = 0.3888;
-  const socialCost = hasSickAbsence ? 0 : employeeBaseCost * socialCostRate;
-  const allowanceHours = totalAllowanceHours(calc);
-  const employeeAllowanceCost =
-    allowanceHours * employeeHourlyWage * (1 + (hasSickAbsence ? 0 : socialCostRate));
-  const employeeTotalCost = employeeBaseCost + socialCost + employeeAllowanceCost;
-  const project = listCompanies()
-    .find((company) => company.id === t.companyId)
-    ?.projects.find((item) => item.id === t.projectId);
-  const customerHourlyWage = project?.billingHourlyWage ?? 0;
-  const customerBillingFactor = project?.billingFactor ?? 0;
-  const customerHourlyRate = customerHourlyWage * customerBillingFactor;
-  const customerBaseBillingTotal = customerHourlyRate * calc.total;
-  const customerAllowanceTotal = customerHourlyRate * allowanceHours;
-  const customerBillingTotal = customerBaseBillingTotal + customerAllowanceTotal;
-  const hasCustomerBilling = customerHourlyWage > 0 && customerBillingFactor > 0;
+  const grossPayDkk = verifiedSnapshotAmountDkk(serverSnapshot, "grossPayOre");
+  const invoiceTotalDkk = verifiedSnapshotAmountDkk(serverSnapshot, "invoiceTotalOre");
+  const blockedFinancialValue =
+    snapshotStatus === "loading"
+      ? "Indlæser serverbaseret beregningssnapshot…"
+      : "Blokeret: gyldigt serverbaseret beregningssnapshot mangler";
 
   const changeStatus = (status: Timesheet["status"], rejectionComment?: string) => {
     const saved = upsert({ ...t, status, rejectionComment });
@@ -126,18 +139,17 @@ function AdminDetail() {
   };
 
   const handleMail = async () => {
+    if (!mailAvailability.available) {
+      setMailMessage(mailAvailability.reason);
+      return;
+    }
     setSendingMail(true);
     setMailMessage("Sender mail via mailsystemet…");
     try {
-      const result = await sendTimesheetEmail(t);
-      setMailMessage(
-        result === "api"
-          ? "Mail sendt via mailsystemet."
-          : "Mailsystemet er ikke konfigureret endnu. Mailkladde åbnes som fallback.",
-      );
-    } catch {
-      setMailMessage("Mailsystemet kunne ikke sende lige nu. Mailkladde åbnes som fallback.");
-      window.location.href = mailtoUrl(t);
+      await sendTimesheetEmail(t);
+      setMailMessage("Mail sendt via det servervaliderede mailsystem.");
+    } catch (error) {
+      setMailMessage(safeTimesheetMailErrorMessage(error));
     } finally {
       setSendingMail(false);
     }
@@ -149,7 +161,7 @@ function AdminDetail() {
     setEditingTimesheet(false);
   };
 
-  const saveEditAndNotify = async () => {
+  const saveEdit = () => {
     const wasRejected = t.status === "rejected";
     const saved = upsert({
       ...t,
@@ -158,27 +170,11 @@ function AdminDetail() {
     });
     setT(saved);
     setEditingTimesheet(false);
-    setSendingMail(true);
-    setMailMessage("Gemmer redigering og sender opdateret timeseddel…");
-    try {
-      const result = await sendTimesheetEmail(saved, {
-        contactFooterMessage: wasRejected
-          ? "efter aftale er timeseddel redigeret"
-          : "timeseddel er redigeret",
-        workerFooterMessage: wasRejected
-          ? "pga. din timeseddel blev afvist er den redigeret kontakt os hvis du er uenig i afgørelsen"
-          : "timeseddel er redigeret",
-      });
-      setMailMessage(
-        result === "api"
-          ? "Redigering gemt, og opdateret timeseddel er sendt."
-          : "Redigering gemt. Mailsystemet er ikke konfigureret endnu. Mailkladde åbnes som fallback.",
-      );
-    } catch {
-      setMailMessage("Redigering gemt, men mailsystemet kunne ikke sende lige nu.");
-    } finally {
-      setSendingMail(false);
-    }
+    setMailMessage(
+      wasRejected
+        ? "Redigeringen er gemt. En eventuel mail skal sendes via den separate, sikre mailknap."
+        : "Redigeringen er gemt uden automatisk mail.",
+    );
   };
 
   return (
@@ -289,57 +285,33 @@ function AdminDetail() {
               <div className="mt-4 border-t pt-4">
                 <h3 className="mb-2 text-sm font-medium">Medarbejderomkostning</h3>
                 <dl className="space-y-1 text-sm">
-                  <Row label="Timeløn" value={formatDkk(employeeHourlyWage)} />
-                  <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
-                  <Row label="Løn for registrerede timer" value={formatDkk(employeeBaseCost)} />
                   <Row
-                    label="Sociale omkostninger 38,88%"
-                    value={hasSickAbsence ? "0,00 DKK (sygdom registreret)" : formatDkk(socialCost)}
+                    label="Serverkilde"
+                    value={serverSnapshot ? `D1 · ${serverSnapshot.calculationId}` : "Ingen"}
                   />
-                  <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
-                  <Row label="Tillæg i alt" value={formatDkk(employeeAllowanceCost)} />
-                  <Row label="Samlet medarbejderomkostning" value={formatDkk(employeeTotalCost)} />
+                  <Row
+                    label="Samlet medarbejderomkostning"
+                    value={grossPayDkk === null ? blockedFinancialValue : formatDkk(grossPayDkk)}
+                  />
                 </dl>
               </div>
               <div className="mt-4 border-t pt-4">
                 <h3 className="mb-2 text-sm font-medium">Afregning til kunden</h3>
                 <dl className="space-y-1 text-sm">
                   <Row
-                    label="Afregningstimeløn"
+                    label="Snapshotstatus"
                     value={
-                      hasCustomerBilling ? formatDkk(customerHourlyWage) : "Ikke sat på projekt"
-                    }
-                  />
-                  <Row
-                    label="Faktor"
-                    value={
-                      hasCustomerBilling ? customerBillingFactor.toFixed(2) : "Ikke sat på projekt"
-                    }
-                  />
-                  <Row
-                    label="Pris pr. time"
-                    value={
-                      hasCustomerBilling ? formatDkk(customerHourlyRate) : "Ikke sat på projekt"
-                    }
-                  />
-                  <Row label="Timer i alt" value={`${calc.total.toFixed(2)} t`} />
-                  <Row
-                    label="Afregning for registrerede timer"
-                    value={
-                      hasCustomerBilling ? formatDkk(customerBaseBillingTotal) : "Ikke sat på projekt"
-                    }
-                  />
-                  <Row label="Tillægstimer med i perioden" value={formatAllowanceHours(calc)} />
-                  <Row
-                    label="Tillæg i alt"
-                    value={
-                      hasCustomerBilling ? formatDkk(customerAllowanceTotal) : "Ikke sat på projekt"
+                      serverSnapshot
+                        ? `${serverSnapshot.status} · ${
+                            serverSnapshot.exportBlocked ? "eksport blokeret" : "servervalideret"
+                          }`
+                        : blockedFinancialValue
                     }
                   />
                   <Row
                     label="Samlet afregning"
                     value={
-                      hasCustomerBilling ? formatDkk(customerBillingTotal) : "Ikke sat på projekt"
+                      invoiceTotalDkk === null ? blockedFinancialValue : formatDkk(invoiceTotalDkk)
                     }
                   />
                 </dl>
@@ -368,8 +340,8 @@ function AdminDetail() {
               <Button variant="outline" size="sm" onClick={cancelEdit} disabled={sendingMail}>
                 Annullér redigering
               </Button>
-              <Button size="sm" onClick={saveEditAndNotify} disabled={sendingMail}>
-                {sendingMail ? "Sender…" : "Gem redigering og send mail"}
+              <Button size="sm" onClick={saveEdit} disabled={sendingMail}>
+                Gem redigering
               </Button>
             </div>
           ) : (
@@ -638,8 +610,15 @@ function AdminDetail() {
       )}
 
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-muted-foreground">{mailMessage}</div>
-        <Button variant="outline" onClick={handleMail} disabled={sendingMail}>
+        <div className="text-sm text-muted-foreground">
+          {mailMessage || (!mailAvailability.available ? mailAvailability.reason : "")}
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleMail}
+          disabled={sendingMail || !mailAvailability.available}
+          title={!mailAvailability.available ? mailAvailability.reason : undefined}
+        >
           {sendingMail ? "Sender…" : "Send mail"}
         </Button>
         <div className="flex flex-wrap justify-end gap-2">
@@ -676,36 +655,6 @@ function formatDkk(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })} DKK`;
-}
-
-function formatAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
-  const allowanceHours = [
-    ["Overarbejde", calc.overtime],
-    ["Lørdag", calc.saturday],
-    ["Søndag", calc.sunday],
-    ["Helligdage", calc.publicHoliday],
-    ["Weekendarbejde lokalaftale", calc.weekend],
-    ["Aften", calc.evening],
-    ["Nat", calc.night],
-    ["Skiftehold", calc.shift],
-  ]
-    .filter(([, hours]) => Number(hours) > 0)
-    .map(([label, hours]) => `${label}: ${Number(hours).toFixed(2)} t`);
-
-  return allowanceHours.length ? allowanceHours.join(" · ") : "Ingen";
-}
-
-function totalAllowanceHours(calc: ReturnType<typeof calculateTimesheet>) {
-  return (
-    calc.overtime +
-    calc.saturday +
-    calc.sunday +
-    calc.publicHoliday +
-    calc.weekend +
-    calc.evening +
-    calc.night +
-    calc.shift
-  );
 }
 
 function AdminTimeRange({

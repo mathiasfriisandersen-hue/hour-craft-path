@@ -1,82 +1,26 @@
-import { useState } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { DEMO_PASSWORD, ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
-import {
-  findByContactPersonAccessCode,
-  findByWorkerAccessCode,
-  getById,
-} from "@/lib/timesheet-store";
+import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import subzLogo from "@/assets/sub-z-logo.png";
 
 const ROLES: Role[] = ["vikar", "kontaktperson", "bruger", "bruger2", "admin"];
 
 export function LoginScreen() {
-  const { login } = useAuth();
+  const { login, role: authenticatedRole, authenticating, error } = useAuth();
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const [role, setRole] = useState<Role>("vikar");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const vikarTimesheetId = pathname.match(/^\/vikar\/([^/]+)$/)?.[1];
-    const vikarTimesheet = vikarTimesheetId ? getById(vikarTimesheetId) : undefined;
-    const validDemoPassword = password === DEMO_PASSWORD;
-    const validVikarPassword =
-      !validDemoPassword &&
-      role === "vikar" &&
-      vikarTimesheet?.workerAccessCode === password &&
-      vikarTimesheet.workerMustChangeAccessCode === false &&
-      /^\d{4,8}$/.test(password);
-    const matchedVikarTimesheet =
-      role === "vikar" && !validDemoPassword && !validVikarPassword
-        ? findByWorkerAccessCode(password)
-        : undefined;
-    const matchedContactTimesheet =
-      role === "kontaktperson" && !validDemoPassword
-        ? findByContactPersonAccessCode(password)
-        : undefined;
+  useEffect(() => {
+    if (authenticatedRole) {
+      void navigate({ to: ROLE_HOME[authenticatedRole], replace: true });
+    }
+  }, [authenticatedRole, navigate]);
 
-    if (
-      !validDemoPassword &&
-      !validVikarPassword &&
-      !matchedVikarTimesheet &&
-      !matchedContactTimesheet
-    ) {
-      setError("Forkert adgangskode");
-      return;
-    }
-    setError(null);
-    if (validVikarPassword && vikarTimesheet) {
-      login("vikar", {
-        workerIdentity: { name: vikarTimesheet.vikar, email: vikarTimesheet.vikarEmail },
-      });
-      navigate({ to: "/vikar/$id", params: { id: vikarTimesheet.id }, replace: true });
-      return;
-    }
-    if (matchedVikarTimesheet) {
-      login("vikar", {
-        workerIdentity: {
-          name: matchedVikarTimesheet.vikar,
-          email: matchedVikarTimesheet.vikarEmail,
-        },
-      });
-      navigate({ to: "/vikar/$id", params: { id: matchedVikarTimesheet.id }, replace: true });
-      return;
-    }
-    login(role);
-    if (matchedContactTimesheet) {
-      navigate({
-        to: "/kontaktperson/$id",
-        params: { id: matchedContactTimesheet.id },
-        replace: true,
-      });
-      return;
-    }
-    navigate({ to: ROLE_HOME[role], replace: true });
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    login(role, { demo: true });
   };
 
   return (
@@ -96,9 +40,8 @@ export function LoginScreen() {
 
         <h1 className="text-2xl font-semibold tracking-tight">Log ind</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Demo-login: vælg rolle og brug koden <span className="font-mono font-semibold">0000</span>
-          . Vikarer og kontaktpersoner kan også bruge deres personlige adgangskode via
-          invitationslinket.
+          Vælg en rolle for at starte en tidsbegrænset, serververificeret session i den isolerede
+          demo.
         </p>
 
         <form onSubmit={submit} className="mt-6 space-y-5">
@@ -123,38 +66,21 @@ export function LoginScreen() {
             </div>
           </div>
 
-          <div>
-            <label htmlFor="pw" className="text-sm font-medium">
-              Adgangskode
-            </label>
-            <input
-              id="pw"
-              type="password"
-              inputMode="numeric"
-              autoComplete="off"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (error) setError(null);
-              }}
-              className="mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-              placeholder="0000"
-            />
-            {error && (
-              <p role="alert" className="mt-2 text-sm font-medium text-status-rejected-fg">
-                {error}
-              </p>
-            )}
-          </div>
+          {error && (
+            <p role="alert" className="text-sm font-medium text-status-rejected-fg">
+              {error}
+            </p>
+          )}
 
-          <Button type="submit" className="w-full">
-            Log ind
+          <Button type="submit" className="w-full" disabled={authenticating}>
+            {authenticating ? "Starter sikker demo…" : "Start demo"}
           </Button>
         </form>
 
         <div className="mt-6 flex items-center justify-between gap-3 border-t pt-5">
           <p className="text-xs text-muted-foreground leading-snug">
-            Demooplysninger gemmes ikke permanent og kan ryddes af admin.
+            Syntetiske demodata kan blive gemt lokalt i denne browser. Demoen er isoleret fra
+            produktionsdata og kan ikke sende rigtige mails.
           </p>
           <img
             src={subzLogo}

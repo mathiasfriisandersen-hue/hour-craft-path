@@ -7,11 +7,10 @@ import { Input } from "@/components/ui/input";
 import { activeCollectiveAgreements } from "@/lib/collectiveAgreements";
 import { companiesVisibleForRole, companyOwnerForRole } from "@/lib/company-access";
 import { useAuth } from "@/lib/auth";
-import { sendProjectConfirmationEmail } from "@/lib/timesheet-mail";
-import { createShortWorkerInviteUrl } from "@/lib/worker-invite";
+import { getMailSessionAvailability } from "@/lib/api-session";
+import { safeTimesheetMailErrorMessage, sendProjectConfirmationEmail } from "@/lib/timesheet-mail";
 import {
   createTimesheetForWorker,
-  generateOneTimeCode,
   listAll,
   listCompanies,
   listKnownWorkers,
@@ -667,6 +666,7 @@ function ProjectsSection({
 }) {
   const [projectMailMessage, setProjectMailMessage] = useState("");
   const [sendingProjectId, setSendingProjectId] = useState<string | null>(null);
+  const mailAvailability = getMailSessionAvailability();
   const updateProject = (index: number, patch: Partial<CompanyProject>) => {
     setCompany({
       ...company,
@@ -676,6 +676,10 @@ function ProjectsSection({
     });
   };
   const sendProjectMail = async (project: CompanyProject) => {
+    if (!mailAvailability.available) {
+      setProjectMailMessage(mailAvailability.reason);
+      return;
+    }
     setSendingProjectId(project.id);
     setProjectMailMessage("Sender projektbekræftelse…");
     try {
@@ -695,19 +699,17 @@ function ProjectsSection({
       } else {
         for (const worker of workers) {
           const timesheet = ensureProjectTimesheet(company, project, worker);
-          const workerInviteUrl = await createShortWorkerInviteUrl(timesheet);
           await sendProjectConfirmationEmail({
             company,
             project,
             worker,
-            workerInviteUrl,
-            workerAccessCode: timesheet.workerAccessCode,
+            timesheetId: timesheet.id,
           });
         }
       }
       setProjectMailMessage("Projektbekræftelse sendt.");
-    } catch {
-      setProjectMailMessage("Projektbekræftelsen kunne ikke sendes automatisk.");
+    } catch (error) {
+      setProjectMailMessage(safeTimesheetMailErrorMessage(error));
     } finally {
       setSendingProjectId(null);
     }
@@ -962,8 +964,10 @@ function ProjectsSection({
                   onClick={() => sendProjectMail(project)}
                   disabled={
                     sendingProjectId === project.id ||
-                    !(project.contactEmail || company.contactEmail)
+                    !(project.contactEmail || company.contactEmail) ||
+                    !mailAvailability.available
                   }
+                  title={!mailAvailability.available ? mailAvailability.reason : undefined}
                 >
                   {sendingProjectId === project.id ? "Sender…" : "Send projektmail"}
                 </Button>
@@ -1066,8 +1070,6 @@ function ensureProjectTimesheet(
     return upsert({
       ...existing,
       workerLanguage: existing.workerLanguage || worker.language,
-      workerAccessCode: existing.workerAccessCode || generateOneTimeCode(),
-      workerMustChangeAccessCode: existing.workerMustChangeAccessCode || !existing.workerAccessCode,
       calendarStatus: "planned",
       calendarSource: "project-mail",
       projectMailSentAt: existing.projectMailSentAt || new Date().toISOString(),
@@ -1109,8 +1111,6 @@ function ensureProjectTimesheet(
     defaultNightWorkEnd: project.workPeriod === "night" ? project.defaultEnd : "",
     shiftWorkApplies: false,
     startDate: project.startDate,
-    workerAccessCode: generateOneTimeCode(),
-    contactPersonAccessCode: generateOneTimeCode(),
     ownerRole: company.ownerRole,
   });
 
