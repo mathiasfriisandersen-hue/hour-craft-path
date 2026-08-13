@@ -79,8 +79,8 @@ export function LoginScreen() {
 
         <div className="mt-6 flex items-center justify-between gap-3 border-t pt-5">
           <p className="text-xs text-muted-foreground leading-snug">
-            Syntetiske demodata kan blive gemt lokalt i denne browser. Demoen er isoleret fra
-            produktionsdata og kan ikke sende rigtige mails.
+            Denne demo bruger syntetiske testdata. Ikke-følsomme demodata kan gemmes lokalt i
+            browseren. Brug ikke rigtige personoplysninger.
           </p>
           <img
             src={subzLogo}

@@ -15,15 +15,10 @@ import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import subzLogo from "@/assets/sub-z-logo.png";
-import {
-  getAgreementValidationReport,
-  type AgreementRuleCategory,
-} from "@/lib/agreementValidation";
 import { addDaysToISODate } from "@/lib/danishHolidays";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
-  calculateTimesheet,
-  formatDkk,
+  formatDkk as formatStoredDkk,
   formatWeekRange,
   invoicePeriodTone,
   listCompanies,
@@ -71,13 +66,9 @@ type WorkContext = {
   payrollPeriodStart: string;
   payrollPeriodEnd: string;
   payrollBasisHours: number;
-  payrollBasisAmount: number;
   payrollApprovalStatus: string;
   billingMultiplier: number;
-  billingRate: number;
   invoiceBaseExVat: number;
-  invoiceAllowanceRows: PayrollAllowanceRow[];
-  invoiceAllowanceExVat: number;
   invoiceExVat: number;
   vat: number;
   invoiceIncVat: number;
@@ -107,19 +98,6 @@ type TimesheetWithCalculationSnapshot = Timesheet & {
   calculationSnapshot?: ServerCalculationSnapshot;
 };
 
-type PayrollAllowanceRow = {
-  label: string;
-  hours: number;
-  amount: number;
-  rateVerified?: boolean;
-  unitPrice?: number;
-  hourlyWageLabel?: string;
-  quantityLabel?: string;
-  amountLabel?: string;
-  breakdown?: Array<{ label: string; value: string }>;
-  ruleKeys?: AgreementRuleCategory[];
-};
-
 const SELLER = {
   name: "Sub-Z ApS",
   address: "Vesterballevej 5, 7000 Fredericia",
@@ -135,6 +113,11 @@ const PAYMENT = {
   iban: "",
   swift: "",
 };
+const BLOCKED_FINANCIAL_AMOUNT = "Blokeret: serverbaseret beregningssnapshot mangler";
+
+function formatDkk(value: number): string {
+  return Number.isFinite(value) ? formatStoredDkk(value) : BLOCKED_FINANCIAL_AMOUNT;
+}
 const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Alle statusser" },
   { value: "invoice-soon", label: "Skal snart håndteres" },
@@ -1058,13 +1041,9 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     payrollPeriodStart: payrollPeriod.start,
     payrollPeriodEnd: payrollPeriod.end,
     payrollBasisHours,
-    payrollBasisAmount: Number.NaN,
     payrollApprovalStatus: payrollApprovalStatus(timesheet, payrollPeriod.end),
     billingMultiplier,
-    billingRate: Number.NaN,
     invoiceBaseExVat: Number.NaN,
-    invoiceAllowanceRows: [],
-    invoiceAllowanceExVat: Number.NaN,
     invoiceExVat: Number.NaN,
     vat: Number.NaN,
     invoiceIncVat: Number.NaN,
@@ -1124,23 +1103,6 @@ function formatMultiplier(row: WorkContext) {
   return row.billingMultiplier > 0
     ? `Konfigureret faktor ${formatDecimal(row.billingMultiplier)} · økonomisk beregning blokeret`
     : "Økonomisk beregning blokeret";
-}
-
-function invoiceLineUnitPrice(row: WorkContext, item?: PayrollAllowanceRow) {
-  void row;
-  void item;
-  return Number.NaN;
-}
-
-function invoiceLineHourlyWage(row: WorkContext, item?: PayrollAllowanceRow) {
-  void row;
-  void item;
-  return Number.NaN;
-}
-
-function invoiceLineFactor(row: WorkContext) {
-  void row;
-  return "Blokeret";
 }
 
 function invoiceDateForTimesheet(weekStart: string): string {
@@ -1331,13 +1293,6 @@ function ExportGateNotice({
 }
 
 function payrollFinancials(row: WorkContext) {
-  const calculation = calculateTimesheet(row.timesheet);
-  const allowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
-    ...item,
-    amount: Number.NaN,
-    rateVerified: false,
-    amountLabel: "Blokeret: serverbaseret beregningssnapshot mangler",
-  }));
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
     .join(" / ");
@@ -1348,454 +1303,17 @@ function payrollFinancials(row: WorkContext) {
     hourlyWageExcludingSocialCosts: Number.NaN,
     basePayrollHours: row.approvedHours,
     basePayrollAmount: Number.NaN,
-    allowanceRows,
+    allowanceRows: [],
     allowanceTotal: Number.NaN,
     payrollTotal: Number.NaN,
     projectName,
   };
 }
 
-function payrollOvertimeHoursForCalculation(
-  row: WorkContext,
-  calculation: ReturnType<typeof calculateTimesheet>,
-) {
-  void row;
-  return calculation.overtime;
-}
-
-function invoiceAllowanceLabel(label: string) {
-  return label === "Overarbejdsløn" ? "Overarbejdstillæg" : label;
-}
-
 function invoiceBaseLineLabel(row: WorkContext) {
   return row.invoiceBaseHours < row.approvedHours
     ? "Almindelige vikartimer"
     : "Godkendte vikartimer";
-}
-
-function invoiceAllowanceRowsForCalculation(
-  timesheet: Timesheet,
-  calculation: ReturnType<typeof calculateTimesheet>,
-  project: CompanyProject | undefined,
-  billingRate: number,
-  periodEnd: string,
-): PayrollAllowanceRow[] {
-  const validationReport = getAgreementValidationReport(timesheet.selectedAgreementId);
-  const projectFactor = project?.billingFactor ?? 0;
-  const baseHourlyWage = project?.billingHourlyWage ?? 0;
-
-  const rows = allowanceRowsForCalculation(calculation).flatMap((item) => {
-    const manualRow = invoiceManualAllowanceRow(item, validationReport);
-
-    if (item.ruleKeys?.includes("overtime")) {
-      const overtimeRows = invoiceOvertimeAllowanceRows(
-        validationReport,
-        item.hours,
-        baseHourlyWage,
-        projectFactor,
-        periodEnd,
-      );
-      if (overtimeRows.length) return overtimeRows;
-      const rate = allowanceRateForRule(validationReport, item.ruleKeys);
-      if (rate && baseHourlyWage > 0 && projectFactor > 0) {
-        const unitPrice = (baseHourlyWage + rate) * projectFactor;
-        return [
-          {
-            ...item,
-            label: "Overarbejde inkl. tillæg",
-            unitPrice,
-            amount: item.hours * unitPrice,
-            rateVerified: true,
-          },
-        ];
-      }
-      return [manualRow];
-    }
-
-    const rate = allowanceRateForRule(validationReport, item.ruleKeys);
-    if (rate) {
-      const unitPrice = projectFactor > 0 ? rate * projectFactor : rate;
-      return [
-        {
-          ...item,
-          label: invoiceAllowanceLabel(item.label),
-          unitPrice,
-          amount: item.hours * unitPrice,
-          rateVerified: true,
-          amountLabel: `${formatDkk(rate)}/t${
-            projectFactor > 0 ? ` x faktor ${formatDecimal(projectFactor)}` : ""
-          } = ${formatDkk(unitPrice)}/t`,
-        },
-      ];
-    }
-
-    return [manualRow];
-  });
-
-  if (calculation.delayedMealBreakDays > 0) {
-    rows.push({
-      label: "Udsat spisepause",
-      hours: 0,
-      quantityLabel: `${calculation.delayedMealBreakDays} ${
-        calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
-      }`,
-      unitPrice: 0,
-      amount: 0,
-      rateVerified: false,
-      amountLabel: "Kræver manuel validering",
-      ruleKeys: ["breaks"],
-    });
-  }
-
-  return rows;
-}
-
-function invoiceManualAllowanceRow(
-  item: Omit<PayrollAllowanceRow, "amount">,
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-): PayrollAllowanceRow {
-  return {
-    ...item,
-    label: invoiceAllowanceLabel(item.label),
-    unitPrice: 0,
-    amount: 0,
-    rateVerified: false,
-    amountLabel: `Kræver manuel validering: ${allowanceRateStatusLabel(
-      validationReport,
-      item.ruleKeys,
-    )}`,
-  };
-}
-
-function invoiceOvertimeAllowanceRows(
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-  hours: number,
-  baseHourlyWage: number,
-  projectFactor: number,
-  periodEnd: string,
-): PayrollAllowanceRow[] {
-  if (
-    !validationReport?.validatedForCalculation ||
-    hours <= 0 ||
-    baseHourlyWage <= 0 ||
-    projectFactor <= 0
-  ) {
-    return [];
-  }
-  const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
-  const tiers = overtimeRateTiersForDate(overtimeRule?.possibleRates ?? [], periodEnd);
-  if (tiers.length < 3) return [];
-
-  return allocateOvertimeHoursToTiers(hours, tiers).map((tier) => {
-    const unitPrice = (baseHourlyWage + tier.rate) * projectFactor;
-    return {
-      label: `Overarbejde ${tier.label}`,
-      hours: tier.hours,
-      unitPrice,
-      amount: tier.hours * unitPrice,
-      rateVerified: true,
-      ruleKeys: ["overtime", "outside_normal_time"],
-    };
-  });
-}
-
-function payrollAllowanceRowsForCalculation(
-  row: WorkContext,
-  calculation: ReturnType<typeof calculateTimesheet>,
-  hourlyWage: number,
-  payrollOvertime = payrollOvertimeHoursForCalculation(row, calculation),
-): PayrollAllowanceRow[] {
-  const validationReport = getAgreementValidationReport(row.timesheet.selectedAgreementId);
-  const rows: PayrollAllowanceRow[] = allowanceRowsForCalculation(calculation, {
-    overtime: payrollOvertime,
-  }).map((item) => {
-    const overtimeRatePlan = item.ruleKeys?.includes("overtime")
-      ? overtimeAllowanceRatePlan(row, validationReport, item.hours, hourlyWage)
-      : undefined;
-    const eveningRatePlan =
-      !overtimeRatePlan && item.ruleKeys?.includes("evening_allowance")
-        ? eveningAllowanceRatePlan(validationReport, item.hours, row.payrollPeriodEnd)
-        : undefined;
-    const ratePlan = overtimeRatePlan ?? eveningRatePlan;
-    const rate = ratePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
-    const amount = ratePlan?.amount ?? (rate ? item.hours * rate : 0);
-    return {
-      ...item,
-      amount,
-      rateVerified: Boolean(ratePlan || rate),
-      hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
-      amountLabel:
-        ratePlan?.label ??
-        (rate
-          ? `${formatDkk(rate)}/t; sociale omkostninger kræver manuel validering`
-          : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
-      breakdown: ratePlan?.breakdown,
-    };
-  });
-
-  if (calculation.delayedMealBreakDays > 0) {
-    rows.push({
-      label: "Udsat spisepause",
-      hours: 0,
-      quantityLabel: `${calculation.delayedMealBreakDays} ${
-        calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
-      }`,
-      amount: 0,
-      rateVerified: false,
-      amountLabel: "Kræver manuel validering; ingen sats anvendes automatisk",
-    });
-  }
-
-  if (calculation.localAgreement > 0) {
-    rows.push({
-      label: "Lokalaftale",
-      hours: calculation.localAgreement,
-      amount: 0,
-      rateVerified: false,
-      amountLabel: allowanceRateStatusLabel(validationReport, ["local_agreements"]),
-      ruleKeys: ["local_agreements"],
-    });
-  }
-
-  return rows;
-}
-
-type OvertimeRateTier = {
-  label: string;
-  hours: number;
-  rate: number;
-};
-
-type AppliedOvertimeRateTier = OvertimeRateTier & {
-  hours: number;
-};
-
-function overtimeAllowanceRatePlan(
-  row: WorkContext,
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-  hours: number,
-  hourlyWage: number,
-) {
-  if (!validationReport?.validatedForCalculation || hours <= 0) return undefined;
-  const overtimeRule = validationReport.rules.find((rule) => rule.ruleKey === "overtime");
-  const tiers = overtimeRateTiersForDate(overtimeRule?.possibleRates ?? [], row.payrollPeriodEnd);
-  if (tiers.length < 3) return undefined;
-
-  const appliedTiers = allocateOvertimeHoursToTiers(hours, tiers);
-  if (!appliedTiers.length) return undefined;
-
-  const overtimePayrollAmount = appliedTiers.reduce(
-    (sum, tier) => sum + tier.hours * (hourlyWage + tier.rate),
-    0,
-  );
-  const amount = overtimePayrollAmount;
-  return {
-    amount,
-    label: formatDkk(amount),
-    breakdown: [
-      { label: "Timer", value: `${hours.toFixed(2)} t` },
-      { label: "Grundtimeløn", value: `${formatDkk(hourlyWage)}/t` },
-      ...appliedTiers.map((tier) => ({
-        label: tier.label,
-        value: `${tier.hours.toFixed(2)} t x ${formatDkk(hourlyWage + tier.rate)}/t = ${formatDkk(
-          tier.hours * (hourlyWage + tier.rate),
-        )}`,
-      })),
-      { label: "Lønbeløb", value: formatDkk(overtimePayrollAmount) },
-      { label: "Sociale omkostninger", value: "Kræver manuel validering" },
-    ],
-  };
-}
-
-function eveningAllowanceRatePlan(
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-  hours: number,
-  periodEnd: string,
-) {
-  if (!validationReport?.validatedForCalculation || hours <= 0) return undefined;
-  const eveningRule = validationReport.rules.find((rule) => rule.ruleKey === "evening_allowance");
-  const rateLine =
-    eveningRule?.possibleRates.find((rateText) => /till[æa]g\s*1|forskudt\s+tid/i.test(rateText)) ??
-    eveningRule?.possibleRates[0];
-  const rate = rateLine ? rateForDate(rateLine, periodEnd) : undefined;
-  if (!rate) return undefined;
-
-  const amountBeforeSocial = hours * rate;
-  const amount = amountBeforeSocial;
-  return {
-    amount,
-    label: formatDkk(amount),
-    breakdown: [
-      { label: "Timer", value: `${hours.toFixed(2)} t` },
-      {
-        label: "Aftentillæg",
-        value: `${hours.toFixed(2)} t x ${formatDkk(rate)}/t = ${formatDkk(amountBeforeSocial)}`,
-      },
-      { label: "Lønbeløb", value: formatDkk(amountBeforeSocial) },
-      { label: "Sociale omkostninger", value: "Kræver manuel validering" },
-    ],
-  };
-}
-
-function overtimeRateTiersForDate(possibleRates: string[], isoDate: string): OvertimeRateTier[] {
-  const tierMatchers: Array<{ label: string; pattern: RegExp; hours: number }> = [
-    { label: "1.-2. klokketime", pattern: /første(?:\/|\s+og\s+)anden/i, hours: 2 },
-    { label: "3.-4. klokketime", pattern: /tredje(?:\/|\s+og\s+)fjerde/i, hours: 2 },
-    { label: "5.+ klokketime", pattern: /femte/i, hours: Number.POSITIVE_INFINITY },
-  ];
-  return tierMatchers.flatMap((tier) => {
-    const line = possibleRates.find((rateText) => tier.pattern.test(rateText));
-    const rate = line ? rateForDate(line, isoDate) : undefined;
-    return rate ? [{ label: tier.label, hours: tier.hours, rate }] : [];
-  });
-}
-
-function allocateOvertimeHoursToTiers(
-  hours: number,
-  tiers: OvertimeRateTier[],
-): AppliedOvertimeRateTier[] {
-  let remainingHours = hours;
-  return tiers.flatMap((tier) => {
-    if (remainingHours <= 0) return [];
-    const tierHours = Math.min(remainingHours, tier.hours);
-    remainingHours -= tierHours;
-    return [{ ...tier, hours: tierHours }];
-  });
-}
-
-function rateForDate(rateText: string, isoDate: string) {
-  const target = new Date(`${isoDate}T12:00:00`).getTime();
-  const matches = [
-    ...rateText.matchAll(
-      /(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(?:kr\.\s*)?(\d+(?:,\d+)?)(?:\s*kr\.)?/gi,
-    ),
-  ];
-  const rates = matches
-    .map((match) => {
-      const [, day, month, year, amount] = match;
-      const effectiveDate = new Date(
-        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T12:00:00`,
-      ).getTime();
-      return {
-        effectiveDate,
-        amount: Number(amount.replace(",", ".")),
-      };
-    })
-    .filter((item) => Number.isFinite(item.effectiveDate) && Number.isFinite(item.amount))
-    .sort((a, b) => a.effectiveDate - b.effectiveDate);
-  const currentRate = rates.filter((item) => item.effectiveDate <= target).at(-1) ?? rates[0];
-  return currentRate?.amount;
-}
-
-function allowanceRateForRule(
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-  ruleKeys: AgreementRuleCategory[] | undefined,
-) {
-  if (!validationReport || !ruleKeys?.length) return undefined;
-  const matchingRates = validationReport.rules
-    .filter(
-      (rule) =>
-        ruleKeys.includes(rule.ruleKey) &&
-        rule.reviewStatus === "approved" &&
-        rule.calculationType === "fixed_rate" &&
-        typeof rule.rate === "number" &&
-        Number.isFinite(rule.rate) &&
-        rule.rate > 0 &&
-        (rule.unit || "").toLowerCase().includes("kr"),
-    )
-    .map((rule) => rule.rate as number);
-  const uniqueRates = [...new Set(matchingRates)];
-  return uniqueRates.length === 1 ? uniqueRates[0] : undefined;
-}
-
-function allowanceRateStatusLabel(
-  validationReport: ReturnType<typeof getAgreementValidationReport>,
-  ruleKeys: AgreementRuleCategory[] | undefined,
-) {
-  if (!validationReport?.validatedForCalculation) return "Tillægssats kræver validering";
-  const matchingRules = validationReport.rules.filter((rule) => ruleKeys?.includes(rule.ruleKey));
-  if (matchingRules.some((rule) => rule.possibleRates.length > 1)) {
-    return "Valideret: flere satstrin i regelgrundlag";
-  }
-  return "Valideret: sats ikke struktureret som én timesats";
-}
-
-function allowanceRowsForCalculation(
-  calculation: ReturnType<typeof calculateTimesheet>,
-  overrides: { overtime?: number } = {},
-): Omit<PayrollAllowanceRow, "amount">[] {
-  const rows = [
-    {
-      label: "Overarbejdsløn",
-      hours: overrides.overtime ?? calculation.overtime,
-      ruleKeys: ["overtime", "outside_normal_time"],
-    },
-    {
-      label: "Weekend-/søndagstillæg",
-      hours: calculation.saturday + calculation.sunday + calculation.weekend,
-      ruleKeys: ["saturday_allowance", "sunday_allowance", "local_agreements"],
-    },
-    {
-      label: "Helligdagstillæg",
-      hours: calculation.publicHoliday,
-      ruleKeys: ["public_holiday", "sunday_allowance"],
-    },
-    {
-      label: "Aftentillæg",
-      hours: calculation.evening,
-      ruleKeys: ["evening_allowance", "staggered_time"],
-    },
-    { label: "Nattillæg", hours: calculation.night, ruleKeys: ["night_allowance"] },
-    { label: "Skifteholdstillæg", hours: calculation.shift, ruleKeys: ["shift_work"] },
-  ] satisfies Array<Omit<PayrollAllowanceRow, "amount">>;
-
-  return rows.filter((item) => item.hours > 0);
-}
-
-function allowanceQuantityLabel(item: PayrollAllowanceRow) {
-  return item.quantityLabel ?? `${item.hours.toFixed(2)} t`;
-}
-
-function allowanceAmountLabel(item: PayrollAllowanceRow) {
-  return item.amountLabel ?? formatDkk(item.amount);
-}
-
-function invoiceAllowanceDescription(item: PayrollAllowanceRow) {
-  return item.amountLabel ? `${item.label} (${item.amountLabel})` : item.label;
-}
-
-function allowancePdfAmountLabel(item: PayrollAllowanceRow) {
-  if (item.hourlyWageLabel) return `${item.hourlyWageLabel}; ${allowanceAmountLabel(item)}`;
-  return allowanceAmountLabel(item);
-}
-
-function PayrollAllowancePreviewItem({ item }: { item: PayrollAllowanceRow }) {
-  return (
-    <div className="border-b pb-4 last:border-b-0 last:pb-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase text-muted-foreground">{item.label}</div>
-          <div className="mt-1 font-medium">{allowanceQuantityLabel(item)}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs uppercase text-muted-foreground">Beløb</div>
-          <div className="mt-1 font-semibold">{allowanceAmountLabel(item)}</div>
-        </div>
-      </div>
-      {item.breakdown?.length ? (
-        <dl className="mt-3 grid gap-x-6 gap-y-2 md:grid-cols-2">
-          {item.breakdown.map((line) => (
-            <div key={`${item.label}-${line.label}`} className="min-w-0">
-              <dt className="text-xs text-muted-foreground">{line.label}</dt>
-              <dd className="mt-0.5 break-words font-medium">{line.value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : item.hourlyWageLabel ? (
-        <div className="mt-2 text-sm text-muted-foreground">{item.hourlyWageLabel}</div>
-      ) : null}
-    </div>
-  );
 }
 
 function PayrollPreview({
@@ -1892,15 +1410,7 @@ function PayrollPreview({
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
           <h3 className="mb-3 font-medium">Tillæg</h3>
-          {financials.allowanceRows.length === 0 ? (
-            <p className="text-muted-foreground">Ingen registrerede tillæg i perioden.</p>
-          ) : (
-            <div className="grid gap-4">
-              {financials.allowanceRows.map((item) => (
-                <PayrollAllowancePreviewItem key={item.label} item={item} />
-              ))}
-            </div>
-          )}
+          <p className="text-muted-foreground">{BLOCKED_FINANCIAL_AMOUNT}</p>
         </div>
 
         <div className="mt-4 rounded-lg border p-4 text-sm">
@@ -2048,33 +1558,13 @@ function InvoicePreview({
                   <td className="border-b px-3 py-3 text-right">
                     {row.invoiceBaseHours.toFixed(2)} t
                   </td>
-                  <td className="border-b px-3 py-3 text-right">
-                    {formatDkk(invoiceLineHourlyWage(row))}
-                  </td>
-                  <td className="border-b px-3 py-3 text-right">{invoiceLineFactor(row)}</td>
-                  <td className="border-b px-3 py-3 text-right">
-                    {formatDkk(invoiceLineUnitPrice(row))}
-                  </td>
+                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
+                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
+                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
                   <td className="border-b px-3 py-3 text-right">
                     {formatDkk(row.invoiceBaseExVat)}
                   </td>
                 </tr>
-                {row.invoiceAllowanceRows.map((item) => (
-                  <tr key={item.label}>
-                    <td className="border-b px-3 py-3">{invoiceAllowanceDescription(item)}</td>
-                    <td className="border-b px-3 py-3 text-right">
-                      {allowanceQuantityLabel(item)}
-                    </td>
-                    <td className="border-b px-3 py-3 text-right">
-                      {formatDkk(invoiceLineHourlyWage(row, item))}
-                    </td>
-                    <td className="border-b px-3 py-3 text-right">{invoiceLineFactor(row)}</td>
-                    <td className="border-b px-3 py-3 text-right">
-                      {formatDkk(invoiceLineUnitPrice(row, item))}
-                    </td>
-                    <td className="border-b px-3 py-3 text-right">{formatDkk(item.amount)}</td>
-                  </tr>
-                ))}
               </tbody>
             </table>
           </div>
@@ -2167,8 +1657,7 @@ async function downloadInvoicePdf(row: WorkContext) {
   ]);
 
   const tableTop = taskBottom + 12;
-  const invoiceLineHeight = 10;
-  const invoiceTableHeight = 10 + invoiceLineHeight * (1 + row.invoiceAllowanceRows.length);
+  const invoiceTableHeight = 20;
   doc.setFillColor(245, 247, 250);
   doc.rect(16, tableTop, 178, 10, "F");
   doc.setDrawColor(214, 222, 232);
@@ -2187,25 +1676,10 @@ async function downloadInvoicePdf(row: WorkContext) {
   doc.setFontSize(8);
   doc.text(invoiceBaseLineLabel(row), 20, tableTop + 20);
   doc.text(`${row.invoiceBaseHours.toFixed(2)} t`, 92, tableTop + 20, { align: "right" });
-  doc.text(formatDkk(invoiceLineHourlyWage(row)), 118, tableTop + 20, { align: "right" });
-  doc.text(invoiceLineFactor(row), 138, tableTop + 20, { align: "right" });
-  doc.text(formatDkk(invoiceLineUnitPrice(row)), 163, tableTop + 20, { align: "right" });
+  doc.text(BLOCKED_FINANCIAL_AMOUNT, 118, tableTop + 20, { align: "right" });
+  doc.text("Blokeret", 138, tableTop + 20, { align: "right" });
+  doc.text(BLOCKED_FINANCIAL_AMOUNT, 163, tableTop + 20, { align: "right" });
   doc.text(formatDkk(row.invoiceBaseExVat), 190, tableTop + 20, { align: "right" });
-
-  let invoiceLineY = tableTop + 20;
-  row.invoiceAllowanceRows.forEach((item) => {
-    invoiceLineY += invoiceLineHeight;
-    doc.text(invoiceAllowanceDescription(item), 20, invoiceLineY, { maxWidth: 68 });
-    doc.text(allowanceQuantityLabel(item), 92, invoiceLineY, { align: "right" });
-    doc.text(formatDkk(invoiceLineHourlyWage(row, item)), 118, invoiceLineY, {
-      align: "right",
-    });
-    doc.text(invoiceLineFactor(row), 138, invoiceLineY, { align: "right" });
-    doc.text(formatDkk(invoiceLineUnitPrice(row, item)), 163, invoiceLineY, {
-      align: "right",
-    });
-    doc.text(formatDkk(item.amount), 190, invoiceLineY, { align: "right" });
-  });
 
   const totalsTop = tableTop + invoiceTableHeight + 12;
   drawAmountRow(doc, totalsTop, "Subtotal ekskl. moms", row.invoiceExVat, false);
@@ -2298,18 +1772,8 @@ async function downloadPayrollPdf(row: WorkContext) {
   let cursorY = tableTop + 18;
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-
-  if (financials.allowanceRows.length === 0) {
-    doc.text("Ingen registrerede tillæg i perioden.", 20, cursorY);
-    cursorY += 8;
-  } else {
-    financials.allowanceRows.forEach((item) => {
-      doc.text(item.label, 20, cursorY);
-      doc.text(allowanceQuantityLabel(item), 145, cursorY, { align: "right" });
-      doc.text(allowancePdfAmountLabel(item), 190, cursorY, { align: "right" });
-      cursorY += 8;
-    });
-  }
+  doc.text(BLOCKED_FINANCIAL_AMOUNT, 20, cursorY);
+  cursorY += 8;
 
   doc.setDrawColor(214, 222, 232);
   doc.line(16, cursorY, 194, cursorY);

@@ -74,6 +74,11 @@ type RoleRow = {
   id: string;
 };
 
+type OrganizationMailPolicyRow = {
+  is_demo: number;
+  outbound_mail_enabled: number;
+};
+
 type InvitationRow = {
   id: string;
   organization_id: string;
@@ -120,7 +125,7 @@ const PRIVACY_POLICY_HTML = `<!doctype html>
       <h2>Data sharing and sale</h2>
       <p>The information is not sold. Data is only used for the timesheet support purpose described above and is not shared with third parties for advertising or resale.</p>
       <h2>Contact</h2>
-      <p>Questions about this privacy policy or the Timesheet GPT can be sent to <a href="mailto:mathiasfriisandersen@gmail.com">mathiasfriisandersen@gmail.com</a>.</p>
+      <p>Questions about this privacy policy or the Timesheet GPT can be sent to mathiasfriisandersen@gmail.com.</p>
     </main>
   </body>
 </html>`;
@@ -438,6 +443,41 @@ async function requireProductionSession(
     throw new ApiError(
       "demo_mail_disabled",
       "Demoorganisationen må ikke sende mails eller oprette invitationer.",
+      403,
+    );
+  }
+  const organization = await database
+    .prepare(
+      `SELECT is_demo, outbound_mail_enabled
+       FROM organizations
+       WHERE id = ?
+         AND status = 'active'
+       LIMIT 1`,
+    )
+    .bind(session.organizationId)
+    .first<OrganizationMailPolicyRow>();
+  if (
+    !organization ||
+    (organization.is_demo !== 0 && organization.is_demo !== 1) ||
+    (organization.outbound_mail_enabled !== 0 && organization.outbound_mail_enabled !== 1)
+  ) {
+    throw new ApiError(
+      "organization_mail_policy_unavailable",
+      "Mail er blokeret, fordi organisationens mailpolitik ikke kunne verificeres.",
+      503,
+    );
+  }
+  if (organization.is_demo === 1) {
+    throw new ApiError(
+      "demo_mail_disabled",
+      "Demoorganisationen må ikke sende mails eller oprette invitationer.",
+      403,
+    );
+  }
+  if (organization.outbound_mail_enabled !== 1) {
+    throw new ApiError(
+      "organization_mail_disabled",
+      "Organisationen har ikke tilladelse til at sende mails eller oprette invitationer.",
       403,
     );
   }

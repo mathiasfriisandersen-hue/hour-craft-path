@@ -290,7 +290,7 @@ function AdminDetail() {
                     value={serverSnapshot ? `D1 · ${serverSnapshot.calculationId}` : "Ingen"}
                   />
                   <Row
-                    label="Samlet medarbejderomkostning"
+                    label="Serverberegnet bruttoløn"
                     value={grossPayDkk === null ? blockedFinancialValue : formatDkk(grossPayDkk)}
                   />
                 </dl>

@@ -192,7 +192,7 @@ const PRIVACY_POLICY_HTML = `<!doctype html>
       <h2>Data sharing and sale</h2>
       <p>The information is not sold. Data is only used for the timesheet support purpose described above and is not shared with third parties for advertising or resale.</p>
       <h2>Contact</h2>
-      <p>Questions about this privacy policy or the Timesheet GPT can be sent to <a href="mailto:mathiasfriisandersen@gmail.com">mathiasfriisandersen@gmail.com</a>.</p>
+      <p>Questions about this privacy policy or the Timesheet GPT can be sent to mathiasfriisandersen@gmail.com.</p>
     </main>
   </body>
 </html>`;
