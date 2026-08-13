@@ -12,6 +12,7 @@ const migrations = readdirSync(migrationDirectory)
 assert.ok(migrations.includes("0001_create_timesheets.sql"));
 assert.ok(migrations.includes("0002_secure_multitenant_agreements.sql"));
 assert.ok(migrations.includes("0003_agreement_catalog.sql"));
+assert.ok(migrations.includes("0004_refresh_agreement_source_audit.sql"));
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "hour-craft-migration-"));
 const cleanDatabase = join(temporaryDirectory, "clean.sqlite");
@@ -192,11 +193,10 @@ function assertCatalogAndSchema(database) {
        ORDER BY catalog_status;`,
     ),
     [
-      { status: "manual_review_required", count: 10 },
-      { status: "missing_official_source", count: 8 },
+      { status: "manual_review_required", count: 3 },
       { status: "out_of_scope", count: 3 },
-      { status: "source_conflict", count: 4 },
-      { status: "verified_not_implemented", count: 5 },
+      { status: "source_conflict", count: 2 },
+      { status: "verified_not_implemented", count: 22 },
     ],
   );
   const requiredTriggers = [

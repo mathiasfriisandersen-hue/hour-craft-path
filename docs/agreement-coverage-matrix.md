@@ -1,6 +1,10 @@
 # Overenskomstdækning for voksne timelønnede
 
-Status pr. 26. juli 2026.
+> Historisk status pr. 26. juli 2026. Denne matrix er erstattet som
+> kildegrundlag af [valideringen fra 13. august 2026](AGREEMENT_RATE_VALIDATION_2026-08-13.md)
+> og det maskinlæsbare [kilderegister](../legal-sources/agreement-source-audit.json).
+> Brug ikke de efterfølgende statusoptællinger eller arbejds­titler til nye
+> beregninger.
 
 ## Afgrænsning og sikkerhed
 

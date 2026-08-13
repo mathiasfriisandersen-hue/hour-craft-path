@@ -12,6 +12,7 @@
     "mail:dev": "npx --yes wrangler@latest dev --config mail-worker/wrangler.toml",
     "mail:deploy": "npx --yes wrangler@latest deploy --config mail-worker/wrangler.toml",
     "validate:agreements": "python3 scripts/extract-agreement-rules.py",
+    "verify:agreement-sources": "node scripts/verify-agreement-sources.mjs",
     "test:validation": "node scripts/run-validation-tests.mjs",
     "test:agreement-engine": "node scripts/run-agreement-engine-tests.mjs",
     "test:worker-auth": "node scripts/run-worker-auth-tests.mjs",

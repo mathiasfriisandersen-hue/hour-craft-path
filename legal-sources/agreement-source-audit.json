@@ -1,0 +1,407 @@
+{
+  "schemaVersion": 1,
+  "auditedAt": "2026-08-13",
+  "scope": "De 30 katalogposter i docs/agreement-coverage-matrix.md. Kildevalidering er adskilt fra aktivering af beregningsregler.",
+  "agreements": [
+    {
+      "catalogKey": "bygge-anlaeg-di-3f",
+      "title": "Bygge- og Anlægsoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/bygge--og-anlaegsoverenskomsten-2025-2028.pdf",
+      "sha256": "82dc8294ee76d127bcf979be5fc5afa6e0db531d581e158480be529374359f84",
+      "localFile": "legal-sources/overenskomster/bygge-anlaegsoverenskomsten.pdf",
+      "localSha256": "82dc8294ee76d127bcf979be5fc5afa6e0db531d581e158480be529374359f84",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "bygningsoverenskomsten",
+      "title": "Bygningsoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/bygningsoverenskomsten-2025-2028_002.pdf",
+      "sha256": "c680cae31338113c01a51942288c16eeec581dd54c450b08172c7ed650768c0c",
+      "localFile": "legal-sources/overenskomster/bygningsoverenskomsten.pdf",
+      "localSha256": "c680cae31338113c01a51942288c16eeec581dd54c450b08172c7ed650768c0c",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "murer-murerarbejdsmand",
+      "title": "Overenskomst for murer- og murerarbejdsmandsarbejde 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/murer--og-murerarbejdsmandsarbejde-dio-iii-2025-2028.pdf",
+      "sha256": "0b5e78b1fbbaabffeb76042d1970b502028edf4263fc7667c57742f4b4fe3b07",
+      "localFile": "legal-sources/overenskomster/murer-murerarbejdsmandsarbejde.pdf",
+      "localSha256": "0b5e78b1fbbaabffeb76042d1970b502028edf4263fc7667c57742f4b4fe3b07",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "gulvoverenskomsten",
+      "title": "Gulvoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund Byggegruppen",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/gulvoverenskomsten-2025-2028.pdf",
+      "sha256": "db3e5fe2bf8701f4e967467c1a0ebcccbae922ab053dbf421b24e5aa5850783d"
+    },
+    {
+      "catalogKey": "asfaltoverenskomsten",
+      "title": "Asfaltoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "Asfaltindustriens Arbejdsgiverforening og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/asfaltoverenskomsten-2025-2028.pdf",
+      "sha256": "62a64bcd85ca22115c84c777de2434db8680f8aaddbd4d083d2c598a85d13524"
+    },
+    {
+      "catalogKey": "isoleringsoverenskomsten",
+      "title": "Isoleringsoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/afdelinger/103/filer/ok25/overenskomster-2025-2028/isoleringsoverenskomsten-2025-2028.pdf",
+      "sha256": "0bc3701fb1a88f2f4d4e2f9e151da1a3b543046913572de6445a4e7eb3a63912",
+      "localFile": "legal-sources/overenskomster/isoleringsoverenskomsten.pdf",
+      "localSha256": "0bc3701fb1a88f2f4d4e2f9e151da1a3b543046913572de6445a4e7eb3a63912",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "glasoverenskomsten",
+      "title": "Glasoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "Glarmesterlauget i Danmark og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/glasoverenskomsten-2025-2028.pdf",
+      "sha256": "3eb54d2f7d0558660c3fcbb871bd5ed37741d5dbf004472805365fe275947910"
+    },
+    {
+      "catalogKey": "bygge-anlaeg-dansk-haandvaerk-3f",
+      "title": "Bygge- og Anlægsoverenskomst 2026-2029",
+      "period": "2026-2029",
+      "parties": "Dansk Håndværk og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "manual_review_required_due_source_drift",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/bygge--og-anlaegsoverenskomst-2026-2029.pdf",
+      "sha256": "a9d37e5712aeb42a849ba27c0ecc501656cee598aa5204762d83c5d5e80ea9b4",
+      "localFile": "legal-sources/overenskomster/bygge-anlaegsoverenskomsten-dansk-haandvaerk.pdf",
+      "localSha256": "a3d4c90908fa78916059a2f2c0430e04c42ca36fcc9851d5b6f9e887055b782f",
+      "localMatchesOfficial": false,
+      "note": "Den lokale 2026-2029-kopi afviger byte-for-byte fra den officielle PDF hentet 2026-08-13 og må ikke bruges som ratekilde uden ny sidekontrol."
+    },
+    {
+      "catalogKey": "el-di-def",
+      "title": "El-overenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og Dansk El-Forbund",
+      "sourceStatus": "manual_review_required",
+      "rateStatus": "manual_review_required",
+      "landingPage": "https://www.danskindustri.dk/vi-radgiver-dig/di-dokumenter-for-personale/personalejuras-dokumenter/overenskomster/el-overenskomsten/",
+      "localFile": "legal-sources/overenskomster/el-overenskomsten-di-def.pdf",
+      "localSha256": "760704a5083a7ba17baac4e135d97c8574d549bd63f38e497741c3a87614eb1f",
+      "note": "DI bekræfter identitet og periode, men hoved-PDF'en er loginbeskyttet, så den lokale fil kan ikke byte-verificeres mod en offentlig officiel URL."
+    },
+    {
+      "catalogKey": "elektrikeroverenskomsten-tekniq-def",
+      "title": "Elektrikeroverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "TEKNIQ Arbejdsgiverne og Dansk El-Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.tekniq.dk/media/pwjbybrp/elektrikeroverenskomst-2025-2028.pdf",
+      "sha256": "c7dba83a52bff770e12b2e835ad4032101d1aeb72381f5c9255c4faf0e5f1f3c",
+      "localFile": "legal-sources/overenskomster/elektrikeroverenskomsten.pdf",
+      "localSha256": "c7dba83a52bff770e12b2e835ad4032101d1aeb72381f5c9255c4faf0e5f1f3c",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "metal-blik-roer",
+      "title": "Metal- og Blik- og Røroverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III, Dansk Metal og Blik- og Rørarbejderforbundet i Danmark",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "manual_review_required",
+      "officialUrl": "https://blikroer.dk/sites/default/files/2025-09/Metal%2C-%20Blik-%20og%20R%C3%B8rarbejde%202025-2028.pdf",
+      "sha256": "dadfcb7f6612b193a8123148fa0edf85134ecc1dd3c26c1e2eebcc1c5157308c",
+      "note": "TEKNIQ's Industri- og VVS-overenskomst er en anden aftale og må ikke genbruges."
+    },
+    {
+      "catalogKey": "vvs-tekniq-blikroer-metal",
+      "title": "VVS-overenskomsterne 2025-2028",
+      "period": "2025-2028",
+      "parties": "TEKNIQ Arbejdsgiverne, Blik- og Rørarbejderforbundet og Dansk Metal",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "manual_review_required_due_source_drift",
+      "officialUrl": "https://blikroer.dk/sites/default/files/2025-11/VVS-overenskomst%202025%20-%202028.pdf",
+      "sha256": "a8a35ec4e8890b8799c54c36e7124f6566331b13605c900ac512ba33594c81b2",
+      "localFile": "legal-sources/overenskomster/vvs-overenskomsten.pdf",
+      "localSha256": "ac000e353edd0ed8c3f089269f21d20750a3a6377d4ad876e163a3620c49add8",
+      "localMatchesOfficial": false,
+      "note": "Den lokale PDF er en anden dokumentudgave end den aktuelle officielle hoved-PDF. Konkret medarbejderforbund og dækningsgrundlag skal afgøres ved assignment."
+    },
+    {
+      "catalogKey": "maler-di-malerforbundet",
+      "title": "Maleroverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og Malerforbundet i Danmark",
+      "sourceStatus": "source_conflict",
+      "rateStatus": "manual_review_required",
+      "landingPage": "https://www.danskindustri.dk/vi-radgiver-dig/di-dokumenter-for-personale/personalejuras-dokumenter/overenskomster/maleroverenskomsten/",
+      "localFile": "legal-sources/overenskomster/maleroverenskomsten.pdf",
+      "localSha256": "a720da31e30f3aab0d54fa3c4d3f1305cc8a41c07f7ff9f57c2bfab3f2141e87",
+      "note": "Identiteten er afklaret, men DI's hoved-PDF er loginbeskyttet, og gældende svendeprisliste kan ikke byte-verificeres offentligt."
+    },
+    {
+      "catalogKey": "maler-danske-malermestre",
+      "title": "Overenskomsten mellem Danske Malermestre og Malerforbundet",
+      "period": "ukendt efter 2025",
+      "parties": "Danske Malermestre og Malerforbundet",
+      "sourceStatus": "manual_review_required",
+      "rateStatus": "manual_review_required",
+      "landingPage": "https://maler.dk/fagligtok/ok/",
+      "note": "Malerforbundets officielle e-viewer identificerer den særskilte aftale, men stiller ikke en hente- og hashbar hoved-PDF eller separat aktuel satskilde til rådighed. Kræver manuel validering."
+    },
+    {
+      "catalogKey": "maler-kooperationen",
+      "title": "Kooperationens maleroverenskomst",
+      "period": "ukendt",
+      "parties": "Kooperationen og Malerforbundet",
+      "sourceStatus": "manual_review_required",
+      "rateStatus": "manual_review_required",
+      "landingPage": "https://maler.dk/fagligtok/ok/",
+      "note": "Malerforbundets officielle e-viewer identificerer den særskilte aftale, men stiller ikke en hente- og hashbar hoved-PDF eller separat aktuel satskilde til rådighed. Regler må ikke arves fra DI- eller Danske Malermestre-aftalen."
+    },
+    {
+      "catalogKey": "jord-beton-kbh-frederiksberg-amager",
+      "title": "Jord- og Betonoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og Bygge-, Jord- og Miljøarbejdernes Fagforening",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/afdelinger/103/filer/ok25/overenskomster-2025-2028/jord-og-betonoverenskomsten-mellem-di-og-bjmf-2025-2028.pdf",
+      "sha256": "fcb62abec8a1bc0346e81c127d08de83310e6c21631f8b1db6ed8e53bd737ceb",
+      "localFile": "legal-sources/overenskomster/jord-betonoverenskomsten.pdf",
+      "localSha256": "fcb62abec8a1bc0346e81c127d08de83310e6c21631f8b1db6ed8e53bd737ceb",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "murerarbejdsmand-kbh-frederiksberg",
+      "title": "Murerarbejdsmandsoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og Bygge-, Jord- og Miljøarbejdernes Fagforening",
+      "sourceStatus": "source_conflict",
+      "rateStatus": "manual_review_required",
+      "landingPage": "https://www.danskindustri.dk/vi-radgiver-dig/di-dokumenter-for-personale/personalejuras-dokumenter/overenskomster/murerarbejdsmandsoverenskomsten/",
+      "note": "DI angiver 2025-2028, mens den offentligt tilgængelige konkrete PDF er en ældre landsaftale fra 2023. Der er derfor en kildekonflikt; ingen sats må bruges."
+    },
+    {
+      "catalogKey": "gulv-bjmf-protokol",
+      "title": "Geografisk BJMF-protokol til Gulvoverenskomsten",
+      "period": "ukendt",
+      "parties": "Kræver manuel validering",
+      "sourceStatus": "out_of_scope",
+      "rateStatus": "companion_not_assignable",
+      "note": "Ledsagekilde, ikke et selvstændigt overenskomstvalg. Ingen særskilt offentlig PDF er byte-verificeret."
+    },
+    {
+      "catalogKey": "industriens-overenskomst",
+      "title": "Industriens Overenskomst 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I og CO-industri",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.co-industri.dk/sites/default/files/2025-08/Industriens-Overenskomst-2025-2028-2025_07_31.pdf",
+      "sha256": "eb9971928f9bfe3ad12ea3aca15cae806e583d160032d8cbef34b605d26780e0",
+      "localFile": "legal-sources/overenskomster/industriens-overenskomst.pdf",
+      "localSha256": "eb9971928f9bfe3ad12ea3aca15cae806e583d160032d8cbef34b605d26780e0",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "industriens-organisationsaftaler",
+      "title": "Industriens Organisationsaftaler 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I og CO-industri",
+      "sourceStatus": "out_of_scope",
+      "rateStatus": "companion_not_assignable",
+      "officialUrl": "https://www.co-industri.dk/sites/default/files/2025-04/Industriens_Organisationsaftaler_2025-2028_0.pdf",
+      "sha256": "142cce03ddf84834625301139d6eebcd546e69b21d310d3dc51611069707d2e0",
+      "note": "Verificeret ledsagekilde til Industriens Overenskomst; må ikke tildeles som selvstændig overenskomst."
+    },
+    {
+      "catalogKey": "industrioverenskomsten-di-byggeri",
+      "title": "Industrioverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund Byggegruppen",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/byggegruppen/overenskomster/industrioverenskomsten-dio-iii-2025-2028.pdf",
+      "sha256": "ec1c43d24ee5a4bb7dd6049e159b661218dd35b4f9e3fa777f3854640ab686e3",
+      "localFile": "legal-sources/overenskomster/industrioverenskomsten-byggeri.pdf",
+      "localSha256": "ec1c43d24ee5a4bb7dd6049e159b661218dd35b4f9e3fa777f3854640ab686e3",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "trae-moebeloverenskomsten",
+      "title": "Træ- og Møbeloverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I for Træ- og Møbelindustrien og 3F Fagligt Fælles Forbund",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/industrigruppen/overenskomster/trae--og-moebeloverenskomsten-2025-2028.pdf",
+      "sha256": "f13e4977639450fc41c2733d678f8df34c59482db40e7982ab66dcf3e62c21b3",
+      "localFile": "legal-sources/overenskomster/trae-moebeloverenskomsten.pdf",
+      "localSha256": "f13e4977639450fc41c2733d678f8df34c59482db40e7982ab66dcf3e62c21b3",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "industri-trae-moebeloverenskomsten",
+      "title": "Industri-, Træ- og Møbeloverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst III og 3F Fagligt Fælles Forbund Industrigruppen",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/industrigruppen/overenskomster/industri--trae--og-moebeloverenskomsten-2025-2028.pdf",
+      "sha256": "87909abbfb8eb239582b4c41ac9536c63eaecb6dcd81dcdceaad828261f5e029",
+      "localFile": "legal-sources/overenskomster/industri-trae-moebeloverenskomsten.pdf",
+      "localSha256": "87909abbfb8eb239582b4c41ac9536c63eaecb6dcd81dcdceaad828261f5e029",
+      "localMatchesOfficial": true
+    },
+    {
+      "catalogKey": "emballageindustriens-overenskomst",
+      "title": "Emballageoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I for Emballageindustrien og Plastindustrien i Danmark, 3F Industri (Emballage) og HK Privat",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://www.3f.dk/-/media/files/artikler/overenskomst/industrigruppen/overenskomster/emballageoverenskomst-2025-2028.pdf",
+      "sha256": "6f5a3ea25ca89c5437c04b9450fea576b6193b33e0f5487a9da7d7c266e18b74"
+    },
+    {
+      "catalogKey": "foedevareindustrielle-overenskomst",
+      "title": "Den Fødevareindustrielle Overenskomst 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst I og Fødevareforbundet NNF",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://nnf.dk/media/gtqm1wfh/dfo-2025-2028-07-2025-trykt-udgave.pdf",
+      "sha256": "b95233acdf4c9c6a0f96d06d256e3c6b3610dfb7d8bf9715650005f51294f804",
+      "rateSources": [
+        {
+          "title": "Lønblad for Forædling 2026",
+          "officialUrl": "https://nnf.dk/media/dqsf4xpm/foraedling-2026.pdf",
+          "sha256": "7e80499df36a7abf937b2d3f019bdd88022937431759038386e1c94575792964"
+        },
+        {
+          "title": "Lønblad for Fødevareindustrien 2026",
+          "officialUrl": "https://nnf.dk/media/tqjj41j5/fodevareindustrien-2026.pdf",
+          "sha256": "41812fba4ec2a4fa9003846ffe94ec8a1c1b5f2f74aeff49fd67e98de1c7f1e6"
+        }
+      ]
+    },
+    {
+      "catalogKey": "slagteoverenskomsten",
+      "title": "Slagteoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "Fødevareforbundet NNF og DI Overenskomst I",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://nnf.dk/media/5sodwo3y/slagter-ok-2025-2028-2025-trykt-udgave.pdf",
+      "sha256": "93295bd57295d1d8ee6791ca37d1f76dea9c00fe016507b880f76e55ecdc48eb",
+      "rateSources": [
+        {
+          "title": "Lønblad Slagter 2026",
+          "officialUrl": "https://nnf.dk/media/a2wdedbd/slagter-2026.pdf",
+          "sha256": "abb9a33838a94a531bd837b8eaf0381a384ff08808d18eb162138ff0a66fd22d"
+        },
+        {
+          "title": "Lønblad Kødfoder og destruktion 2026",
+          "officialUrl": "https://nnf.dk/media/1hfp0wcz/kodfoder-og-destruktion-2026.pdf",
+          "sha256": "55cb4974a37087943adb22dcb492922efb882ca1be2d150b5edf299fc103fa10"
+        },
+        {
+          "title": "Lønblad særregler ved slagtning af kreatur 2026",
+          "officialUrl": "https://nnf.dk/media/dhubgkm0/saerregler-vedr-slagtning-kreatur-2026.pdf",
+          "sha256": "19d081cd3a54e861e7c3ad7da3acbe4708b80cb13daf5054a4513d6645a2574d"
+        }
+      ]
+    },
+    {
+      "catalogKey": "mejeribranchens-faellesoverenskomst",
+      "title": "Mejeribranchens Fællesoverenskomst 2025-2028",
+      "period": "2025-2028",
+      "parties": "Mejeribrugets Arbejdsgiverforening og overenskomstens arbejdstagerorganisationer, herunder Fødevareforbundet NNF",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://nnf.dk/media/eaejga20/mejeribranchens-faellesoverenskomst-2025-2028-v2.pdf",
+      "sha256": "b2b674d980665c2e60a7db36500b596da2c54031bfeef67e6c34bbefbd778ec0",
+      "rateSources": [
+        {
+          "title": "Lønsatser chauffører og mejeripersonale 1. marts 2026",
+          "officialUrl": "https://nnf.dk/media/nvnnpoiq/mejeri-chaufforer-og-mejeripersonale-marts-2026.pdf",
+          "sha256": "0a6f773559dd7885620d75bb29a199628e18dcbde26847ab29469ad85d7c4958"
+        },
+        {
+          "title": "Lønsatser lager- og transportelever 1. marts 2026",
+          "officialUrl": "https://nnf.dk/media/q2bjl104/mejeri-lager-og-transportelever-marts-2026.pdf",
+          "sha256": "37b8ec4556bf8a1e135c80b6622493a9846ae29c571d43204c23ee776dcae072"
+        },
+        {
+          "title": "Lønsatser mejeri-, industri- og procesoperatørelever 1. marts 2026",
+          "officialUrl": "https://nnf.dk/media/d2vjpmtz/mejeri-elever-samt-industri-og-procesoperatorelevermarts-2026.pdf",
+          "sha256": "8bc926b9aa80882720f073797a09fdd90e24ff47956919be8816285191358ad7"
+        }
+      ]
+    },
+    {
+      "catalogKey": "industri-vvs-overenskomsten",
+      "title": "Industri- og VVS-overenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "TEKNIQ Arbejdsgiverne, Dansk Metal, 3F Industri og Blik- og Rørarbejderforbundet",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "manual_review_required_due_source_drift",
+      "officialUrl": "https://blikroer.dk/sites/default/files/2026-06/Industri-%20og%20VVS-overenskomsten%202025-2028.pdf",
+      "sha256": "bcc962e06ef9b0e4654a00eab39e56bff08ecda7e4dbb19144f1b87d623b4004",
+      "localFile": "legal-sources/overenskomster/industri-vvs-overenskomsten.pdf",
+      "localSha256": "8b5e16de5700a90bfcfc273a701bb81feeea744109e5723e0f6c905abf9db6b3",
+      "localMatchesOfficial": false,
+      "note": "Den lokale 206-siders PDF afviger fra den aktuelle officielle 218-siders udgave og må ikke anvendes som satskilde."
+    },
+    {
+      "catalogKey": "dsm-industriomraadet",
+      "title": "DSM Industrioverenskomst 2025-2028",
+      "period": "2025-2028",
+      "parties": "Danske Slagtermestre og Fødevareforbundet NNF",
+      "sourceStatus": "verified_not_implemented",
+      "rateStatus": "published_rates_source_verified_not_implemented",
+      "officialUrl": "https://nnf.dk/media/pvuhqxuv/dsm-industri-overenskomst-2025-2028-v2.pdf",
+      "sha256": "e52134069722feb41c8ae6f99bc995cb6f3909d3a108590246d14c27bed2240e",
+      "rateSources": [
+        {
+          "title": "Lønoversigt DSM Industri 2026",
+          "officialUrl": "https://nnf.dk/media/zrua1l5i/dsm-industri-2026.pdf",
+          "sha256": "2149286a84296163555c3ecb0251d9cd7d322ab8ba9649e80dceda79447d4990"
+        }
+      ]
+    },
+    {
+      "catalogKey": "faglaerteoverenskomsten-betinget",
+      "title": "Faglærteoverenskomsten 2025-2028",
+      "period": "2025-2028",
+      "parties": "DI Overenskomst II, Dansk Metal og Dansk El-Forbund; tiltrådt af 3F Industri (TIB) og Malerforbundet",
+      "sourceStatus": "out_of_scope",
+      "rateStatus": "conditional_out_of_scope",
+      "landingPage": "https://www.danskindustri.dk/vi-radgiver-dig/di-dokumenter-for-personale/personalejuras-dokumenter/overenskomster/faglarteoverenskomsten/",
+      "note": "Må kun aktiveres, hvis en konkret eksisterende virksomhed dokumenterer, at den er omfattet."
+    }
+  ]
+}
