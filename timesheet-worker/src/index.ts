@@ -20,6 +20,7 @@ type Env = {
   AUTH_AUDIENCE?: string;
   SUPABASE_JWKS_URL?: string;
   DEMO_SESSION_SECRET?: string;
+  DEMO_ACCESS_CODE?: string;
 } & AuthEnvironment;
 
 type D1Database = {
@@ -233,7 +234,10 @@ export default {
 
     try {
       if (request.method === "POST" && url.pathname === "/api/demo/session") {
-        const payload = (await readJson(request)) as { role?: MembershipRole };
+        const payload = (await readJson(request)) as {
+          role?: MembershipRole;
+          accessCode?: unknown;
+        };
         const role = payload?.role;
         if (
           role !== "vikar" &&
@@ -243,6 +247,7 @@ export default {
         ) {
           return errorResponse("invalid_demo_role", "Demo-rollen er ugyldig.", 400, cors);
         }
+        await requireDemoAccessCode(env.DEMO_ACCESS_CODE ?? "", payload?.accessCode);
         const issued = await issueDemoSession(env.DEMO_SESSION_SECRET ?? "", role);
         return jsonResponse(
           {
@@ -1879,6 +1884,34 @@ function allowedOrigins(env: Env): string[] {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+}
+
+async function requireDemoAccessCode(expected: string, received: unknown): Promise<void> {
+  if (!expected) {
+    throw new AuthenticationError(
+      "demo_access_code_not_configured",
+      "Demoens adgangskode er ikke konfigureret.",
+      503,
+    );
+  }
+  if (typeof received !== "string" || received.length > 128) {
+    throw new AuthenticationError("invalid_demo_access_code", "Koden er forkert.", 401);
+  }
+
+  const encoder = new TextEncoder();
+  const [expectedHash, receivedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+    crypto.subtle.digest("SHA-256", encoder.encode(received)),
+  ]);
+  const expectedBytes = new Uint8Array(expectedHash);
+  const receivedBytes = new Uint8Array(receivedHash);
+  let difference = 0;
+  for (let index = 0; index < expectedBytes.length; index += 1) {
+    difference |= expectedBytes[index] ^ receivedBytes[index];
+  }
+  if (difference !== 0) {
+    throw new AuthenticationError("invalid_demo_access_code", "Koden er forkert.", 401);
+  }
 }
 
 function corsHeaders(request: Request, env: Env): HeadersInit {

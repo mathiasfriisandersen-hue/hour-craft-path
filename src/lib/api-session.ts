@@ -193,6 +193,7 @@ export function verifiedSnapshotAmountDkk(
 
 export async function createVerifiedDemoSession(
   role: Exclude<ApiMembershipRole, "platformsadministrator">,
+  accessCode: string,
 ): Promise<ApiSession> {
   const apiUrl = await getApiUrl();
   const response = await safeFetch(`${apiUrl}/api/demo/session`, {
@@ -203,7 +204,7 @@ export async function createVerifiedDemoSession(
       accept: "application/json",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ role }),
+    body: JSON.stringify({ role, accessCode }),
   });
   const payload = await readEnvelope(response);
 
@@ -415,6 +416,9 @@ function responseError(status: number, payload: SessionEnvelope): SessionApiErro
 
   if (code === "auth_not_configured" || code === "demo_not_configured" || status === 503) {
     return new SessionApiError(code, "Login-tjenesten er ikke konfigureret.");
+  }
+  if (code === "invalid_demo_access_code") {
+    return new SessionApiError(code, "Koden er forkert.");
   }
   if (status === 401 || status === 403) {
     return new SessionApiError(code, "Sessionen kunne ikke verificeres.");

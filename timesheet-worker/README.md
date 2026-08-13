@@ -17,9 +17,10 @@ projekt-ID'er eller URL'er:
 - `SUPABASE_JWKS_URL`
 - `ALLOWED_ORIGIN`
 
-Demo kræver desuden `DEMO_SESSION_SECRET` som Worker secret. En demosession er højst gyldig i én
-time, er bundet til demoorganisationen og giver kun syntetiske/tomme svar. Demo kan ikke skrive
-timesedler, sende mail eller læse produktionsdata.
+Demo kræver desuden både `DEMO_SESSION_SECRET` og `DEMO_ACCESS_CODE` som Worker secrets.
+Adgangskoden kontrolleres kun i Workeren og må ikke ligge i browserkoden. En demosession er højst
+gyldig i én time, er bundet til demoorganisationen og giver kun syntetiske/tomme svar. Demo kan
+ikke skrive timesedler, sende mail eller læse produktionsdata.
 
 ## D1 og migrationer
 
@@ -85,7 +86,7 @@ curl -sS http://127.0.0.1:8787/api/session \
 ```
 
 Der findes ikke længere et globalt `TIMESHEET_API_TOKEN`, en browserautoriserende
-`/app-state`-rute eller en lokal adgangskode som alternativ til en serversession.
+`/app-state`-rute eller en lokalt valideret adgangskode som alternativ til en serversession.
 
 ## Deploy
 

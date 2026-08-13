@@ -121,6 +121,18 @@ const tests = [
     },
   },
   {
+    id: "rolling-demo-dates-follow-current-week",
+    run() {
+      const dates = store.rollingDemoDates("2026-08-13");
+      assertEqual(dates.currentWeekStart, "2026-08-10", "rolling demo current week");
+      assertEqual(dates.invoiceSentDate, "2026-08-03", "rolling demo invoice history");
+      assertEqual(dates.payrollSentDate, "2026-08-04", "rolling demo payroll history");
+      assertEqual(dates.invoiceSoonEnd, "2026-08-21", "rolling demo active invoice end");
+      assertEqual(dates.invoiceWaitingStart, "2026-08-17", "rolling demo future start");
+      assertEqual(dates.activeProjectEndDate, "2026-09-07", "rolling demo active project end");
+    },
+  },
+  {
     id: "weekday-no-allowance",
     run() {
       const result = store.calculateTimesheet(

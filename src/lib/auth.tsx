@@ -32,6 +32,7 @@ let inMemoryUiRolePreference: Role | null = null;
 type LoginOptions = {
   workerIdentity?: { name: string; email: string };
   demo?: boolean;
+  accessCode?: string;
 };
 
 type AuthCtx = {
@@ -92,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         const expectedApiRole = apiRoleForUiRole(requestedRole);
         const session = options.demo
-          ? await createVerifiedDemoSession(expectedApiRole)
+          ? await createVerifiedDemoSession(expectedApiRole, options.accessCode ?? "")
           : await getVerifiedSession();
         if (session.role !== expectedApiRole || (options.demo && !session.demo)) {
           throw new SessionApiError("role_mismatch", "Sessionen har ikke den valgte rolle.");

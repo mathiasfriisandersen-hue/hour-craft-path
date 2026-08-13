@@ -16,6 +16,7 @@ const mailWorker = await server.ssrLoadModule("/mail-worker/src/index.ts");
 
 const allowedOrigin = "https://app.example.test";
 const demoSecret = "test-only-demo-secret-that-is-longer-than-32-bytes";
+const demoAccessCode = "0000";
 const now = Math.floor(Date.now() / 1000);
 const issuer = "https://security-auth.example.test";
 const audience = "authenticated";
@@ -266,6 +267,58 @@ const tests = [
       );
       assert.equal(response.status, 204);
       assert.equal(response.headers.get("access-control-allow-origin"), null);
+    },
+  },
+  {
+    id: "demo-session-requires-server-access-code",
+    async run() {
+      const missingCode = await timesheetWorker.default.fetch(
+        request("/api/demo/session", {
+          method: "POST",
+          body: JSON.stringify({ role: "vikar" }),
+        }),
+        {
+          TIMESHEET_DB: unusedDatabase,
+          ALLOWED_ORIGIN: allowedOrigin,
+          DEMO_SESSION_SECRET: demoSecret,
+          DEMO_ACCESS_CODE: demoAccessCode,
+        },
+      );
+      assert.equal(missingCode.status, 401);
+      assert.equal((await body(missingCode)).error.code, "invalid_demo_access_code");
+
+      const wrongCode = await timesheetWorker.default.fetch(
+        request("/api/demo/session", {
+          method: "POST",
+          body: JSON.stringify({ role: "vikar", accessCode: "1234" }),
+        }),
+        {
+          TIMESHEET_DB: unusedDatabase,
+          ALLOWED_ORIGIN: allowedOrigin,
+          DEMO_SESSION_SECRET: demoSecret,
+          DEMO_ACCESS_CODE: demoAccessCode,
+        },
+      );
+      assert.equal(wrongCode.status, 401);
+      assert.equal((await body(wrongCode)).error.code, "invalid_demo_access_code");
+
+      const correctCode = await timesheetWorker.default.fetch(
+        request("/api/demo/session", {
+          method: "POST",
+          body: JSON.stringify({ role: "vikar", accessCode: demoAccessCode }),
+        }),
+        {
+          TIMESHEET_DB: unusedDatabase,
+          ALLOWED_ORIGIN: allowedOrigin,
+          DEMO_SESSION_SECRET: demoSecret,
+          DEMO_ACCESS_CODE: demoAccessCode,
+        },
+      );
+      assert.equal(correctCode.status, 200);
+      const correctBody = await body(correctCode);
+      assert.equal(correctBody.session.role, "vikar");
+      assert.equal(correctBody.session.demo, true);
+      assert.equal(typeof correctBody.token, "string");
     },
   },
   {

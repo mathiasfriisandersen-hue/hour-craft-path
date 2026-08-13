@@ -32,6 +32,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          VITE_ENABLE_TEST_DATA_SEED: "true"
 
       - name: Add GitHub Pages SPA fallback
         run: |

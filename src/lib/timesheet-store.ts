@@ -3794,18 +3794,44 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
 }
 
 const TEST_DATA_PREFIX = "testdata-2026-07-06-v6";
-const TEST_DATA_SEED_VERSION = "testdata-2026-07-06-v6-invoice-period-v2";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
-const TEST_DATA_BASE_DATE = "2026-07-06";
-const TEST_DATA_ACTIVE_PROJECT_END_DATE = "2026-08-03";
-const TEST_DATA_PAST_PROJECT_START = "2026-06-16";
-const TEST_DATA_PAST_PROJECT_END = "2026-06-22";
-const TEST_DATA_PAST_WEEK_START = "2026-06-15";
-const TEST_DATA_ACTIVE_WEEK_START = "2026-07-06";
-const TEST_DATA_INVOICE_SOON_START = "2026-07-13";
-const TEST_DATA_INVOICE_SOON_END = "2026-07-24";
-const TEST_DATA_INVOICE_WAITING_START = "2026-07-20";
-const TEST_DATA_INVOICE_WAITING_END = "2026-07-31";
+export function rollingDemoDates(referenceDate: Date | string = new Date()) {
+  const parsedReferenceDate =
+    typeof referenceDate === "string"
+      ? new Date(`${referenceDate.slice(0, 10)}T12:00:00`)
+      : referenceDate;
+  const currentWeekStart = getMondayISO(parsedReferenceDate);
+  return {
+    currentWeekStart,
+    activeProjectEndDate: addDaysToISODate(currentWeekStart, 28),
+    pastProjectStart: addDaysToISODate(currentWeekStart, -28),
+    pastProjectEnd: addDaysToISODate(currentWeekStart, -15),
+    pastWeekStart: addDaysToISODate(currentWeekStart, -21),
+    invoiceSoonStart: currentWeekStart,
+    invoiceSoonEnd: addDaysToISODate(currentWeekStart, 11),
+    invoiceWaitingStart: addDaysToISODate(currentWeekStart, 7),
+    invoiceWaitingEnd: addDaysToISODate(currentWeekStart, 18),
+    invoiceSentDate: addDaysToISODate(currentWeekStart, -7),
+    payrollSentDate: addDaysToISODate(currentWeekStart, -6),
+  };
+}
+
+const TEST_DATA_DATES = rollingDemoDates();
+const TEST_DATA_CURRENT_WEEK_START = TEST_DATA_DATES.currentWeekStart;
+const TEST_DATA_SEED_VERSION = `${TEST_DATA_PREFIX}-rolling-${TEST_DATA_CURRENT_WEEK_START}`;
+const TEST_DATA_BASE_DATE = TEST_DATA_CURRENT_WEEK_START;
+const TEST_DATA_ACTIVE_PROJECT_END_DATE = TEST_DATA_DATES.activeProjectEndDate;
+const TEST_DATA_PAST_PROJECT_START = TEST_DATA_DATES.pastProjectStart;
+const TEST_DATA_PAST_PROJECT_END = TEST_DATA_DATES.pastProjectEnd;
+const TEST_DATA_PAST_WEEK_START = TEST_DATA_DATES.pastWeekStart;
+const TEST_DATA_ACTIVE_WEEK_START = TEST_DATA_CURRENT_WEEK_START;
+const TEST_DATA_INVOICE_SOON_START = TEST_DATA_DATES.invoiceSoonStart;
+const TEST_DATA_INVOICE_SOON_END = TEST_DATA_DATES.invoiceSoonEnd;
+const TEST_DATA_INVOICE_WAITING_START = TEST_DATA_DATES.invoiceWaitingStart;
+const TEST_DATA_INVOICE_WAITING_END = TEST_DATA_DATES.invoiceWaitingEnd;
+const TEST_DATA_INVOICE_SENT_DATE = TEST_DATA_DATES.invoiceSentDate;
+const TEST_DATA_PAYROLL_SENT_DATE = TEST_DATA_DATES.payrollSentDate;
+const LEGACY_DEMO_TIMESHEET_ID = /^timesheet-\d{3}$/u;
 
 type TestCompanyInput = {
   name: string;
@@ -4086,11 +4112,11 @@ function testTimesheetStatus(projectIndex: number): Status {
 }
 
 function testInvoiceSentDate(projectIndex: number): string {
-  return projectIndex >= 19 && projectIndex < 28 ? "2026-07-01" : "";
+  return projectIndex >= 19 && projectIndex < 28 ? TEST_DATA_INVOICE_SENT_DATE : "";
 }
 
 function testPayrollSentDate(projectIndex: number): string {
-  return projectIndex >= 17 && projectIndex < 20 ? "2026-07-02" : "";
+  return projectIndex >= 17 && projectIndex < 20 ? TEST_DATA_PAYROLL_SENT_DATE : "";
 }
 
 function testCancelledShiftDayIndex(
@@ -4274,7 +4300,7 @@ function buildOwnerTestSeed(
       status: testTimesheetStatus(project.projectIndex),
       invoiceSentDate: testInvoiceSentDate(project.projectIndex),
       payrollSentDate: testPayrollSentDate(project.projectIndex),
-      createdAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
+      createdAt: `${testTimesheetWeekStart(project.projectIndex)}T08:00:00.000Z`,
       updatedAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
     });
   });
@@ -4283,12 +4309,22 @@ function buildOwnerTestSeed(
 }
 
 function buildTestDataSeed(): { companies: Company[]; timesheets: Timesheet[] } {
+  const demoWeekStart = addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, -7);
+  const demoWorkers = demoWorkersSeed();
   const bruger1 = buildOwnerTestSeed("bruger", [3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], 28, 0);
   const bruger2 = buildOwnerTestSeed("bruger2", [3, 3, 3, 2, 2, 2, 2, 2, 2, 2], 22, 28);
 
   return {
-    companies: [...bruger1.companies, ...bruger2.companies],
-    timesheets: [...bruger1.timesheets, ...bruger2.timesheets],
+    companies: [
+      ...demoCompaniesForSeed(demoWeekStart, demoWorkers),
+      ...bruger1.companies,
+      ...bruger2.companies,
+    ],
+    timesheets: [
+      ...demoWorkers.map((worker) => createDemoTimesheet(worker, demoWeekStart)),
+      ...bruger1.timesheets,
+      ...bruger2.timesheets,
+    ],
   };
 }
 
@@ -4316,6 +4352,49 @@ function testProjectMatchesSeed(
       (reference, index) => reference === testProject.workerEmails[index],
     ),
   );
+}
+
+function legacyDemoWeekStart(timesheet: Timesheet): string {
+  return timesheet.status === "sent" || timesheet.status === "approved"
+    ? addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, -7)
+    : TEST_DATA_CURRENT_WEEK_START;
+}
+
+function refreshLegacyDemoTimesheetDates(timesheet: Timesheet): Timesheet {
+  if (!LEGACY_DEMO_TIMESHEET_ID.test(timesheet.id)) return timesheet;
+  const weekStart = legacyDemoWeekStart(timesheet);
+  return normalizeTimesheet({
+    ...timesheet,
+    weekStart,
+    projectEndDate: addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, 28),
+    invoiceDueDate: timesheet.invoiceDueDate
+      ? addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, 8)
+      : "",
+    payrollDeadline: timesheet.payrollDeadline
+      ? addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, 2)
+      : "",
+    invoiceSentDate: timesheet.invoiceSentDate ? TEST_DATA_INVOICE_SENT_DATE : "",
+    payrollSentDate: timesheet.payrollSentDate ? TEST_DATA_PAYROLL_SENT_DATE : "",
+    invoiceArchivedAt: timesheet.invoiceArchivedAt
+      ? `${TEST_DATA_INVOICE_SENT_DATE}T08:00:00.000Z`
+      : "",
+    createdAt: `${weekStart}T08:00:00.000Z`,
+    updatedAt: `${TEST_DATA_BASE_DATE}T08:00:00.000Z`,
+  });
+}
+
+function hasCurrentLegacyDemoDates(timesheets: Timesheet[]): boolean {
+  return timesheets
+    .filter((timesheet) => LEGACY_DEMO_TIMESHEET_ID.test(timesheet.id))
+    .every((timesheet) => {
+      const expectedWeekStart = legacyDemoWeekStart(timesheet);
+      return (
+        timesheet.weekStart === expectedWeekStart &&
+        timesheet.projectEndDate === addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, 28) &&
+        (!timesheet.invoiceSentDate || timesheet.invoiceSentDate === TEST_DATA_INVOICE_SENT_DATE) &&
+        (!timesheet.payrollSentDate || timesheet.payrollSentDate === TEST_DATA_PAYROLL_SENT_DATE)
+      );
+    });
 }
 
 function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): boolean {
@@ -4354,7 +4433,8 @@ function hasCurrentTestData(companies: Company[], timesheets: Timesheet[]): bool
     ) &&
     requiredTestTimesheets.every((timesheet) =>
       testTimesheetMatchesSeed(timesheetsById.get(timesheet.id), timesheet),
-    )
+    ) &&
+    hasCurrentLegacyDemoDates(timesheets)
   );
 }
 
@@ -4378,15 +4458,34 @@ function mergeTestDataSeed(
   const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
   const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
   const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
+  const refreshedExistingTimesheets = existingTimesheets.map(refreshLegacyDemoTimesheetDates);
+  const legacyProjectDates = new Map(
+    refreshedExistingTimesheets
+      .filter((timesheet) => LEGACY_DEMO_TIMESHEET_ID.test(timesheet.id) && timesheet.projectId)
+      .map((timesheet) => [
+        timesheet.projectId,
+        {
+          startDate: timesheet.weekStart,
+          endDate: timesheet.projectEndDate ?? TEST_DATA_DATES.activeProjectEndDate,
+        },
+      ]),
+  );
+  const refreshedExistingCompanies = existingCompanies.map((company) => ({
+    ...company,
+    projects: company.projects.map((project) => {
+      const dates = legacyProjectDates.get(project.id);
+      return dates ? { ...project, ...dates } : project;
+    }),
+  }));
 
   const companiesById = new Map(
-    existingCompanies
+    refreshedExistingCompanies
       .filter((company) => !deletedCompanyIds.has(company.id))
       .map((company) => [company.id, company]),
   );
 
   const timesheetsById = new Map(
-    existingTimesheets
+    refreshedExistingTimesheets
       .filter((timesheet) => !deletedTimesheetIds.has(timesheet.id))
       .map((timesheet) => [timesheet.id, timesheet]),
   );

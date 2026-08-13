@@ -11,6 +11,7 @@ export function LoginScreen() {
   const { login, role: authenticatedRole, authenticating, error } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("vikar");
+  const [accessCode, setAccessCode] = useState("");
 
   useEffect(() => {
     if (authenticatedRole) {
@@ -20,7 +21,7 @@ export function LoginScreen() {
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    login(role, { demo: true });
+    login(role, { demo: true, accessCode });
   };
 
   return (
@@ -64,6 +65,24 @@ export function LoginScreen() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="demo-access-code" className="text-sm font-medium">
+              Kode
+            </label>
+            <input
+              id="demo-access-code"
+              type="password"
+              inputMode="numeric"
+              autoComplete="current-password"
+              maxLength={4}
+              pattern="[0-9]{4}"
+              value={accessCode}
+              onChange={(event) => setAccessCode(event.target.value)}
+              className="mt-2 w-full rounded-md border bg-background px-3 py-2 text-sm"
+              required
+            />
           </div>
 
           {error && (
