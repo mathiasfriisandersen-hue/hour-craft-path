@@ -49,6 +49,7 @@ type StatusFilter =
   | "invoice-soon"
   | "invoice-now"
   | "invoice-waiting"
+  | "invoice-sent"
   | "payroll-ready"
   | "payroll-waiting"
   | "payroll-sent"
@@ -139,6 +140,7 @@ const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "invoice-soon", label: "Skal snart håndteres" },
   { value: "invoice-now", label: "Skal håndteres nu" },
   { value: "invoice-waiting", label: "Kræver ikke handling endnu" },
+  { value: "invoice-sent", label: "Faktura sendt" },
   { value: "payroll-ready", label: "Klar til bogholderi" },
   { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
   { value: "payroll-sent", label: "Sendt til bogholderi" },
@@ -225,29 +227,20 @@ function InvoicePayrollPage() {
   const allInvoiceSentRows = filteredRows
     .filter(
       (row) =>
-        row.approvedHours > 0 &&
-        row.timesheet.invoiceSentDate &&
-        !row.timesheet.invoiceArchivedAt,
+        row.approvedHours > 0 && row.timesheet.invoiceSentDate && !row.timesheet.invoiceArchivedAt,
     )
     .sort((a, b) =>
       (b.timesheet.invoiceSentDate ?? "").localeCompare(a.timesheet.invoiceSentDate ?? ""),
     );
-  const invoiceSentRows =
-    statusFilter === "invoice-sent" ? allInvoiceSentRows : [];
+  const invoiceSentRows = statusFilter === "invoice-sent" ? allInvoiceSentRows : [];
   const invoiceNowRows = invoiceRows.filter(
-    (row) =>
-      statusFilterMatches(statusFilter, "invoice-now") &&
-      row.invoiceTone === "red",
+    (row) => statusFilterMatches(statusFilter, "invoice-now") && row.invoiceTone === "red",
   );
   const invoiceSoonRows = invoiceRows.filter(
-    (row) =>
-      statusFilterMatches(statusFilter, "invoice-soon") &&
-      row.invoiceTone === "orange",
+    (row) => statusFilterMatches(statusFilter, "invoice-soon") && row.invoiceTone === "orange",
   );
   const invoiceWaitingRows = invoiceRows.filter(
-    (row) =>
-      statusFilterMatches(statusFilter, "invoice-waiting") &&
-      row.invoiceTone === "green",
+    (row) => statusFilterMatches(statusFilter, "invoice-waiting") && row.invoiceTone === "green",
   );
   const payrollSentRows = payrollRows.filter(
     (row) =>
@@ -411,7 +404,20 @@ function InvoicePayrollPage() {
 
         {view === "invoice" ? (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <SectionHeader title="Fakturaoverblik" count={visibleInvoiceCount} />
+            <SectionHeader
+              title="Fakturaoverblik"
+              count={visibleInvoiceCount}
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
+                  onClick={() => setStatusFilter("invoice-sent")}
+                >
+                  Faktura sendt
+                </Button>
+              }
+            />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "invoice-now") && (
                 <StatusColumn
@@ -455,6 +461,22 @@ function InvoicePayrollPage() {
                   {invoiceWaitingRows.map((row) => (
                     <InvoiceCaseCard
                       key={`invoice-waiting-${row.timesheet.id}`}
+                      row={row}
+                      onPreview={() => setPreview(row)}
+                    />
+                  ))}
+                </StatusColumn>
+              )}
+              {statusFilter === "invoice-sent" && (
+                <StatusColumn
+                  title="Faktura sendt"
+                  count={invoiceSentRows.length}
+                  tone="green"
+                  empty="Ingen fakturaer er markeret sendt."
+                >
+                  {invoiceSentRows.map((row) => (
+                    <InvoiceCaseCard
+                      key={`invoice-sent-${row.timesheet.id}`}
                       row={row}
                       onPreview={() => setPreview(row)}
                     />

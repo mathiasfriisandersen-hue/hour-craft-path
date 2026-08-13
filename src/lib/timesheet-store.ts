@@ -648,10 +648,7 @@ function findTimesheetCompany(timesheet: Timesheet, companies: Company[]): Compa
   return companies.find((company) => invoiceReferenceKey(company.name) === companyName);
 }
 
-function findTimesheetProject(
-  timesheet: Timesheet,
-  company: Company,
-): CompanyProject | undefined {
+function findTimesheetProject(timesheet: Timesheet, company: Company): CompanyProject | undefined {
   if (timesheet.projectId) {
     return company.projects.find((project) => project.id === timesheet.projectId);
   }
@@ -1686,9 +1683,7 @@ function mergeCompanies(local: Company[], remote: Company[], preferLocal: boolea
     local.filter((company) => !deletedIds.has(company.id)).map((company) => [company.id, company]),
   );
   const remoteById = new Map(
-    remote
-      .filter((company) => !deletedIds.has(company.id))
-      .map((company) => [company.id, company]),
+    remote.filter((company) => !deletedIds.has(company.id)).map((company) => [company.id, company]),
   );
   const ids = new Set([...localById.keys(), ...remoteById.keys()]);
 
