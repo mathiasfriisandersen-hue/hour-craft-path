@@ -103,8 +103,6 @@ export function CreateWorkerPage() {
       workerLanguage: form.workerLanguage,
       tradeSkills: form.tradeSkills,
       competencies: form.competencies.trim(),
-      workerMustChangeAccessCode: false,
-      contactPersonMustChangeAccessCode: false,
       createdAt: now,
       updatedAt: now,
     });

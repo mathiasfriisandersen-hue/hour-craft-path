@@ -10,7 +10,3 @@ binding = "TIMESHEET_DB"
 database_name = "mathias_andersen"
 database_id = "2aa37479-6b01-4749-9ed1-38a5650c075f"
 migrations_dir = "migrations"
-
-[[kv_namespaces]]
-binding = "WORKER_INVITES"
-id = "50e3915ec68c4eae9b6ba1e4c70ecedf"

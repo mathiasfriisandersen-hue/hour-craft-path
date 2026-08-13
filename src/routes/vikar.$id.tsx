@@ -19,7 +19,8 @@ import {
 } from "@/lib/timesheet-store";
 import { getCollectiveAgreementById } from "@/lib/collectiveAgreements";
 import { addDaysToISODate, getDanishAgreementHolidayName } from "@/lib/danishHolidays";
-import { sendTimesheetEmail } from "@/lib/timesheet-mail";
+import { getMailSessionAvailability } from "@/lib/api-session";
+import { safeTimesheetMailErrorMessage, sendTimesheetEmail } from "@/lib/timesheet-mail";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PAUSE_1_START = "09:00";
@@ -54,6 +55,7 @@ function VikarEdit() {
         <div>Indlæser…</div>
       </AppShell>
     );
+  const mailAvailability = getMailSessionAvailability();
 
   const locked = t.status === "sent" || t.status === "approved";
   const update = (patch: Partial<Timesheet>) => setT({ ...t, ...patch });
@@ -108,17 +110,17 @@ function VikarEdit() {
     const saved = upsert({ ...t, status: "sent", rejectionComment: undefined });
     setT(saved);
 
+    if (!mailAvailability.available) {
+      setMessage(`Timesedlen er markeret som sendt. ${mailAvailability.reason}`);
+      return;
+    }
     setSendingMail(true);
     setMessage("Sender timesedlen via mailsystemet…");
     try {
-      const result = await sendTimesheetEmail(saved);
-      setMessage(
-        result === "api"
-          ? "Timesedlen er sendt via mailsystemet."
-          : "Timesedlen er markeret som sendt. Mailsystemet er ikke konfigureret endnu, så din mailapp åbnes som fallback.",
-      );
-    } catch {
-      setMessage("Timesedlen er markeret som sendt, men mailsystemet kunne ikke sende lige nu.");
+      await sendTimesheetEmail(saved);
+      setMessage("Timesedlen er sendt via det servervaliderede mailsystem.");
+    } catch (error) {
+      setMessage(`Timesedlen er markeret som sendt. ${safeTimesheetMailErrorMessage(error)}`);
     } finally {
       setSendingMail(false);
     }
@@ -554,7 +556,12 @@ function VikarEdit() {
       </section>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <div className="max-w-2xl text-sm text-muted-foreground">{message}</div>
+        <div className="max-w-2xl text-sm text-muted-foreground">
+          {message ||
+            (!mailAvailability.available
+              ? `Timesedlen kan afleveres i systemet, men mailnotifikation er blokeret. ${mailAvailability.reason}`
+              : "")}
+        </div>
         {!locked && (
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button variant="outline" className="w-full sm:w-auto" onClick={handleSave}>

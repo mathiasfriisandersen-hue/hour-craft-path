@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { AppShell, StatusBadge } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
-import { DEMO_PASSWORD, useAuth } from "@/lib/auth";
+import { useAuth } from "@/lib/auth";
 import { useTimesheets } from "@/lib/use-timesheets";
 import {
   formatWeekRange,
@@ -41,7 +41,7 @@ function VikarList() {
   const workerNameKey = personKey(workerIdentity?.name ?? "");
   const workerEmailKey = personKey(workerIdentity?.email ?? "");
 
-  const workerMatchedList = useMemo(
+  const workerScopedList = useMemo(
     () =>
       workerNameKey || workerEmailKey
         ? all.filter((timesheet) => {
@@ -52,14 +52,9 @@ function VikarList() {
               workerEmailKey && timesheetEmailKey && timesheetEmailKey === workerEmailKey,
             );
           })
-        : all,
+        : [],
     [all, workerEmailKey, workerNameKey],
   );
-  const demoWorkerIdentity =
-    Boolean(workerNameKey || workerEmailKey) &&
-    workerMatchedList.some((timesheet) => timesheet.workerAccessCode === DEMO_PASSWORD);
-  const workerScopedList =
-    workerNameKey || workerEmailKey ? (demoWorkerIdentity ? all : workerMatchedList) : all;
 
   const list = useMemo(() => {
     const needle = query.toLocaleLowerCase("da-DK");

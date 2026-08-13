@@ -245,10 +245,6 @@ export function formatAgreementRulePages(pages: number[]) {
   return ranges.join(", ");
 }
 
-function hasRuleSourcePages(pages?: AgreementRuleSourcePages) {
-  return agreementRuleSourcePages(pages).length > 0;
-}
-
 export function agreementRuleText(field: AgreementRuleSourceKey, pages?: AgreementRuleSourcePages) {
   const sourcePages = agreementRuleSourcePages(pages);
   return sourcePages.length
@@ -272,9 +268,7 @@ function ruleSources(agreement: (typeof collectiveAgreements)[number]) {
 export const defaultAgreementRules: AgreementRule[] = collectiveAgreements.map((agreement) => ({
   id: agreement.id,
   agreementId: agreement.id,
-  normalWeekHours: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.normalWeekHours)
-    ? 37
-    : undefined,
+  normalWeekHours: undefined,
   overtimeRule: agreementRuleText(
     "overtimeRule",
     EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.overtimeRule,
@@ -292,21 +286,14 @@ export const defaultAgreementRules: AgreementRule[] = collectiveAgreements.map((
     EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.eveningRule,
   ),
   nightRule: agreementRuleText("nightRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.nightRule),
-  shiftRule: agreementRuleText(
-    "shiftRule",
-    EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.shiftRule,
-  ),
+  shiftRule: agreementRuleText("shiftRule", EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.shiftRule),
   specialRule: agreementRuleText(
     "specialRule",
     EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.specialRule,
   ),
-  eveningStart: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.eveningRule)
-    ? "18:00"
-    : "",
-  nightStart: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.nightRule)
-    ? "22:00"
-    : "",
-  nightEnd: hasRuleSourcePages(EXTRACTED_RULE_SOURCE_PAGES[agreement.id]?.nightRule) ? "06:00" : "",
+  eveningStart: "",
+  nightStart: "",
+  nightEnd: "",
   validFrom: "",
   validTo: "",
   sources: ruleSources(agreement),

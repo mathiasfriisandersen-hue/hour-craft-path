@@ -1,182 +1,65 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState, type ReactNode } from "react";
 import subzLogo from "@/assets/sub-z-logo.png";
-import { useAuth } from "@/lib/auth";
-import { upsert, type Timesheet } from "@/lib/timesheet-store";
-import { fetchWorkerInviteByToken, parseWorkerInviteFromHash } from "@/lib/worker-invite";
+import { fetchWorkerInviteByToken } from "@/lib/worker-invite";
 
-const INVITE_VALIDITY_DAYS = 7;
-const INVITE_VALIDITY_MS = INVITE_VALIDITY_DAYS * 24 * 60 * 60 * 1000;
+type InviteState = "loading" | "valid" | "invalid";
 
 export const Route = createFileRoute("/vikar/invite")({
   head: () => ({ meta: [{ title: "Vikar — Invitation" }] }),
   component: VikarInvitePage,
 });
 
-function isInviteExpired(timesheet: Timesheet): boolean {
-  const createdAt = Date.parse(timesheet.createdAt);
-  if (!Number.isFinite(createdAt)) return true;
-  return Date.now() - createdAt > INVITE_VALIDITY_MS;
-}
-
 function VikarInvitePage() {
-  const navigate = useNavigate();
-  const { login } = useAuth();
-  const [payload, setPayload] = useState<ReturnType<typeof parseWorkerInviteFromHash>>();
-  const [isLoadingInvite, setIsLoadingInvite] = useState(true);
-  const [temporaryCode, setTemporaryCode] = useState("");
-  const [newCode, setNewCode] = useState("");
-  const [step, setStep] = useState<"temporary" | "change">("temporary");
-  const [error, setError] = useState("");
+  const [inviteState, setInviteState] = useState<InviteState>("loading");
 
   useEffect(() => {
     let isMounted = true;
 
-    async function loadInvite() {
-      if (typeof window === "undefined") return;
-
-      const legacyPayload = parseWorkerInviteFromHash(window.location.hash);
-      if (legacyPayload) {
-        if (isMounted) {
-          setPayload(legacyPayload);
-          setIsLoadingInvite(false);
-        }
-        return;
-      }
-
-      const token = new URLSearchParams(window.location.search).get("i") ?? "";
-      const tokenPayload = token ? await fetchWorkerInviteByToken(token) : undefined;
-      if (isMounted) {
-        setPayload(tokenPayload);
-        setIsLoadingInvite(false);
-      }
+    async function validateInvite() {
+      const token =
+        typeof window === "undefined"
+          ? ""
+          : (new URLSearchParams(window.location.search).get("i") ?? "");
+      const valid = token ? await fetchWorkerInviteByToken(token) : false;
+      if (isMounted) setInviteState(valid ? "valid" : "invalid");
     }
 
-    void loadInvite();
-
+    void validateInvite();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  if (isLoadingInvite) {
+  if (inviteState === "loading") {
     return (
       <InviteShell>
-        <h1 className="text-2xl font-semibold">Indlæser invitation</h1>
+        <h1 className="text-2xl font-semibold">Kontrollerer invitation</h1>
         <p className="mt-2 text-sm text-muted-foreground">Vent et øjeblik…</p>
       </InviteShell>
     );
   }
 
-  if (!payload) {
+  if (inviteState === "invalid") {
     return (
       <InviteShell>
-        <h1 className="text-2xl font-semibold">Invitationen kunne ikke læses</h1>
+        <h1 className="text-2xl font-semibold">Invitationen er ugyldig</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Linket er ugyldigt eller mangler invitationsdata. Kontakt Sub-Z for et nyt link.
+          Linket er udløbet, allerede brugt eller kunne ikke verificeres sikkert. Kontakt Sub-Z for
+          en ny invitation.
         </p>
       </InviteShell>
     );
   }
-
-  const timesheet = payload.timesheet;
-
-  if (isInviteExpired(timesheet)) {
-    return (
-      <InviteShell>
-        <h1 className="text-2xl font-semibold">Invitationslinket er udløbet</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Linket er kun gyldigt i {INVITE_VALIDITY_DAYS} dage fra oprettelse. Kontakt Sub-Z for et
-          nyt invitationslink.
-        </p>
-      </InviteShell>
-    );
-  }
-
-  const verifyTemporaryCode = (event: FormEvent) => {
-    event.preventDefault();
-    if (temporaryCode !== timesheet.workerAccessCode) {
-      setError("Forkert engangskode");
-      return;
-    }
-    setError("");
-    setStep("change");
-  };
-
-  const saveNewCode = (event: FormEvent) => {
-    event.preventDefault();
-    if (!/^\d{4,8}$/.test(newCode)) {
-      setError("Ny adgangskode skal være 4-8 cifre");
-      return;
-    }
-    const saved: Timesheet = upsert({
-      ...timesheet,
-      workerAccessCode: newCode,
-      workerMustChangeAccessCode: false,
-    });
-    login("vikar", {
-      workerIdentity: { name: saved.vikar, email: saved.vikarEmail },
-    });
-    navigate({ to: "/vikar/$id", params: { id: saved.id }, replace: true });
-  };
 
   return (
     <InviteShell>
-      <h1 className="text-2xl font-semibold">Log ind på din timeseddel</h1>
+      <h1 className="text-2xl font-semibold">Invitationen er gyldig</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Timeseddel for {timesheet.brugervirksomhed || "brugervirksomhed"} er oprettet til{" "}
-        {timesheet.vikar || "vikaren"}.
+        Invitationen indeholder ikke dine timeseddeldata og giver ikke adgang alene. Du skal logge
+        ind med den serververificerede Supabase-session eller det personlige magic link fra Sub-Z,
+        før timesedlen kan åbnes.
       </p>
-
-      {step === "temporary" ? (
-        <form onSubmit={verifyTemporaryCode} className="mt-6 space-y-4">
-          <label>
-            <span className="mb-1.5 block text-sm font-medium">Engangskode</span>
-            <Input
-              type="password"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={temporaryCode}
-              onChange={(e) => {
-                setTemporaryCode(e.target.value.replace(/\D/g, "").slice(0, 6));
-                setError("");
-              }}
-              placeholder="6-cifret engangskode"
-            />
-          </label>
-          {error && <p className="text-sm font-medium text-status-rejected-fg">{error}</p>}
-          <Button type="submit" className="w-full">
-            Fortsæt
-          </Button>
-        </form>
-      ) : (
-        <form onSubmit={saveNewCode} className="mt-6 space-y-4">
-          <label>
-            <span className="mb-1.5 block text-sm font-medium">Vælg ny adgangskode</span>
-            <Input
-              type="password"
-              inputMode="numeric"
-              autoComplete="new-password"
-              value={newCode}
-              onChange={(e) => {
-                setNewCode(e.target.value.replace(/\D/g, "").slice(0, 8));
-                setError("");
-              }}
-              placeholder="4-8 cifre"
-            />
-          </label>
-          <p className="text-xs text-muted-foreground">
-            Denne prototype gemmer adgangskoden lokalt i browseren. Produktionslogin kræver en
-            fælles serverdatabase.
-          </p>
-          {error && <p className="text-sm font-medium text-status-rejected-fg">{error}</p>}
-          <Button type="submit" className="w-full">
-            Gem adgangskode og åbn timeseddel
-          </Button>
-        </form>
-      )}
     </InviteShell>
   );
 }

@@ -25,10 +25,8 @@ import {
   calculateTimesheet,
   formatDkk,
   formatWeekRange,
-  getRule,
   invoicePeriodTone,
   listCompanies,
-  overtimeHours,
   resolveInvoiceBookingPeriod,
   totalHours,
   upsert,
@@ -51,7 +49,6 @@ type StatusFilter =
   | "invoice-soon"
   | "invoice-now"
   | "invoice-waiting"
-  | "invoice-sent"
   | "payroll-ready"
   | "payroll-waiting"
   | "payroll-sent"
@@ -61,6 +58,7 @@ type WorkContext = {
   timesheet: Timesheet;
   company?: Company;
   project?: CompanyProject;
+  exportBlockers: string[];
   approvedHours: number;
   invoiceBaseHours: number;
   invoiceBookingStart?: string;
@@ -86,10 +84,33 @@ type WorkContext = {
   payrollTone: StatusTone;
 };
 
+type TimesheetWithWorkerStatus = Timesheet & {
+  workerDeleted?: boolean;
+  deleted?: boolean;
+  workerStatus?: "deleted" | "inactive" | string;
+  workerActive?: boolean;
+};
+
+type ServerCalculationSnapshot = {
+  calculationId?: string;
+  status?: "completed" | "manual_review_required" | "source_conflict" | "failed";
+  exportBlocked?: boolean;
+  manualReviewReasons?: string[];
+  resultHash?: string;
+};
+
+type TimesheetWithCalculationSnapshot = Timesheet & {
+  employmentTermId?: string;
+  agreementAssignmentId?: string;
+  lastCalculationSnapshotId?: string;
+  calculationSnapshot?: ServerCalculationSnapshot;
+};
+
 type PayrollAllowanceRow = {
   label: string;
   hours: number;
   amount: number;
+  rateVerified?: boolean;
   unitPrice?: number;
   hourlyWageLabel?: string;
   quantityLabel?: string;
@@ -113,14 +134,11 @@ const PAYMENT = {
   iban: "",
   swift: "",
 };
-const PAYROLL_SOCIAL_COST_RATE = 0.3888;
-
 const STATUS_FILTER_OPTIONS: Array<{ value: StatusFilter; label: string }> = [
   { value: "all", label: "Alle statusser" },
   { value: "invoice-soon", label: "Skal snart håndteres" },
   { value: "invoice-now", label: "Skal håndteres nu" },
   { value: "invoice-waiting", label: "Kræver ikke handling endnu" },
-  { value: "invoice-sent", label: "Faktura sendt" },
   { value: "payroll-ready", label: "Klar til bogholderi" },
   { value: "payroll-waiting", label: "Kræver ikke handling endnu" },
   { value: "payroll-sent", label: "Sendt til bogholderi" },
@@ -184,23 +202,23 @@ function InvoicePayrollPage() {
       (b.timesheet.invoiceArchivedAt ?? "").localeCompare(a.timesheet.invoiceArchivedAt ?? ""),
     );
   const payrollRows = filteredRows
-  .filter((row) => {
-    const timesheet = row.timesheet as any;
+    .filter((row) => {
+      const timesheet = row.timesheet as TimesheetWithWorkerStatus;
 
-    const workerIsDeleted =
-      timesheet.workerDeleted === true ||
-      timesheet.deleted === true ||
-      timesheet.workerStatus === "deleted" ||
-      timesheet.workerStatus === "inactive" ||
-      timesheet.workerActive === false;
+      const workerIsDeleted =
+        timesheet.workerDeleted === true ||
+        timesheet.deleted === true ||
+        timesheet.workerStatus === "deleted" ||
+        timesheet.workerStatus === "inactive" ||
+        timesheet.workerActive === false;
 
-    return (
-      (timesheet.status === "sent" || timesheet.status === "approved") &&
-      totalHours(timesheet.days) > 0 &&
-      !workerIsDeleted
-    );
-  })
-  .sort(comparePayrollRows);
+      return (
+        (timesheet.status === "sent" || timesheet.status === "approved") &&
+        totalHours(timesheet.days) > 0 &&
+        !workerIsDeleted
+      );
+    })
+    .sort(comparePayrollRows);
   const invoiceSentCount = filteredRows.filter(
     (row) => row.approvedHours > 0 && row.timesheet.invoiceSentDate,
   );
@@ -252,9 +270,7 @@ function InvoicePayrollPage() {
       row.payrollTone !== "red",
   );
   const payrollApprovedRows = payrollRows.filter(
-    (row) =>
-      statusFilter === "payroll-approved" &&
-      row.timesheet.payrollBookkeepingApprovedDate,
+    (row) => statusFilter === "payroll-approved" && row.timesheet.payrollBookkeepingApprovedDate,
   );
   const visibleInvoiceCount =
     invoiceNowRows.length +
@@ -356,59 +372,46 @@ function InvoicePayrollPage() {
         </section>
 
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-  <div className="flex flex-wrap gap-2">
-    <ViewToggleButton
-      active={view === "invoice"}
-      onClick={() => setView("invoice")}
-      label="Fakturaoverblik"
-      count={visibleInvoiceCount}
-    />
-    <ViewToggleButton
-      active={view === "payroll"}
-      onClick={() => setView("payroll")}
-      label="Lønoverblik"
-      count={visiblePayrollCount}
-    />
-  </div>
+          <div className="flex flex-wrap gap-2">
+            <ViewToggleButton
+              active={view === "invoice"}
+              onClick={() => setView("invoice")}
+              label="Fakturaoverblik"
+              count={visibleInvoiceCount}
+            />
+            <ViewToggleButton
+              active={view === "payroll"}
+              onClick={() => setView("payroll")}
+              label="Lønoverblik"
+              count={visiblePayrollCount}
+            />
+          </div>
 
-  <button
-    type="button"
-    onClick={() => setShowArchivedInvoices(true)}
-    className={cn(
-      "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-      showArchivedInvoices
-        ? "bg-blue-600 text-white shadow-sm"
-        : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-950",
-    )}
-  >
-    <span>Arkiverede dokumenter</span>
-    <span
-      className={cn(
-        "rounded-full px-2 py-0.5 text-xs",
-        showArchivedInvoices ? "bg-white/20 text-white" : "bg-white text-slate-500",
-      )}
-    >
-      {archivedInvoiceRows.length}
-    </span>
-  </button>
-</div>
+          <button
+            type="button"
+            onClick={() => setShowArchivedInvoices(true)}
+            className={cn(
+              "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+              showArchivedInvoices
+                ? "bg-blue-600 text-white shadow-sm"
+                : "bg-slate-50 text-slate-700 hover:bg-slate-100 hover:text-slate-950",
+            )}
+          >
+            <span>Arkiverede dokumenter</span>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-xs",
+                showArchivedInvoices ? "bg-white/20 text-white" : "bg-white text-slate-500",
+              )}
+            >
+              {archivedInvoiceRows.length}
+            </span>
+          </button>
+        </div>
 
         {view === "invoice" ? (
           <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
-            <SectionHeader
-              title="Fakturaoverblik"
-              count={visibleInvoiceCount}
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  className="bg-emerald-600 text-white shadow-sm hover:bg-emerald-700"
-                  onClick={() => setStatusFilter("invoice-sent")}
-                >
-                  Faktura sendt
-                </Button>
-              }
-            />
+            <SectionHeader title="Fakturaoverblik" count={visibleInvoiceCount} />
             <div className="grid gap-4 p-4 xl:grid-cols-3">
               {statusFilterMatches(statusFilter, "invoice-now") && (
                 <StatusColumn
@@ -452,22 +455,6 @@ function InvoicePayrollPage() {
                   {invoiceWaitingRows.map((row) => (
                     <InvoiceCaseCard
                       key={`invoice-waiting-${row.timesheet.id}`}
-                      row={row}
-                      onPreview={() => setPreview(row)}
-                    />
-                  ))}
-                </StatusColumn>
-              )}
-              {statusFilter === "invoice-sent" && (
-                <StatusColumn
-                  title="Faktura sendt"
-                  count={invoiceSentRows.length}
-                  tone="green"
-                  empty="Ingen fakturaer er markeret sendt."
-                >
-                  {invoiceSentRows.map((row) => (
-                    <InvoiceCaseCard
-                      key={`invoice-sent-${row.timesheet.id}`}
                       row={row}
                       onPreview={() => setPreview(row)}
                     />
@@ -599,8 +586,7 @@ function InvoicePayrollPage() {
                   >
                     <div className="text-sm font-semibold text-slate-950">{row.invoiceNumber}</div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {row.company?.name || row.timesheet.brugervirksomhed} ·{" "}
-                      {row.timesheet.vikar}
+                      {row.company?.name || row.timesheet.brugervirksomhed} · {row.timesheet.vikar}
                     </div>
 
                     <dl className="mt-3 grid gap-2 text-sm">
@@ -630,15 +616,15 @@ function InvoicePayrollPage() {
       )}
 
       {preview && (
-  <InvoicePreview
-    row={preview}
-    onArchive={() => {
-      archiveInvoice(preview);
-      setPreview(null);
-    }}
-    onClose={() => setPreview(null)}
-  />
-)}
+        <InvoicePreview
+          row={preview}
+          onArchive={() => {
+            archiveInvoice(preview);
+            setPreview(null);
+          }}
+          onClose={() => setPreview(null)}
+        />
+      )}
       {payrollPreview && (
         <PayrollPreview
           row={payrollPreview}
@@ -903,9 +889,12 @@ function InvoiceCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
         <StatusDateInput
           label="Faktura sendt"
           value={row.timesheet.invoiceSentDate ?? ""}
-          onChange={(value) => updateTimesheetDate(row.timesheet, "invoiceSentDate", value)}
+          disabled={row.exportBlockers.length > 0 && !row.timesheet.invoiceSentDate}
+          onChange={(value) => updateTimesheetDate(row, "invoiceSentDate", value)}
         />
       </dl>
+
+      <ExportGateNotice blockers={row.exportBlockers} compact />
 
       <div className="mt-3 flex justify-end">
         <Button type="button" variant="outline" size="sm" onClick={onPreview}>
@@ -941,12 +930,14 @@ function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
         <StatusDateInput
           label="Sendt til bogholderi"
           value={row.timesheet.payrollSentDate ?? ""}
-          onChange={(value) => updateTimesheetDate(row.timesheet, "payrollSentDate", value)}
+          disabled={row.exportBlockers.length > 0 && !row.timesheet.payrollSentDate}
+          onChange={(value) => updateTimesheetDate(row, "payrollSentDate", value)}
         />
         <Button type="button" variant="outline" size="sm" onClick={onPreview}>
           Preview
         </Button>
       </div>
+      <ExportGateNotice blockers={row.exportBlockers} compact />
     </article>
   );
 }
@@ -978,16 +969,17 @@ function toneTextClass(tone: DashboardTone): string {
 }
 
 function updateTimesheetDate(
-  timesheet: Timesheet,
+  row: WorkContext,
   field: "invoiceSentDate" | "payrollSentDate" | "payrollBookkeepingApprovedDate",
   value: string,
 ) {
-  upsert({ ...timesheet, [field]: value });
+  if (value && row.exportBlockers.length > 0) return;
+  upsert({ ...row.timesheet, [field]: value });
 }
 
 function approvePayrollInBookkeeping(row: WorkContext) {
-  if (row.timesheet.payrollBookkeepingApprovedDate) return;
-  updateTimesheetDate(row.timesheet, "payrollBookkeepingApprovedDate", localDateInputValue());
+  if (row.exportBlockers.length > 0 || row.timesheet.payrollBookkeepingApprovedDate) return;
+  updateTimesheetDate(row, "payrollBookkeepingApprovedDate", localDateInputValue());
 }
 
 function localDateInputValue(date = new Date()): string {
@@ -996,6 +988,7 @@ function localDateInputValue(date = new Date()): string {
 }
 
 function archiveInvoice(row: WorkContext) {
+  if (row.exportBlockers.length > 0) return;
   upsert({
     ...row.timesheet,
     invoiceArchivedAt: new Date().toISOString(),
@@ -1015,27 +1008,7 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
   const isApprovedForPayroll = isTimesheetApprovedForPayroll(timesheet, payrollPeriod.end);
   const payrollBasisHours = isApprovedForPayroll ? approvedHours : 0;
   const billingMultiplier = project?.billingFactor ?? 0;
-  const billingRate =
-    project && project.billingHourlyWage > 0 && project.billingFactor > 0
-      ? project.billingHourlyWage * project.billingFactor
-      : billingMultiplier;
-  const calculation = calculateTimesheet(timesheet);
-  const invoiceAllowanceRows = invoiceAllowanceRowsForCalculation(
-    timesheet,
-    calculation,
-    project,
-    billingRate,
-    payrollPeriod.end,
-  );
-  const invoiceOvertimeHours = invoiceAllowanceRows.reduce(
-    (sum, item) => sum + (item.ruleKeys?.includes("overtime") ? item.hours : 0),
-    0,
-  );
-  const invoiceBaseHours = Math.max(0, approvedHours - invoiceOvertimeHours);
-  const invoiceBaseExVat = invoiceBaseHours * billingRate;
-  const invoiceAllowanceExVat = invoiceAllowanceRows.reduce((sum, item) => sum + item.amount, 0);
-  const invoiceExVat = invoiceBaseExVat + invoiceAllowanceExVat;
-  const vat = invoiceExVat * 0.25;
+  const invoiceBaseHours = approvedHours;
   const payrollDeadline = timesheet.payrollDeadline || fallbackPayrollDeadline;
   const bookingPeriod = resolveInvoiceBookingPeriod(timesheet, companies);
   const invoiceTone =
@@ -1047,10 +1020,11 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
           endDate: bookingPeriod?.endDate,
         });
 
-  return {
+  const context: WorkContext = {
     timesheet,
     company,
     project,
+    exportBlockers: [],
     approvedHours,
     invoiceBaseHours,
     invoiceBookingStart: bookingPeriod?.startDate,
@@ -1062,19 +1036,36 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     payrollPeriodStart: payrollPeriod.start,
     payrollPeriodEnd: payrollPeriod.end,
     payrollBasisHours,
-    payrollBasisAmount: payrollBasisHours * (timesheet.hourlyWage || 0),
+    payrollBasisAmount: Number.NaN,
     payrollApprovalStatus: payrollApprovalStatus(timesheet, payrollPeriod.end),
     billingMultiplier,
-    billingRate,
-    invoiceBaseExVat,
-    invoiceAllowanceRows,
-    invoiceAllowanceExVat,
-    invoiceExVat,
-    vat,
-    invoiceIncVat: invoiceExVat + vat,
+    billingRate: Number.NaN,
+    invoiceBaseExVat: Number.NaN,
+    invoiceAllowanceRows: [],
+    invoiceAllowanceExVat: Number.NaN,
+    invoiceExVat: Number.NaN,
+    vat: Number.NaN,
+    invoiceIncVat: Number.NaN,
     invoiceTone,
     payrollTone: payrollTone(timesheet, payrollPeriod.end),
   };
+  context.exportBlockers = financialExportBlockers(context);
+  return context;
+}
+
+function financialExportBlockers(row: WorkContext): string[] {
+  const timesheet = row.timesheet;
+  const blockers: string[] = [];
+
+  blockers.push(
+    "Økonomiske beløb og linjefordeling mangler et gyldigt serverbaseret beregningssnapshot.",
+  );
+  blockers.push("Sociale omkostninger er ikke valideret i det aktuelle løngrundlag.");
+  if (timesheet.days.some((day) => day.absence === "sick")) {
+    blockers.push("Sygedagpengesatsen kræver manuel validering.");
+  }
+
+  return [...new Set(blockers)];
 }
 
 function findCompany(timesheet: Timesheet, companies: Company[]) {
@@ -1107,42 +1098,27 @@ function toneRank(tone: StatusTone) {
   return 2;
 }
 
-function urgencyTone(deadline: string): StatusTone {
-  const days = calendarDaysUntil(deadline);
-  if (days <= 0) return "red";
-  if (days <= 3) return "orange";
-  return "green";
-}
-
-function calendarDaysUntil(isoDate: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(`${isoDate}T00:00:00`);
-  target.setHours(0, 0, 0, 0);
-  return Math.round((target.getTime() - today.getTime()) / 86400000);
-}
-
 function formatMultiplier(row: WorkContext) {
-  const wage = row.project?.billingHourlyWage ?? 0;
-  if (wage > 0 && row.billingMultiplier > 0) {
-    return `${formatDecimal(wage)} x ${formatDecimal(row.billingMultiplier)} = ${formatDkk(row.billingRate)}`;
-  }
-  if (row.billingMultiplier > 0) return formatDecimal(row.billingMultiplier);
-  return "Ikke sat";
+  return row.billingMultiplier > 0
+    ? `Konfigureret faktor ${formatDecimal(row.billingMultiplier)} · økonomisk beregning blokeret`
+    : "Økonomisk beregning blokeret";
 }
 
 function invoiceLineUnitPrice(row: WorkContext, item?: PayrollAllowanceRow) {
-  return item?.unitPrice ?? row.billingRate;
+  void row;
+  void item;
+  return Number.NaN;
 }
 
 function invoiceLineHourlyWage(row: WorkContext, item?: PayrollAllowanceRow) {
-  const unitPrice = invoiceLineUnitPrice(row, item);
-  if (unitPrice > 0 && row.billingMultiplier > 0) return unitPrice / row.billingMultiplier;
-  return row.project?.billingHourlyWage ?? 0;
+  void row;
+  void item;
+  return Number.NaN;
 }
 
 function invoiceLineFactor(row: WorkContext) {
-  return row.billingMultiplier > 0 ? formatDecimal(row.billingMultiplier) : "Ikke sat";
+  void row;
+  return "Blokeret";
 }
 
 function invoiceDateForTimesheet(weekStart: string): string {
@@ -1222,7 +1198,9 @@ function formatDateRange(start: string, end: string) {
 function workDateRange(timesheet: Timesheet) {
   const workDates = timesheet.days
     .map((day, index) =>
-      day.absence === "none" && day.start && day.end ? addDaysToISODate(timesheet.weekStart, index) : "",
+      day.absence === "none" && day.start && day.end
+        ? addDaysToISODate(timesheet.weekStart, index)
+        : "",
     )
     .filter(Boolean);
   if (!workDates.length) return "—";
@@ -1286,51 +1264,71 @@ function Fact({ label, value }: { label: string; value: string }) {
 function StatusDateInput({
   label,
   value,
+  disabled = false,
   onChange,
 }: {
   label: string;
   value: string;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <label className="grid gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <Input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input
+        type="date"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </label>
   );
 }
 
-function payrollHourlyWage(row: WorkContext) {
-  return row.timesheet.hourlyWage || row.project?.billingHourlyWage || 0;
+function ExportGateNotice({
+  blockers,
+  compact = false,
+}: {
+  blockers: string[];
+  compact?: boolean;
+}) {
+  if (blockers.length === 0) return null;
+  const extraCount = Math.max(0, blockers.length - 1);
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "rounded-md border border-amber-200 bg-amber-50 text-amber-950",
+        compact ? "mt-3 px-3 py-2 text-xs" : "mb-4 px-4 py-3 text-sm",
+      )}
+    >
+      <span className="font-medium">Økonomisk eksport er blokeret:</span> {blockers[0]}
+      {extraCount > 0 ? ` (+${extraCount} yderligere krav)` : ""}
+    </div>
+  );
 }
 
 function payrollFinancials(row: WorkContext) {
   const calculation = calculateTimesheet(row.timesheet);
-  const hourlyWage = payrollHourlyWage(row);
-  const hourlyWageWithSocial = hourlyWage * (1 + PAYROLL_SOCIAL_COST_RATE);
-  const payrollOvertime = payrollOvertimeHoursForCalculation(row, calculation);
-  const basePayrollHours = Math.max(0, row.approvedHours - payrollOvertime);
-  const basePayrollAmount = basePayrollHours * hourlyWageWithSocial;
-  const allowanceRows = payrollAllowanceRowsForCalculation(
-    row,
-    calculation,
-    hourlyWage,
-    payrollOvertime,
-  );
-  const allowanceTotal = allowanceRows.reduce((sum, item) => sum + item.amount, 0);
+  const allowanceRows = allowanceRowsForCalculation(calculation).map((item) => ({
+    ...item,
+    amount: Number.NaN,
+    rateVerified: false,
+    amountLabel: "Blokeret: serverbaseret beregningssnapshot mangler",
+  }));
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
     .join(" / ");
 
   return {
     agreementName: row.timesheet.overenskomst || row.timesheet.selectedAgreementId || "—",
-    hourlyWage,
-    hourlyWageWithSocial,
-    basePayrollHours,
-    basePayrollAmount,
+    hourlyWage: Number.NaN,
+    hourlyWageExcludingSocialCosts: Number.NaN,
+    basePayrollHours: row.approvedHours,
+    basePayrollAmount: Number.NaN,
     allowanceRows,
-    allowanceTotal,
-    payrollTotal: basePayrollAmount + allowanceTotal,
+    allowanceTotal: Number.NaN,
+    payrollTotal: Number.NaN,
     projectName,
   };
 }
@@ -1339,16 +1337,8 @@ function payrollOvertimeHoursForCalculation(
   row: WorkContext,
   calculation: ReturnType<typeof calculateTimesheet>,
 ) {
-  return effectiveOvertimeHours(row.timesheet, calculation);
-}
-
-function effectiveOvertimeHours(
-  timesheet: Timesheet,
-  calculation: ReturnType<typeof calculateTimesheet>,
-) {
-  const normalWeekHours = getRule(timesheet.selectedAgreementId)?.normalWeekHours;
-  const weeklyLimit = normalWeekHours && normalWeekHours > 0 ? normalWeekHours : 37;
-  return Math.max(calculation.overtime, overtimeHours(timesheet.days, weeklyLimit));
+  void row;
+  return calculation.overtime;
 }
 
 function invoiceAllowanceLabel(label: string) {
@@ -1372,9 +1362,9 @@ function invoiceAllowanceRowsForCalculation(
   const projectFactor = project?.billingFactor ?? 0;
   const baseHourlyWage = project?.billingHourlyWage ?? 0;
 
-  return allowanceRowsForCalculation(calculation, {
-    overtime: effectiveOvertimeHours(timesheet, calculation),
-  }).flatMap((item) => {
+  const rows = allowanceRowsForCalculation(calculation).flatMap((item) => {
+    const manualRow = invoiceManualAllowanceRow(item, validationReport);
+
     if (item.ruleKeys?.includes("overtime")) {
       const overtimeRows = invoiceOvertimeAllowanceRows(
         validationReport,
@@ -1393,21 +1383,66 @@ function invoiceAllowanceRowsForCalculation(
             label: "Overarbejde inkl. tillæg",
             unitPrice,
             amount: item.hours * unitPrice,
+            rateVerified: true,
           },
         ];
       }
-      return [];
+      return [manualRow];
     }
 
-    return [
-      {
-        ...item,
-        label: invoiceAllowanceLabel(item.label),
-        unitPrice: billingRate,
-        amount: item.hours * billingRate,
-      },
-    ];
+    const rate = allowanceRateForRule(validationReport, item.ruleKeys);
+    if (rate) {
+      const unitPrice = projectFactor > 0 ? rate * projectFactor : rate;
+      return [
+        {
+          ...item,
+          label: invoiceAllowanceLabel(item.label),
+          unitPrice,
+          amount: item.hours * unitPrice,
+          rateVerified: true,
+          amountLabel: `${formatDkk(rate)}/t${
+            projectFactor > 0 ? ` x faktor ${formatDecimal(projectFactor)}` : ""
+          } = ${formatDkk(unitPrice)}/t`,
+        },
+      ];
+    }
+
+    return [manualRow];
   });
+
+  if (calculation.delayedMealBreakDays > 0) {
+    rows.push({
+      label: "Udsat spisepause",
+      hours: 0,
+      quantityLabel: `${calculation.delayedMealBreakDays} ${
+        calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
+      }`,
+      unitPrice: 0,
+      amount: 0,
+      rateVerified: false,
+      amountLabel: "Kræver manuel validering",
+      ruleKeys: ["breaks"],
+    });
+  }
+
+  return rows;
+}
+
+function invoiceManualAllowanceRow(
+  item: Omit<PayrollAllowanceRow, "amount">,
+  validationReport: ReturnType<typeof getAgreementValidationReport>,
+): PayrollAllowanceRow {
+  return {
+    ...item,
+    label: invoiceAllowanceLabel(item.label),
+    unitPrice: 0,
+    amount: 0,
+    rateVerified: false,
+    amountLabel: `Kræver manuel validering: ${allowanceRateStatusLabel(
+      validationReport,
+      item.ruleKeys,
+    )}`,
+  };
 }
 
 function invoiceOvertimeAllowanceRows(
@@ -1436,6 +1471,7 @@ function invoiceOvertimeAllowanceRows(
       hours: tier.hours,
       unitPrice,
       amount: tier.hours * unitPrice,
+      rateVerified: true,
       ruleKeys: ["overtime", "outside_normal_time"],
     };
   });
@@ -1460,34 +1496,31 @@ function payrollAllowanceRowsForCalculation(
         : undefined;
     const ratePlan = overtimeRatePlan ?? eveningRatePlan;
     const rate = ratePlan ? undefined : allowanceRateForRule(validationReport, item.ruleKeys);
-    const amount =
-      ratePlan?.amount ?? (rate ? item.hours * rate * (1 + PAYROLL_SOCIAL_COST_RATE) : 0);
+    const amount = ratePlan?.amount ?? (rate ? item.hours * rate : 0);
     return {
       ...item,
       amount,
+      rateVerified: Boolean(ratePlan || rate),
       hourlyWageLabel: `Timeløn i perioden: ${formatDkk(hourlyWage)}`,
       amountLabel:
         ratePlan?.label ??
         (rate
-          ? `${formatDkk(rate)}/t + sociale omkostninger = ${formatDkk(amount)}`
+          ? `${formatDkk(rate)}/t; sociale omkostninger kræver manuel validering`
           : allowanceRateStatusLabel(validationReport, item.ruleKeys)),
       breakdown: ratePlan?.breakdown,
     };
   });
 
   if (calculation.delayedMealBreakDays > 0) {
-    const delayedMealBreakAmount =
-      calculation.delayedMealBreakAmount * (1 + PAYROLL_SOCIAL_COST_RATE);
     rows.push({
       label: "Udsat spisepause",
       hours: 0,
       quantityLabel: `${calculation.delayedMealBreakDays} ${
         calculation.delayedMealBreakDays === 1 ? "dag" : "dage"
       }`,
-      amount: delayedMealBreakAmount,
-      amountLabel: `${formatDkk(
-        calculation.delayedMealBreakAmount,
-      )} + sociale omkostninger = ${formatDkk(delayedMealBreakAmount)}`,
+      amount: 0,
+      rateVerified: false,
+      amountLabel: "Kræver manuel validering; ingen sats anvendes automatisk",
     });
   }
 
@@ -1496,6 +1529,7 @@ function payrollAllowanceRowsForCalculation(
       label: "Lokalaftale",
       hours: calculation.localAgreement,
       amount: 0,
+      rateVerified: false,
       amountLabel: allowanceRateStatusLabel(validationReport, ["local_agreements"]),
       ruleKeys: ["local_agreements"],
     });
@@ -1532,7 +1566,7 @@ function overtimeAllowanceRatePlan(
     (sum, tier) => sum + tier.hours * (hourlyWage + tier.rate),
     0,
   );
-  const amount = overtimePayrollAmount * (1 + PAYROLL_SOCIAL_COST_RATE);
+  const amount = overtimePayrollAmount;
   return {
     amount,
     label: formatDkk(amount),
@@ -1545,8 +1579,8 @@ function overtimeAllowanceRatePlan(
           tier.hours * (hourlyWage + tier.rate),
         )}`,
       })),
-      { label: "Før sociale omkostninger", value: formatDkk(overtimePayrollAmount) },
-      { label: "Inkl. sociale omkostninger", value: formatDkk(amount) },
+      { label: "Lønbeløb", value: formatDkk(overtimePayrollAmount) },
+      { label: "Sociale omkostninger", value: "Kræver manuel validering" },
     ],
   };
 }
@@ -1565,7 +1599,7 @@ function eveningAllowanceRatePlan(
   if (!rate) return undefined;
 
   const amountBeforeSocial = hours * rate;
-  const amount = amountBeforeSocial * (1 + PAYROLL_SOCIAL_COST_RATE);
+  const amount = amountBeforeSocial;
   return {
     amount,
     label: formatDkk(amount),
@@ -1575,8 +1609,8 @@ function eveningAllowanceRatePlan(
         label: "Aftentillæg",
         value: `${hours.toFixed(2)} t x ${formatDkk(rate)}/t = ${formatDkk(amountBeforeSocial)}`,
       },
-      { label: "Før sociale omkostninger", value: formatDkk(amountBeforeSocial) },
-      { label: "Inkl. sociale omkostninger", value: formatDkk(amount) },
+      { label: "Lønbeløb", value: formatDkk(amountBeforeSocial) },
+      { label: "Sociale omkostninger", value: "Kræver manuel validering" },
     ],
   };
 }
@@ -1704,6 +1738,10 @@ function allowanceAmountLabel(item: PayrollAllowanceRow) {
   return item.amountLabel ?? formatDkk(item.amount);
 }
 
+function invoiceAllowanceDescription(item: PayrollAllowanceRow) {
+  return item.amountLabel ? `${item.label} (${item.amountLabel})` : item.label;
+}
+
 function allowancePdfAmountLabel(item: PayrollAllowanceRow) {
   if (item.hourlyWageLabel) return `${item.hourlyWageLabel}; ${allowanceAmountLabel(item)}`;
   return allowanceAmountLabel(item);
@@ -1752,7 +1790,9 @@ function PayrollPreview({
   const sickness = sicknessBasis(row.timesheet, timesheets);
   const financials = payrollFinancials(row);
   const canApproveInBookkeeping =
-    Boolean(row.timesheet.payrollSentDate) && !row.timesheet.payrollBookkeepingApprovedDate;
+    row.exportBlockers.length === 0 &&
+    Boolean(row.timesheet.payrollSentDate) &&
+    !row.timesheet.payrollBookkeepingApprovedDate;
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/30 p-4">
@@ -1765,7 +1805,12 @@ function PayrollPreview({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={() => downloadPayrollPdf(row)}>
+            <Button
+              type="button"
+              size="sm"
+              disabled={row.exportBlockers.length > 0}
+              onClick={() => downloadPayrollPdf(row)}
+            >
               Hent løngrundlag som PDF
             </Button>
             <Button
@@ -1782,6 +1827,8 @@ function PayrollPreview({
             </Button>
           </div>
         </div>
+
+        <ExportGateNotice blockers={row.exportBlockers} />
 
         <dl className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
           <PreviewRow label="Vikar" value={row.timesheet.vikar || "—"} />
@@ -1802,10 +1849,10 @@ function PayrollPreview({
           <dl className="grid gap-2 md:grid-cols-2">
             <PreviewRow label="Overenskomst" value={financials.agreementName} />
             <PreviewRow label="Registreret timeløn" value={formatDkk(financials.hourlyWage)} />
-            <PreviewRow label="Sociale omkostninger" value="38,88 %" />
+            <PreviewRow label="Sociale omkostninger" value="Kræver manuel validering" />
             <PreviewRow
-              label="Timeløn inkl. sociale omkostninger"
-              value={formatDkk(financials.hourlyWageWithSocial)}
+              label="Timeløn (uden sociale omkostninger)"
+              value={formatDkk(financials.hourlyWageExcludingSocialCosts)}
             />
           </dl>
         </div>
@@ -1815,7 +1862,7 @@ function PayrollPreview({
           <dl className="grid gap-2 md:grid-cols-2">
             <PreviewRow label="Grundtimer" value={`${financials.basePayrollHours.toFixed(2)} t`} />
             <PreviewRow
-              label="Grundløn inkl. sociale omkostninger"
+              label="Grundløn (uden sociale omkostninger)"
               value={formatDkk(financials.basePayrollAmount)}
             />
           </dl>
@@ -1860,7 +1907,7 @@ function PayrollPreview({
                 label="Berettiget efter 8 uger / 74 timer"
                 value={sickness.eligible ? "Ja" : "Nej"}
               />
-              <PreviewRow label="Maks. sygedagpengesats 2026" value="137,43 DKK pr. time" />
+              <PreviewRow label="Sygedagpengesats" value="Kræver manuel validering" />
             </dl>
           ) : (
             <p className="text-muted-foreground">Ingen sygdom registreret i perioden.</p>
@@ -1895,17 +1942,29 @@ function InvoicePreview({
             <p className="mt-1 text-sm text-muted-foreground">Preview sendes ikke automatisk.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button type="button" size="sm" onClick={() => downloadInvoicePdf(row)}>
-  Hent faktura som PDF
-</Button>
-<Button type="button" variant="outline" size="sm" onClick={onArchive}>
-  Arkiver
-</Button>
-<Button type="button" variant="outline" size="sm" onClick={onClose}>
-  Luk preview
-</Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={row.exportBlockers.length > 0}
+              onClick={() => downloadInvoicePdf(row)}
+            >
+              Hent faktura som PDF
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={row.exportBlockers.length > 0}
+              onClick={onArchive}
+            >
+              Arkiver
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              Luk preview
+            </Button>
           </div>
         </div>
+        <ExportGateNotice blockers={row.exportBlockers} />
         <div className="grid gap-4 text-sm lg:grid-cols-2">
           <div className="rounded-lg border p-4">
             <h3 className="mb-3 font-medium">Sælger</h3>
@@ -1980,8 +2039,10 @@ function InvoicePreview({
                 </tr>
                 {row.invoiceAllowanceRows.map((item) => (
                   <tr key={item.label}>
-                    <td className="border-b px-3 py-3">{item.label}</td>
-                    <td className="border-b px-3 py-3 text-right">{item.hours.toFixed(2)} t</td>
+                    <td className="border-b px-3 py-3">{invoiceAllowanceDescription(item)}</td>
+                    <td className="border-b px-3 py-3 text-right">
+                      {allowanceQuantityLabel(item)}
+                    </td>
                     <td className="border-b px-3 py-3 text-right">
                       {formatDkk(invoiceLineHourlyWage(row, item))}
                     </td>
@@ -2024,6 +2085,7 @@ function PreviewRow({
 }
 
 async function downloadInvoicePdf(row: WorkContext) {
+  if (row.exportBlockers.length > 0) return;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const t = row.timesheet;
   const customerName = row.company?.name || t.brugervirksomhed || "—";
@@ -2111,8 +2173,8 @@ async function downloadInvoicePdf(row: WorkContext) {
   let invoiceLineY = tableTop + 20;
   row.invoiceAllowanceRows.forEach((item) => {
     invoiceLineY += invoiceLineHeight;
-    doc.text(item.label, 20, invoiceLineY);
-    doc.text(`${item.hours.toFixed(2)} t`, 92, invoiceLineY, { align: "right" });
+    doc.text(invoiceAllowanceDescription(item), 20, invoiceLineY, { maxWidth: 68 });
+    doc.text(allowanceQuantityLabel(item), 92, invoiceLineY, { align: "right" });
     doc.text(formatDkk(invoiceLineHourlyWage(row, item)), 118, invoiceLineY, {
       align: "right",
     });
@@ -2151,6 +2213,7 @@ async function downloadInvoicePdf(row: WorkContext) {
 }
 
 async function downloadPayrollPdf(row: WorkContext) {
+  if (row.exportBlockers.length > 0) return;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const financials = payrollFinancials(row);
   const generatedDate = new Date().toISOString().slice(0, 10);
@@ -2193,10 +2256,10 @@ async function downloadPayrollPdf(row: WorkContext) {
   const basisBottom = drawInfoBox(doc, 16, basisTop, 178, "Løngrundlag", [
     `Overenskomst: ${financials.agreementName}`,
     `Registreret timeløn: ${formatDkk(financials.hourlyWage)}`,
-    "Sociale omkostninger: 38,88 %",
-    `Timeløn inkl. sociale omkostninger: ${formatDkk(financials.hourlyWageWithSocial)}`,
+    "Sociale omkostninger: Kræver manuel validering",
+    `Timeløn uden sociale omkostninger: ${formatDkk(financials.hourlyWageExcludingSocialCosts)}`,
     `Grundtimer: ${financials.basePayrollHours.toFixed(2)} t`,
-    `Grundløn inkl. sociale omkostninger: ${formatDkk(financials.basePayrollAmount)}`,
+    `Grundløn uden sociale omkostninger: ${formatDkk(financials.basePayrollAmount)}`,
   ]);
 
   const tableTop = basisBottom + 12;

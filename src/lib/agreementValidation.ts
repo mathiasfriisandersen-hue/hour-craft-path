@@ -470,31 +470,16 @@ function validatedFallbackReport(agreementSlug: string) {
   return {
     agreementSlug: agreement.id,
     agreementName: agreement.name,
-    sourceAuditVersion: "manual-admin-validation",
-    status: "validated_for_calculation",
-    validatedForCalculation: true,
+    sourceAuditVersion: "manual-validation-required",
+    status: "needs_manual_review",
+    validatedForCalculation: false,
     sourcePdf: agreement.pdfFileName ?? agreement.pdfUrl ?? "",
     extractedAt: agreement.pdfUploadedAt ?? "",
-    validatedAt: "2026-07-05",
-    validatedBy: "Admin",
-    validationNote:
-      "Overenskomsten er markeret som valideret af admin ud fra den uploadede overenskomst.",
+    validatedAt: "",
+    validatedBy: "",
+    validationNote: "Kræver manuel validering.",
     rules: [],
     testCases: [],
-  } satisfies AgreementValidationReport;
-}
-
-function enforceSupportedValidation(report: AgreementValidationReport) {
-  if (!isSupportedCollectiveAgreementId(report.agreementSlug)) return report;
-  return {
-    ...report,
-    status: "validated_for_calculation",
-    validatedForCalculation: true,
-    validatedAt: report.validatedAt || "2026-07-05",
-    validatedBy: report.validatedBy || "Admin",
-    validationNote:
-      report.validationNote ||
-      "Overenskomsten er markeret som valideret af admin ud fra den uploadede overenskomst.",
   } satisfies AgreementValidationReport;
 }
 
@@ -546,10 +531,7 @@ export function listAgreementValidationReports() {
   );
   const extraStoredReports = stored.filter((report) => !defaultSlugs.has(report.agreementSlug));
   const reportsBySlug = new Map(
-    [...mergedDefaults, ...extraStoredReports].map((report) => [
-      report.agreementSlug,
-      enforceSupportedValidation(report),
-    ]),
+    [...mergedDefaults, ...extraStoredReports].map((report) => [report.agreementSlug, report]),
   );
   collectiveAgreements.forEach((agreement) => {
     if (!reportsBySlug.has(agreement.id)) {
@@ -565,7 +547,7 @@ export function getAgreementValidationReport(agreementSlug: string) {
     (item) => item.agreementSlug === agreementSlug,
   );
   const agreement = getCollectiveAgreementById(agreementSlug);
-  if (report) return enforceSupportedValidation(report);
+  if (report) return report;
   if (!agreement) return undefined;
   const validatedFallback = validatedFallbackReport(agreementSlug);
   if (validatedFallback) return validatedFallback;
