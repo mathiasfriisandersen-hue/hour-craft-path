@@ -512,7 +512,7 @@ function OverviewSection({
           </label>
         </div>
       </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <div className={cn("mt-4 grid gap-3 sm:grid-cols-3", cards.length === 4 && "xl:grid-cols-4")}>
         {cards.map((card) => (
           <article
             key={card.label}

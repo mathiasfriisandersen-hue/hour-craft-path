@@ -3150,6 +3150,96 @@ type DemoWorkerSeed = {
   workForm: "weekend" | "holiday" | "overtime" | "night" | "evening" | "shift" | "normal";
 };
 
+type DemoInvoiceScenario = "now" | "soon" | "waiting" | "sent" | "draft";
+
+const PRESENTATION_DEMO_TIMESHEET_COUNT = 12;
+const PAYROLL_SENT_DEMO_INDEXES = new Set([3, 4, 5, 8]);
+const CURRENT_WEEK_DEMO_SHIFT_COUNTS = new Map([
+  [2, 2],
+  [9, 1],
+  [10, 1],
+  [11, 2],
+]);
+const CURRENT_WEEK_DEMO_ABSENCE_DAYS = new Map([
+  [2, 3],
+  [9, 1],
+  [10, 2],
+]);
+
+function demoInvoiceScenario(index: number): DemoInvoiceScenario {
+  if (index < 3) return "now";
+  if (index < 6) return "soon";
+  if (index < 9) return "waiting";
+  if (index < PRESENTATION_DEMO_TIMESHEET_COUNT) return "sent";
+  return "draft";
+}
+
+function demoTimesheetWeekStart(index: number, currentWeekStart: string): string {
+  if (CURRENT_WEEK_DEMO_SHIFT_COUNTS.has(index)) return currentWeekStart;
+  return addDaysToISODate(currentWeekStart, -21);
+}
+
+function demoProjectDates(index: number, currentWeekStart: string) {
+  const scenario = demoInvoiceScenario(index);
+  if (scenario === "now" || scenario === "sent") {
+    return {
+      startDate: addDaysToISODate(currentWeekStart, -28),
+      endDate: addDaysToISODate(currentWeekStart, -15),
+    };
+  }
+  if (scenario === "soon") {
+    return {
+      startDate: currentWeekStart,
+      endDate: addDaysToISODate(currentWeekStart, 11),
+    };
+  }
+  return {
+    startDate: addDaysToISODate(currentWeekStart, 7),
+    endDate: addDaysToISODate(currentWeekStart, 18),
+  };
+}
+
+function demoTimesheetStatus(index: number): Status {
+  const scenario = demoInvoiceScenario(index);
+  if (scenario === "draft") return "draft";
+  if (scenario === "now" || scenario === "sent") return "approved";
+  return "sent";
+}
+
+function presentationDemoDays(days: Timesheet["days"], index: number): Timesheet["days"] {
+  const plannedShiftCount = CURRENT_WEEK_DEMO_SHIFT_COUNTS.get(index);
+  const absenceDayIndex = CURRENT_WEEK_DEMO_ABSENCE_DAYS.get(index);
+
+  if (plannedShiftCount === undefined && absenceDayIndex === undefined) return days;
+
+  let retainedShifts = 0;
+  return days.map((day, dayIndex) => {
+    const isPlannedShift = Boolean(day.start && day.end) && retainedShifts < (plannedShiftCount ?? 0);
+    if (day.start && day.end && isPlannedShift) retainedShifts += 1;
+
+    const absence = dayIndex === absenceDayIndex ? "dayoff" : day.absence;
+    if (isPlannedShift) return { ...day, absence };
+
+    return {
+      ...day,
+      start: "",
+      end: "",
+      pause: 0,
+      pauseStart: "",
+      pauseEnd: "",
+      pause2Start: "",
+      pause2End: "",
+      dayWorkStart: "",
+      dayWorkEnd: "",
+      eveningWorkStart: "",
+      eveningWorkEnd: "",
+      nightWorkStart: "",
+      nightWorkEnd: "",
+      absence,
+    };
+  });
+}
+
 function demoWorkersSeed(): DemoWorkerSeed[] {
   return [
     {
@@ -3626,7 +3716,9 @@ function demoDayPlan(workForm: DemoWorkerSeed["workForm"], index: number): Creat
   };
 }
 
-function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timesheet {
+function createDemoTimesheet(worker: DemoWorkerSeed, currentWeekStart: string, index: number): Timesheet {
+  const weekStart = demoTimesheetWeekStart(index, currentWeekStart);
+  const projectDates = demoProjectDates(index, currentWeekStart);
   const projectId = `${worker.id}-project`;
   const projectName = `${worker.name} projekt`;
   const timesheet = createTimesheetForWorker({
@@ -3639,7 +3731,7 @@ function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timeshe
     companyId: worker.companyId,
     projectId,
     projectName,
-    projectEndDate: addDaysToISODate(weekStart, 28),
+    projectEndDate: projectDates.endDate,
     arbejdssted: worker.address,
     kontaktperson: worker.companyContactName,
     kontaktpersonPhone: worker.companyContactPhone,
@@ -3698,16 +3790,20 @@ function createDemoTimesheet(worker: DemoWorkerSeed, weekStart: string): Timeshe
   return normalizeTimesheet({
     ...timesheet,
     id: worker.id,
-    status: worker.ownerRole === "bruger2" ? "sent" : "approved",
+    status: demoTimesheetStatus(index),
+    invoiceSentDate:
+      demoInvoiceScenario(index) === "sent" ? TEST_DATA_INVOICE_SENT_DATE : "",
+    payrollSentDate: PAYROLL_SENT_DEMO_INDEXES.has(index) ? TEST_DATA_PAYROLL_SENT_DATE : "",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    days,
+    days: presentationDemoDays(days, index),
   });
 }
 
 function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Company[] {
   const byId = new Map<string, Company>();
-  for (const worker of workers) {
+  for (const [index, worker] of workers.entries()) {
+    const projectDates = demoProjectDates(index, weekStart);
     if (!byId.has(worker.companyId)) {
       byId.set(worker.companyId, {
         id: worker.companyId,
@@ -3730,8 +3826,8 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
       contactPhone: worker.companyContactPhone,
       contactEmail: worker.companyContactEmail,
       referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
-      startDate: weekStart,
-      endDate: addDaysToISODate(weekStart, 28),
+      startDate: projectDates.startDate,
+      endDate: projectDates.endDate,
       selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
       billingHourlyWage: Number(worker.hourlyWage) || 0,
       billingFactor: 0,
@@ -3793,7 +3889,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-const TEST_DATA_PREFIX = "testdata-2026-07-06-v6";
+const TEST_DATA_PREFIX = "testdata-2026-08-24-v7";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 export function rollingDemoDates(referenceDate: Date | string = new Date()) {
   const parsedReferenceDate =
@@ -4309,23 +4405,17 @@ function buildOwnerTestSeed(
 }
 
 function buildTestDataSeed(): { companies: Company[]; timesheets: Timesheet[] } {
-  const demoWeekStart = addDaysToISODate(TEST_DATA_CURRENT_WEEK_START, -7);
+  const demoWeekStart = TEST_DATA_CURRENT_WEEK_START;
   const demoWorkers = demoWorkersSeed();
-  const bruger1 = buildOwnerTestSeed("bruger", [3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2], 28, 0);
-  const bruger2 = buildOwnerTestSeed("bruger2", [3, 3, 3, 2, 2, 2, 2, 2, 2, 2], 22, 28);
 
   return {
-    companies: [
-      ...demoCompaniesForSeed(demoWeekStart, demoWorkers),
-      ...bruger1.companies,
-      ...bruger2.companies,
-    ],
-    timesheets: [
-      ...demoWorkers.map((worker) => createDemoTimesheet(worker, demoWeekStart)),
-      ...bruger1.timesheets,
-      ...bruger2.timesheets,
-    ],
+    companies: demoCompaniesForSeed(demoWeekStart, demoWorkers),
+    timesheets: demoWorkers.map((worker, index) => createDemoTimesheet(worker, demoWeekStart, index)),
   };
+}
+
+function isSupersededBulkTestDataId(id: string): boolean {
+  return /^testdata-\d{4}-\d{2}-\d{2}-v\d+-(?:bruger|bruger2)-(?:company|timesheet)-/u.test(id);
 }
 
 function testTimesheetMatchesSeed(existing: Timesheet | undefined, testTimesheet: Timesheet) {
@@ -4458,7 +4548,9 @@ function mergeTestDataSeed(
   const { companies: testCompanies, timesheets: testTimesheets } = buildTestDataSeed();
   const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
   const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
-  const refreshedExistingTimesheets = existingTimesheets.map(refreshLegacyDemoTimesheetDates);
+  const refreshedExistingTimesheets = existingTimesheets
+    .filter((timesheet) => !isSupersededBulkTestDataId(timesheet.id))
+    .map(refreshLegacyDemoTimesheetDates);
   const legacyProjectDates = new Map(
     refreshedExistingTimesheets
       .filter((timesheet) => LEGACY_DEMO_TIMESHEET_ID.test(timesheet.id) && timesheet.projectId)
@@ -4470,13 +4562,15 @@ function mergeTestDataSeed(
         },
       ]),
   );
-  const refreshedExistingCompanies = existingCompanies.map((company) => ({
-    ...company,
-    projects: company.projects.map((project) => {
-      const dates = legacyProjectDates.get(project.id);
-      return dates ? { ...project, ...dates } : project;
-    }),
-  }));
+  const refreshedExistingCompanies = existingCompanies
+    .filter((company) => !isSupersededBulkTestDataId(company.id))
+    .map((company) => ({
+      ...company,
+      projects: company.projects.map((project) => {
+        const dates = legacyProjectDates.get(project.id);
+        return dates ? { ...project, ...dates } : project;
+      }),
+    }));
 
   const companiesById = new Map(
     refreshedExistingCompanies

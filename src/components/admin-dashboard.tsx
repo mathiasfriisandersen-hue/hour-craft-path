@@ -397,21 +397,21 @@ export function AdminDashboard() {
             <WeekMetricCard
               label="Planlagte vagter"
               value={weekStats.plannedShifts}
-              meta="+8 siden sidste uge"
+              meta="Denne uge"
               tone="blue"
               bars={[42, 70, 88, 76, 58, 62, 72]}
             />
             <WeekMetricCard
               label="Godkendelser"
               value={weekStats.approvals}
-              meta="+6 siden sidste uge"
+              meta="Denne uge"
               tone="green"
               bars={[40, 78, 66, 62, 70, 78, 72]}
             />
             <WeekMetricCard
               label="Fravær / aflyste vagter"
               value={weekStats.absence}
-              meta="-2 siden sidste uge"
+              meta="Denne uge"
               tone="red"
               bars={[0, 38, 60, 48, 34, 22, 10]}
             />
@@ -419,7 +419,7 @@ export function AdminDashboard() {
         </section>
 
         <div className="grid gap-5 xl:grid-cols-2">
-          <OverviewBlock title="Fakturaoverblik">
+          <OverviewBlock title="Fakturaoverblik" columns={4}>
             <OverviewStatusCard
               label="Skal snart håndteres"
               value={invoiceSoonRows.length}
@@ -446,7 +446,7 @@ export function AdminDashboard() {
             />
           </OverviewBlock>
 
-          <OverviewBlock title="Lønoverblik">
+          <OverviewBlock title="Lønoverblik" columns={3}>
             <OverviewStatusCard
               label="Klar til bogholderi"
               value={payrollReadyRows.length}
@@ -772,11 +772,21 @@ function WeekMetricCard({
   );
 }
 
-function OverviewBlock({ title, children }: { title: string; children: ReactNode }) {
+function OverviewBlock({
+  title,
+  columns,
+  children,
+}: {
+  title: string;
+  columns: 3 | 4;
+  children: ReactNode;
+}) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="mb-4 text-lg font-semibold text-slate-950">{title}</h2>
-      <div className="grid gap-3 md:grid-cols-3">{children}</div>
+      <div className={cn("grid gap-3 md:grid-cols-3", columns === 4 && "xl:grid-cols-4")}>
+        {children}
+      </div>
     </section>
   );
 }
@@ -932,7 +942,7 @@ function dashboardPayrollTone(timesheet: Timesheet, periodEnd: string): Dashboar
 }
 
 function getWeekStats(timesheets: Timesheet[]) {
-  const currentWeek = weekNumber(new Date().toISOString().slice(0, 10));
+  const currentWeek = weekNumber(localISODate(new Date()));
   const thisWeek = timesheets.filter((item) => weekNumber(item.weekStart) === currentWeek);
   return {
     plannedShifts: thisWeek.reduce(
