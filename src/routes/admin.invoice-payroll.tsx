@@ -902,7 +902,7 @@ function InvoiceCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
         />
       </dl>
 
-      <ExportGateNotice blockers={row.exportBlockers} compact />
+      <ExportGateNotice blockers={visibleExportBlockers(row)} compact />
 
       <div className="mt-3 flex justify-end">
         <Button type="button" variant="outline" size="sm" onClick={onPreview}>
@@ -945,7 +945,7 @@ function PayrollCaseCard({ row, onPreview }: { row: WorkContext; onPreview: () =
           Preview
         </Button>
       </div>
-      <ExportGateNotice blockers={row.exportBlockers} compact />
+      <ExportGateNotice blockers={visibleExportBlockers(row)} compact />
     </article>
   );
 }
@@ -1313,6 +1313,10 @@ function ExportGateNotice({
   );
 }
 
+function visibleExportBlockers(row: WorkContext): string[] {
+  return row.usesPresentationFinancials ? [] : row.exportBlockers;
+}
+
 function payrollFinancials(row: WorkContext) {
   const projectName = [row.company?.name || row.timesheet.brugervirksomhed, row.project?.name]
     .filter(Boolean)
@@ -1389,7 +1393,7 @@ function PayrollPreview({
           </div>
         </div>
 
-        <ExportGateNotice blockers={row.exportBlockers} />
+        <ExportGateNotice blockers={visibleExportBlockers(row)} />
 
         <dl className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
           <PreviewRow label="Vikar" value={row.timesheet.vikar || "—"} />
@@ -1517,7 +1521,7 @@ function InvoicePreview({
             </Button>
           </div>
         </div>
-        <ExportGateNotice blockers={row.exportBlockers} />
+        <ExportGateNotice blockers={visibleExportBlockers(row)} />
         <div className="grid gap-4 text-sm lg:grid-cols-2">
           <div className="rounded-lg border p-4">
             <h3 className="mb-3 font-medium">Sælger</h3>
