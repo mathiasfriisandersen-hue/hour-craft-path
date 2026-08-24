@@ -68,6 +68,7 @@ type WorkContext = {
   payrollBasisHours: number;
   payrollApprovalStatus: string;
   billingMultiplier: number;
+  usesPresentationFinancials: boolean;
   invoiceBaseExVat: number;
   invoiceExVat: number;
   vat: number;
@@ -1015,6 +1016,18 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
   const isApprovedForPayroll = isTimesheetApprovedForPayroll(timesheet, payrollPeriod.end);
   const payrollBasisHours = isApprovedForPayroll ? approvedHours : 0;
   const billingMultiplier = project?.billingFactor ?? 0;
+  const usesPresentationFinancials =
+    import.meta.env.VITE_ENABLE_TEST_DATA_SEED === "true" &&
+    timesheet.id.startsWith("demo-timesheet-") &&
+    project?.billingHourlyWage !== undefined &&
+    project.billingHourlyWage >= 180 &&
+    project.billingHourlyWage <= 200 &&
+    billingMultiplier >= 1.65 &&
+    billingMultiplier <= 1.8;
+  const invoiceExVat = usesPresentationFinancials
+    ? roundCurrency(approvedHours * project.billingHourlyWage * billingMultiplier)
+    : Number.NaN;
+  const vat = Number.isFinite(invoiceExVat) ? roundCurrency(invoiceExVat * 0.25) : Number.NaN;
   const invoiceBaseHours = approvedHours;
   const payrollDeadline = timesheet.payrollDeadline || fallbackPayrollDeadline;
   const bookingPeriod = resolveInvoiceBookingPeriod(timesheet, companies);
@@ -1045,10 +1058,11 @@ function buildWorkContext(timesheet: Timesheet, companies: Company[]): WorkConte
     payrollBasisHours,
     payrollApprovalStatus: payrollApprovalStatus(timesheet, payrollPeriod.end),
     billingMultiplier,
-    invoiceBaseExVat: Number.NaN,
-    invoiceExVat: Number.NaN,
-    vat: Number.NaN,
-    invoiceIncVat: Number.NaN,
+    usesPresentationFinancials,
+    invoiceBaseExVat: invoiceExVat,
+    invoiceExVat,
+    vat,
+    invoiceIncVat: Number.isFinite(invoiceExVat) ? roundCurrency(invoiceExVat + vat) : Number.NaN,
     invoiceTone,
     payrollTone: payrollTone(timesheet, payrollPeriod.end),
   };
@@ -1102,9 +1116,14 @@ function toneRank(tone: StatusTone) {
 }
 
 function formatMultiplier(row: WorkContext) {
+  if (row.usesPresentationFinancials) return formatDecimal(row.billingMultiplier);
   return row.billingMultiplier > 0
     ? `Konfigureret faktor ${formatDecimal(row.billingMultiplier)} · økonomisk beregning blokeret`
     : "Økonomisk beregning blokeret";
+}
+
+function roundCurrency(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
 function invoiceDateForTimesheet(weekStart: string): string {
@@ -1560,9 +1579,9 @@ function InvoicePreview({
                   <td className="border-b px-3 py-3 text-right">
                     {row.invoiceBaseHours.toFixed(2)} t
                   </td>
-                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
-                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
-                  <td className="border-b px-3 py-3 text-right">{BLOCKED_FINANCIAL_AMOUNT}</td>
+                  <td className="border-b px-3 py-3 text-right">{formatPresentationHourlyWage(row)}</td>
+                  <td className="border-b px-3 py-3 text-right">{formatPresentationFactor(row)}</td>
+                  <td className="border-b px-3 py-3 text-right">{formatPresentationUnitPrice(row)}</td>
                   <td className="border-b px-3 py-3 text-right">
                     {formatDkk(row.invoiceBaseExVat)}
                   </td>
@@ -1579,6 +1598,24 @@ function InvoicePreview({
       </section>
     </div>
   );
+}
+
+function formatPresentationHourlyWage(row: WorkContext): string {
+  return row.usesPresentationFinancials
+    ? formatDkk(row.project?.billingHourlyWage ?? Number.NaN)
+    : BLOCKED_FINANCIAL_AMOUNT;
+}
+
+function formatPresentationFactor(row: WorkContext): string {
+  return row.usesPresentationFinancials
+    ? formatDecimal(row.billingMultiplier)
+    : BLOCKED_FINANCIAL_AMOUNT;
+}
+
+function formatPresentationUnitPrice(row: WorkContext): string {
+  return row.usesPresentationFinancials
+    ? formatDkk((row.project?.billingHourlyWage ?? Number.NaN) * row.billingMultiplier)
+    : BLOCKED_FINANCIAL_AMOUNT;
 }
 
 function PreviewRow({

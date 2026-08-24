@@ -3738,7 +3738,7 @@ function createDemoTimesheet(worker: DemoWorkerSeed, currentWeekStart: string, i
     kontaktpersonEmail: worker.companyContactEmail,
     referenceNo: `REF-${worker.id.slice(-4).toUpperCase()}`,
     selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
-    hourlyWage: worker.hourlyWage,
+    hourlyWage: presentationDemoHourlyWage(index),
     defaultStart:
       worker.workForm === "night" ? "22:00" : worker.workForm === "evening" ? "14:00" : "07:00",
     defaultEnd:
@@ -3800,6 +3800,14 @@ function createDemoTimesheet(worker: DemoWorkerSeed, currentWeekStart: string, i
   });
 }
 
+function presentationDemoHourlyWage(index: number): number {
+  return [180, 184, 188, 192, 196, 200][index % 6];
+}
+
+function presentationDemoBillingFactor(index: number): number {
+  return [1.65, 1.68, 1.71, 1.74, 1.77, 1.8][index % 6];
+}
+
 function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Company[] {
   const byId = new Map<string, Company>();
   for (const [index, worker] of workers.entries()) {
@@ -3829,8 +3837,8 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
       startDate: projectDates.startDate,
       endDate: projectDates.endDate,
       selectedAgreementId: normalizeCollectiveAgreementId(worker.agreementId),
-      billingHourlyWage: Number(worker.hourlyWage) || 0,
-      billingFactor: 0,
+      billingHourlyWage: presentationDemoHourlyWage(index),
+      billingFactor: presentationDemoBillingFactor(index),
       tradeSkills: [worker.tradeSkill],
       competencies: worker.competencies,
       workerEmails: [worker.name],
@@ -3889,7 +3897,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-const TEST_DATA_PREFIX = "testdata-2026-08-24-v9";
+const TEST_DATA_PREFIX = "testdata-2026-08-24-v10";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 export function rollingDemoDates(referenceDate: Date | string = new Date()) {
   const parsedReferenceDate =
