@@ -215,7 +215,9 @@ function InvoicePayrollPage() {
     .sort((a, b) =>
       (b.timesheet.invoiceSentDate ?? "").localeCompare(a.timesheet.invoiceSentDate ?? ""),
     );
-  const invoiceSentRows = statusFilter === "invoice-sent" ? allInvoiceSentRows : [];
+  const invoiceSentRows = allInvoiceSentRows.filter((row) =>
+    statusFilterMatches(statusFilter, "invoice-sent"),
+  );
   const invoiceNowRows = invoiceRows.filter(
     (row) => statusFilterMatches(statusFilter, "invoice-now") && row.invoiceTone === "red",
   );
@@ -401,7 +403,7 @@ function InvoicePayrollPage() {
                 </Button>
               }
             />
-            <div className="grid gap-4 p-4 xl:grid-cols-3">
+            <div className="grid gap-4 p-4 xl:grid-cols-4">
               {statusFilterMatches(statusFilter, "invoice-now") && (
                 <StatusColumn
                   title="Skal håndteres nu"
@@ -450,7 +452,7 @@ function InvoicePayrollPage() {
                   ))}
                 </StatusColumn>
               )}
-              {statusFilter === "invoice-sent" && (
+              {statusFilterMatches(statusFilter, "invoice-sent") && (
                 <StatusColumn
                   title="Faktura sendt"
                   count={invoiceSentRows.length}
