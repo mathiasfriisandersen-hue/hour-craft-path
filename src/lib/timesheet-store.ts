@@ -3889,7 +3889,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-const TEST_DATA_PREFIX = "testdata-2026-08-24-v7";
+const TEST_DATA_PREFIX = "testdata-2026-08-24-v8";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 export function rollingDemoDates(referenceDate: Date | string = new Date()) {
   const parsedReferenceDate =
@@ -4549,7 +4549,10 @@ function mergeTestDataSeed(
   const deletedCompanyIds = readDeletedIds(DELETED_COMPANY_IDS_KEY);
   const deletedTimesheetIds = readDeletedIds(DELETED_TIMESHEET_IDS_KEY);
   const refreshedExistingTimesheets = existingTimesheets
-    .filter((timesheet) => !isSupersededBulkTestDataId(timesheet.id))
+    .filter(
+      (timesheet) =>
+        !isSupersededBulkTestDataId(timesheet.id) && !LEGACY_DEMO_TIMESHEET_ID.test(timesheet.id),
+    )
     .map(refreshLegacyDemoTimesheetDates);
   const legacyProjectDates = new Map(
     refreshedExistingTimesheets
