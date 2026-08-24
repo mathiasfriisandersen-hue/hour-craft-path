@@ -481,6 +481,15 @@ function responseError(status: number, payload: SessionEnvelope): SessionApiErro
   if (code === "invalid_demo_access_code") {
     return new SessionApiError(code, "Koden er forkert.");
   }
+  if (code === "assistant_credits_required") {
+    return new SessionApiError(code, "Admin-assistenten mangler API-kredit på OpenAI-projektet.");
+  }
+  if (code === "assistant_unavailable") {
+    return new SessionApiError(
+      code,
+      "Admin-assistenten kunne ikke svare lige nu. Prøv igen senere.",
+    );
+  }
   if (status === 401 || status === 403) {
     return new SessionApiError(code, "Sessionen kunne ikke verificeres.");
   }

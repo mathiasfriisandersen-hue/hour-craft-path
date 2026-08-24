@@ -452,6 +452,20 @@ async function answerAdminAssistant(
     payload = {};
   }
   if (!upstream.ok) {
+    const upstreamCode =
+      isPlainObject(payload) &&
+      isPlainObject(payload.error) &&
+      typeof payload.error.code === "string"
+        ? payload.error.code
+        : "unknown";
+    console.error("admin_assistant_upstream_error", upstream.status, upstreamCode);
+    if (upstreamCode === "credit_balance_exhausted") {
+      throw new ApiError(
+        "assistant_credits_required",
+        "Admin-assistenten mangler API-kredit på OpenAI-projektet.",
+        503,
+      );
+    }
     throw new ApiError(
       "assistant_unavailable",
       "Admin-assistenten kunne ikke svare lige nu. Prøv igen senere.",
