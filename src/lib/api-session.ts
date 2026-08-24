@@ -475,12 +475,6 @@ function responseError(status: number, payload: SessionEnvelope): SessionApiErro
       ? payload.error.code
       : "session_rejected";
 
-  if (code === "auth_not_configured" || code === "demo_not_configured" || status === 503) {
-    return new SessionApiError(code, "Login-tjenesten er ikke konfigureret.");
-  }
-  if (code === "invalid_demo_access_code") {
-    return new SessionApiError(code, "Koden er forkert.");
-  }
   if (code === "assistant_credits_required") {
     return new SessionApiError(code, "Admin-assistenten mangler API-kredit på OpenAI-projektet.");
   }
@@ -489,6 +483,12 @@ function responseError(status: number, payload: SessionEnvelope): SessionApiErro
       code,
       "Admin-assistenten kunne ikke svare lige nu. Prøv igen senere.",
     );
+  }
+  if (code === "auth_not_configured" || code === "demo_not_configured" || status === 503) {
+    return new SessionApiError(code, "Login-tjenesten er ikke konfigureret.");
+  }
+  if (code === "invalid_demo_access_code") {
+    return new SessionApiError(code, "Koden er forkert.");
   }
   if (status === 401 || status === 403) {
     return new SessionApiError(code, "Sessionen kunne ikke verificeres.");
