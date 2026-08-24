@@ -35,6 +35,7 @@ import { Route as AdminInvoicePayrollRouteImport } from './routes/admin.invoice-
 import { Route as AdminCreateWorkerRouteImport } from './routes/admin.create-worker'
 import { Route as AdminCompaniesRouteImport } from './routes/admin.companies'
 import { Route as AdminCalendarRouteImport } from './routes/admin.calendar'
+import { Route as AdminAssistantRouteImport } from './routes/admin.assistant'
 import { Route as AdminIdRouteImport } from './routes/admin.$id'
 import { Route as AdminUsersIdRouteImport } from './routes/admin.users.$id'
 
@@ -168,6 +169,11 @@ const AdminCalendarRoute = AdminCalendarRouteImport.update({
   path: '/admin/calendar',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminAssistantRoute = AdminAssistantRouteImport.update({
+  id: '/admin/assistant',
+  path: '/admin/assistant',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminIdRoute = AdminIdRouteImport.update({
   id: '/admin/$id',
   path: '/admin/$id',
@@ -182,6 +188,7 @@ const AdminUsersIdRoute = AdminUsersIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/assistant': typeof AdminAssistantRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
@@ -212,6 +219,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/assistant': typeof AdminAssistantRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin/$id': typeof AdminIdRoute
+  '/admin/assistant': typeof AdminAssistantRoute
   '/admin/calendar': typeof AdminCalendarRoute
   '/admin/companies': typeof AdminCompaniesRoute
   '/admin/create-worker': typeof AdminCreateWorkerRoute
@@ -275,6 +284,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin/$id'
+    | '/admin/assistant'
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
@@ -305,6 +315,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin/$id'
+    | '/admin/assistant'
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
@@ -335,6 +346,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/admin/$id'
+    | '/admin/assistant'
     | '/admin/calendar'
     | '/admin/companies'
     | '/admin/create-worker'
@@ -366,6 +378,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminIdRoute: typeof AdminIdRoute
+  AdminAssistantRoute: typeof AdminAssistantRoute
   AdminCalendarRoute: typeof AdminCalendarRoute
   AdminCompaniesRoute: typeof AdminCompaniesRoute
   AdminCreateWorkerRoute: typeof AdminCreateWorkerRoute
@@ -577,6 +590,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminCalendarRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/assistant': {
+      id: '/admin/assistant'
+      path: '/admin/assistant'
+      fullPath: '/admin/assistant'
+      preLoaderRoute: typeof AdminAssistantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/$id': {
       id: '/admin/$id'
       path: '/admin/$id'
@@ -609,6 +629,7 @@ const AdminUsersRouteWithChildren = AdminUsersRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminIdRoute: AdminIdRoute,
+  AdminAssistantRoute: AdminAssistantRoute,
   AdminCalendarRoute: AdminCalendarRoute,
   AdminCompaniesRoute: AdminCompaniesRoute,
   AdminCreateWorkerRoute: AdminCreateWorkerRoute,

@@ -22,9 +22,6 @@ import { ROLE_HOME, ROLE_LABEL, useAuth, type Role } from "@/lib/auth";
 import { LoginScreen } from "@/components/login-screen";
 import subzLogo from "@/assets/sub-z-logo.png";
 
-const TIMESHEET_ADMIN_ASSISTANT_URL =
-  "https://chatgpt.com/g/g-6a4f67db50e0819192cda0577945cec7-sub-z-timesheet-admin";
-
 type DashboardShellOptions = {
   title: string;
   subtitle: string;
@@ -85,7 +82,7 @@ export function AppShell({
           { to: "/admin/users", label: "Brugere" },
           { to: "/admin/statistics", label: "Statistik" },
           { to: "/admin/invoice-payroll", label: "Faktura & løn" },
-          { href: TIMESHEET_ADMIN_ASSISTANT_URL, label: "Admin assistent" },
+          { to: "/admin/assistant", label: "Admin assistent" },
         ]
       : [
           { to: adminBase, label: "Timesedler" },

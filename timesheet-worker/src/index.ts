@@ -21,6 +21,7 @@ type Env = {
   SUPABASE_JWKS_URL?: string;
   DEMO_SESSION_SECRET?: string;
   DEMO_ACCESS_CODE?: string;
+  OPENAI_API_KEY?: string;
 } & AuthEnvironment;
 
 type D1Database = {
@@ -100,6 +101,19 @@ type Timesheet = {
   rejectionComment?: string;
   createdAt?: string;
   updatedAt?: string;
+};
+
+type AdminAssistantTimesheet = {
+  id: string;
+  worker: string;
+  company: string;
+  project: string;
+  weekStart: string;
+  status: string;
+  totalHours: number;
+  absence: string;
+  invoiceSent: boolean;
+  payrollSent: boolean;
 };
 
 type TimesheetRow = {
@@ -264,6 +278,10 @@ export default {
       if (request.method === "GET" && url.pathname === "/api/session") {
         return jsonResponse({ ok: true, session: publicSession(session) }, 200, cors);
       }
+      if (request.method === "POST" && url.pathname === "/api/admin-assistant") {
+        requireRole(session, ["konsulent", "organisationsadministrator"]);
+        return await answerAdminAssistant(request, env, session, cors);
+      }
       if (session.demo) {
         return demoResponse(request, url, session, cors);
       }
@@ -389,6 +407,159 @@ function privacyPolicyResponse(headOnly = false): Response {
       "cache-control": "public, max-age=600",
     },
   });
+}
+
+async function answerAdminAssistant(
+  request: Request,
+  env: Env,
+  session: AuthSession,
+  cors: HeadersInit,
+): Promise<Response> {
+  if (!env.OPENAI_API_KEY) {
+    throw new ApiError(
+      "assistant_not_configured",
+      "Admin-assistenten er ikke konfigureret på serveren endnu.",
+      503,
+    );
+  }
+
+  const body = await readJson(request);
+  const message = assistantMessage(body);
+  const timesheets = session.demo
+    ? assistantTimesheetsFromRequest(body)
+    : await assistantTimesheetsFromDatabase(env, session);
+  const upstream = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-5-mini",
+      store: false,
+      max_output_tokens: 500,
+      reasoning: { effort: "minimal" },
+      instructions:
+        "Du er Hour Craft Path's admin-assistent. Svar på dansk og kort. Brug kun det medsendte timeseddelgrundlag. Forklar status, timer, fravær og administrative næste skridt. Du må aldrig ændre, godkende, sende, arkivere eller slette data. Du må ikke fastsætte løn, moms, overenskomstsatser eller juridiske vurderinger; markér sådanne spørgsmål til manuel validering.",
+      input: `Spørgsmål: ${message}\n\nTimeseddelgrundlag:\n${JSON.stringify(timesheets)}`,
+    }),
+  });
+
+  let payload: unknown;
+  try {
+    payload = await upstream.json();
+  } catch {
+    payload = {};
+  }
+  if (!upstream.ok) {
+    throw new ApiError(
+      "assistant_unavailable",
+      "Admin-assistenten kunne ikke svare lige nu. Prøv igen senere.",
+      502,
+    );
+  }
+  const answer = responseOutputText(payload);
+  if (!answer) {
+    throw new ApiError(
+      "assistant_invalid_response",
+      "Admin-assistenten returnerede ikke et brugbart svar.",
+      502,
+    );
+  }
+  return jsonResponse({ ok: true, answer }, 200, cors);
+}
+
+function assistantMessage(body: unknown): string {
+  const message = isPlainObject(body) ? body.message : undefined;
+  if (typeof message !== "string" || !message.trim() || message.length > 1_200) {
+    throw new ApiError("invalid_assistant_message", "Skriv et spørgsmål på højst 1.200 tegn.", 400);
+  }
+  return message.trim();
+}
+
+function assistantTimesheetsFromRequest(body: unknown): AdminAssistantTimesheet[] {
+  const timesheets = isPlainObject(body) ? body.timesheets : undefined;
+  if (!Array.isArray(timesheets) || timesheets.length > 24) {
+    throw new ApiError(
+      "invalid_assistant_context",
+      "Assistenten kan højst modtage 24 timesedler.",
+      400,
+    );
+  }
+  return timesheets.map((timesheet) => assistantTimesheetFromUnknown(timesheet));
+}
+
+async function assistantTimesheetsFromDatabase(
+  env: Env,
+  session: AuthSession,
+): Promise<AdminAssistantTimesheet[]> {
+  const query = allTimesheetsQuery(session);
+  const result = await env.TIMESHEET_DB.prepare(query.sql)
+    .bind(...query.params)
+    .all<TimesheetRow>();
+  return (result.results ?? [])
+    .map(parseStoredTimesheet)
+    .filter((timesheet) => !timesheet.archived)
+    .slice(0, 24)
+    .map(toAdminAssistantTimesheet);
+}
+
+function assistantTimesheetFromUnknown(value: unknown): AdminAssistantTimesheet {
+  if (!isPlainObject(value)) {
+    throw new ApiError("invalid_assistant_context", "Timeseddelgrundlaget er ugyldigt.", 400);
+  }
+  return {
+    id: assistantText(value.id, 160),
+    worker: assistantText(value.worker, 160),
+    company: assistantText(value.company, 160),
+    project: assistantText(value.project, 160),
+    weekStart: assistantText(value.weekStart, 32),
+    status: assistantText(value.status, 32),
+    totalHours: assistantNumber(value.totalHours),
+    absence: assistantText(value.absence, 32),
+    invoiceSent: value.invoiceSent === true,
+    payrollSent: value.payrollSent === true,
+  };
+}
+
+function toAdminAssistantTimesheet(timesheet: Timesheet): AdminAssistantTimesheet {
+  return {
+    id: timesheet.id,
+    worker: timesheet.vikar ?? "Ukendt vikar",
+    company: timesheet.brugervirksomhed ?? "Ukendt virksomhed",
+    project: timesheet.projectName ?? "",
+    weekStart: timesheet.weekStart ?? "",
+    status: timesheet.status ?? "draft",
+    totalHours: totalHours(timesheet.days),
+    absence: hasSickLeave(timesheet.days) ? "registreret" : "ingen",
+    invoiceSent: Boolean(timesheet.invoiceSentDate),
+    payrollSent: Boolean(timesheet.payrollSentDate),
+  };
+}
+
+function assistantText(value: unknown, limit: number): string {
+  return typeof value === "string" ? value.trim().slice(0, limit) : "";
+}
+
+function assistantNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.round(value * 100) / 100
+    : 0;
+}
+
+function responseOutputText(payload: unknown): string {
+  if (!isPlainObject(payload) || !Array.isArray(payload.output)) return "";
+  return payload.output
+    .flatMap((item) => (isPlainObject(item) && Array.isArray(item.content) ? item.content : []))
+    .map((part) => (isPlainObject(part) && part.type === "output_text" ? part.text : ""))
+    .filter((text): text is string => typeof text === "string")
+    .join("\n")
+    .trim()
+    .slice(0, 8_000);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function publicSession(session: AuthSession): Record<string, unknown> {

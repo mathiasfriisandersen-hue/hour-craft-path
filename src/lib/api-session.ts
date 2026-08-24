@@ -61,6 +61,19 @@ export type ApiCalculationSnapshot = {
   invoiceTotalOre: number | null;
 };
 
+export type AdminAssistantTimesheetContext = {
+  id: string;
+  worker: string;
+  company: string;
+  project: string;
+  weekStart: string;
+  status: string;
+  totalHours: number;
+  absence: string;
+  invoiceSent: boolean;
+  payrollSent: boolean;
+};
+
 type ApiConfig = {
   timesheetApiUrl: string;
 };
@@ -105,6 +118,54 @@ export async function getVerifiedSession(): Promise<ApiSession> {
   const session = await requestVerifiedSession(inMemoryBearerToken);
   inMemoryVerifiedSession = session;
   return session;
+}
+
+export async function askAdminAssistant(
+  message: string,
+  timesheets: AdminAssistantTimesheetContext[],
+): Promise<string> {
+  const trimmedMessage = message.trim();
+  if (!trimmedMessage || trimmedMessage.length > 1_200) {
+    throw new SessionApiError(
+      "invalid_assistant_message",
+      "Skriv et spørgsmål på højst 1.200 tegn.",
+    );
+  }
+  if (!inMemoryBearerToken) {
+    throw new SessionApiError(
+      "assistant_session_required",
+      "Log ind igen for at bruge assistenten.",
+    );
+  }
+
+  const apiUrl = await getApiUrl();
+  const response = await safeFetch(`${apiUrl}/api/admin-assistant`, {
+    method: "POST",
+    credentials: "omit",
+    cache: "no-store",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      authorization: `Bearer ${inMemoryBearerToken}`,
+    },
+    body: JSON.stringify({ message: trimmedMessage, timesheets: timesheets.slice(0, 24) }),
+  });
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    throw responseError(response.status, isRecord(payload) ? (payload as SessionEnvelope) : {});
+  }
+  if (!isRecord(payload) || typeof payload.answer !== "string" || !payload.answer.trim()) {
+    throw new SessionApiError(
+      "invalid_assistant_response",
+      "Admin-assistenten returnerede ikke et brugbart svar.",
+    );
+  }
+  return payload.answer.trim();
 }
 
 export async function listVerifiedAgreementCatalog(): Promise<ApiAgreementCatalogEntry[]> {
