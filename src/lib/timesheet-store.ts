@@ -3889,7 +3889,7 @@ function demoCompaniesForSeed(weekStart: string, workers: DemoWorkerSeed[]): Com
   return [...byId.values()].map(normalizeCompany);
 }
 
-const TEST_DATA_PREFIX = "testdata-2026-08-24-v8";
+const TEST_DATA_PREFIX = "testdata-2026-08-24-v9";
 const TEST_DATA_SEED_KEY = "timesheet-testdata-seed-version-v1";
 export function rollingDemoDates(referenceDate: Date | string = new Date()) {
   const parsedReferenceDate =
@@ -4648,19 +4648,19 @@ function mergeTestDataSeed(
 export function seedIfEmpty(): void {
   const enableLocalTestDataSeed = import.meta.env.VITE_ENABLE_TEST_DATA_SEED === "true";
   if (!enableLocalTestDataSeed) return;
-  const existingTimesheets = readTimesheets();
-  const existingCompanies = listCompanies();
   const hasSeededCurrentVersion =
     storageForKey(TEST_DATA_SEED_KEY)?.getItem(TEST_DATA_SEED_KEY) === TEST_DATA_SEED_VERSION;
 
-  if (hasSeededCurrentVersion && hasCurrentTestData(existingCompanies, existingTimesheets)) {
+  if (hasSeededCurrentVersion && hasCurrentTestData(listCompanies(), readTimesheets())) {
     return;
   }
 
-  const { companies, timesheets } = mergeTestDataSeed(existingCompanies, existingTimesheets);
+  const { companies, timesheets } = buildTestDataSeed();
 
   setStorageItem(TIMESHEET_KEY, JSON.stringify(timesheets));
   setStorageItem(COMPANY_KEY, JSON.stringify(companies));
+  removeStorageItem(DELETED_TIMESHEET_IDS_KEY);
+  removeStorageItem(DELETED_COMPANY_IDS_KEY);
   setStorageItem(TEST_DATA_SEED_KEY, TEST_DATA_SEED_VERSION);
   markLocalUpdated();
   emit();
