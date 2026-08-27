@@ -70,8 +70,8 @@ export type AdminAssistantTimesheetContext = {
   status: string;
   totalHours: number;
   absence: string;
-  invoiceSent: boolean;
-  payrollSent: boolean;
+  fakturaStatus: string;
+  lønStatus: string;
 };
 
 type ApiConfig = {

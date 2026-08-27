@@ -113,8 +113,8 @@ type AdminAssistantTimesheet = {
   status: string;
   totalHours: number;
   absence: string;
-  invoiceSent: boolean;
-  payrollSent: boolean;
+  fakturaStatus: string;
+  lønStatus: string;
 };
 
 type TimesheetRow = {
@@ -441,7 +441,7 @@ async function answerAdminAssistant(
       max_output_tokens: 500,
       reasoning: { effort: "minimal" },
       instructions:
-        "Du er Hour Craft Path's admin-assistent. Svar på dansk og kort. Brug kun det medsendte timeseddelgrundlag. Forklar status, timer, fravær og administrative næste skridt. Du må aldrig ændre, godkende, sende, arkivere eller slette data. Du må ikke fastsætte løn, moms, overenskomstsatser eller juridiske vurderinger; markér sådanne spørgsmål til manuel validering.",
+        "Du er Hour Craft Path's admin-assistent. Svar på dansk og kort. Brug kun det medsendte timeseddelgrundlag. Forklar status, timer, fravær og administrative næste skridt i klart hverdagssprog. Brug aldrig tekniske feltnavne, kodeværdier eller true/false i svaret. Skriv for eksempel 'Faktura sendt' eller 'Faktura ikke sendt' og 'Løn sendt til bogholderi' eller 'Løn ikke sendt til bogholderi'. Brug 'godkendt', 'sendt til godkendelse', 'afvist' og 'kladde' i stedet for engelske statuskoder. Identificér en timeseddel med vikar, virksomhed og projekt frem for intern ID, medmindre brugeren specifikt beder om ID'et. Du må aldrig ændre, godkende, sende, arkivere eller slette data. Du må ikke fastsætte løn, moms, overenskomstsatser eller juridiske vurderinger; markér sådanne spørgsmål til manuel validering.",
       input: `Spørgsmål: ${message}\n\nTimeseddelgrundlag:\n${JSON.stringify(timesheets)}`,
     }),
   });
@@ -535,8 +535,8 @@ function assistantTimesheetFromUnknown(value: unknown): AdminAssistantTimesheet 
     status: assistantText(value.status, 32),
     totalHours: assistantNumber(value.totalHours),
     absence: assistantText(value.absence, 32),
-    invoiceSent: value.invoiceSent === true,
-    payrollSent: value.payrollSent === true,
+    fakturaStatus: assistantText(value.fakturaStatus, 80),
+    lønStatus: assistantText(value.lønStatus, 80),
   };
 }
 
@@ -547,12 +547,21 @@ function toAdminAssistantTimesheet(timesheet: Timesheet): AdminAssistantTimeshee
     company: timesheet.brugervirksomhed ?? "Ukendt virksomhed",
     project: timesheet.projectName ?? "",
     weekStart: timesheet.weekStart ?? "",
-    status: timesheet.status ?? "draft",
+    status: assistantStatusLabel(timesheet.status),
     totalHours: totalHours(timesheet.days),
     absence: hasSickLeave(timesheet.days) ? "registreret" : "ingen",
-    invoiceSent: Boolean(timesheet.invoiceSentDate),
-    payrollSent: Boolean(timesheet.payrollSentDate),
+    fakturaStatus: timesheet.invoiceSentDate ? "Faktura sendt" : "Faktura ikke sendt",
+    lønStatus: timesheet.payrollSentDate
+      ? "Løn sendt til bogholderi"
+      : "Løn ikke sendt til bogholderi",
   };
+}
+
+function assistantStatusLabel(status?: Status): string {
+  if (status === "sent") return "Sendt til godkendelse";
+  if (status === "approved") return "Godkendt";
+  if (status === "rejected") return "Afvist";
+  return "Kladde";
 }
 
 function assistantText(value: unknown, limit: number): string {

@@ -5,7 +5,7 @@ import { AppShell, InfoBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { askAdminAssistant, safeSessionErrorMessage } from "@/lib/api-session";
-import { totalHours } from "@/lib/timesheet-store";
+import { STATUS_LABEL, totalHours } from "@/lib/timesheet-store";
 import { useTimesheets } from "@/lib/use-timesheets";
 
 export const Route = createFileRoute("/admin/assistant")({
@@ -47,13 +47,15 @@ function AdminAssistantPage() {
           company: timesheet.brugervirksomhed || "Ukendt virksomhed",
           project: timesheet.projectName || "",
           weekStart: timesheet.weekStart || "",
-          status: timesheet.status || "draft",
+          status: STATUS_LABEL[timesheet.status] || "Kladde",
           totalHours: totalHours(timesheet.days),
           absence: timesheet.days.some((day) => day.absence && day.absence !== "none")
             ? "registreret"
             : "ingen",
-          invoiceSent: Boolean(timesheet.invoiceSentDate),
-          payrollSent: Boolean(timesheet.payrollSentDate),
+          fakturaStatus: timesheet.invoiceSentDate ? "Faktura sendt" : "Faktura ikke sendt",
+          lønStatus: timesheet.payrollSentDate
+            ? "Løn sendt til bogholderi"
+            : "Løn ikke sendt til bogholderi",
         })),
     [timesheets],
   );
