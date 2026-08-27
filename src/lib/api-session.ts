@@ -148,7 +148,7 @@ export async function askAdminAssistant(
       "content-type": "application/json",
       authorization: `Bearer ${inMemoryBearerToken}`,
     },
-    body: JSON.stringify({ message: trimmedMessage, timesheets: timesheets.slice(0, 24) }),
+    body: JSON.stringify({ message: trimmedMessage, timesheets: timesheets.slice(0, 100) }),
   });
   let payload: unknown;
   try {

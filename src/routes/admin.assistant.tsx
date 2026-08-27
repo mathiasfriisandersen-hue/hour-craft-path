@@ -36,8 +36,11 @@ function AdminAssistantPage() {
   const context = useMemo(
     () =>
       timesheets
-        .filter((timesheet) => !timesheet.archived)
-        .slice(0, 24)
+        .filter(
+          (timesheet) =>
+            timesheet.status !== "draft" && !timesheet.archived && !timesheet.workerConsentInactive,
+        )
+        .slice(0, 100)
         .map((timesheet) => ({
           id: timesheet.id,
           worker: timesheet.vikar || "Ukendt vikar",
@@ -83,7 +86,7 @@ function AdminAssistantPage() {
       }}
     >
       <InfoBanner tone="info">
-        Assistenten læser højst 24 korte timeseddelresuméer ad gangen. Den kan ikke ændre, godkende
+        Assistenten læser højst 100 korte timeseddelresuméer ad gangen. Den kan ikke ændre, godkende
         eller slette noget.
       </InfoBanner>
       <section className="mx-auto mt-6 max-w-3xl rounded-xl border border-slate-200 bg-white shadow-sm">

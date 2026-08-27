@@ -96,6 +96,7 @@ type Timesheet = {
   notes?: string;
   status?: Status;
   archived?: boolean;
+  workerConsentInactive?: boolean;
   invoiceSentDate?: string;
   payrollSentDate?: string;
   rejectionComment?: string;
@@ -493,10 +494,10 @@ function assistantMessage(body: unknown): string {
 
 function assistantTimesheetsFromRequest(body: unknown): AdminAssistantTimesheet[] {
   const timesheets = isPlainObject(body) ? body.timesheets : undefined;
-  if (!Array.isArray(timesheets) || timesheets.length > 24) {
+  if (!Array.isArray(timesheets) || timesheets.length > 100) {
     throw new ApiError(
       "invalid_assistant_context",
-      "Assistenten kan højst modtage 24 timesedler.",
+      "Assistenten kan højst modtage 100 timesedler.",
       400,
     );
   }
@@ -513,8 +514,11 @@ async function assistantTimesheetsFromDatabase(
     .all<TimesheetRow>();
   return (result.results ?? [])
     .map(parseStoredTimesheet)
-    .filter((timesheet) => !timesheet.archived)
-    .slice(0, 24)
+    .filter(
+      (timesheet) =>
+        timesheet.status !== "draft" && !timesheet.archived && !timesheet.workerConsentInactive,
+    )
+    .slice(0, 100)
     .map(toAdminAssistantTimesheet);
 }
 
